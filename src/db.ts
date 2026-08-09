@@ -118,6 +118,21 @@ export async function ensureDb() {
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`;
 
+  await sql`CREATE TABLE IF NOT EXISTS clock_sessions (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id),
+    clocked_in_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    clocked_out_at TIMESTAMPTZ,
+    duration_seconds INTEGER
+  )`;
+
+  await sql`CREATE TABLE IF NOT EXISTS lead_categories (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    color TEXT NOT NULL DEFAULT '#c9a15e',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`;
+
   // ---- Idempotent migrations for tables carried over from earlier deploys ----
   const alters = [
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS notif_prefs JSONB DEFAULT '{"lead_assigned":true,"chat":true,"announcements":true}'`,
@@ -152,6 +167,12 @@ export async function ensureDb() {
   const [templateRow] = await sql`SELECT 1 FROM settings WHERE key = 'call_template'`;
   if (!templateRow) {
     await sql`INSERT INTO settings (key, value) VALUES ('call_template', ${DEFAULT_CALL_TEMPLATE}) ON CONFLICT (key) DO NOTHING`;
+  }
+  const [catRow] = await sql`SELECT 1 FROM lead_categories LIMIT 1`;
+  if (!catRow) {
+    await sql`INSERT INTO lead_categories (name, color) VALUES
+      ('General', '#9c9184'), ('Priority', '#c9a15e'), ('UK', '#3fa89a'), ('International', '#8b6fc9'), ('Callback', '#c04b3f')
+      ON CONFLICT (name) DO NOTHING`;
   }
 
   // Hard-delete expired disappearing messages every 30s. This actually removes the

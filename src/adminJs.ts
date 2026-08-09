@@ -21,6 +21,7 @@ async function renderAdminTab(tab) {
     if (tab === 'goal') return await renderAdminGoal(el);
     if (tab === 'scripts') return await renderAdminScripts(el);
     if (tab === 'template') return await renderAdminTemplate(el);
+    if (tab === 'categories') return await renderAdminCategories(el);
   } catch (err) {
     console.error('Tab render failed:', tab, err);
     el.innerHTML = '<div class="panel p fade-up" style="text-align:center;"><div style="font-size:14px;margin-bottom:10px;">Something went wrong loading this.</div><div style="font-size:12px;color:var(--text-dim);margin-bottom:14px;">' + esc(String(err && err.message || err)) + '</div><button class="btn btn-gold" onclick="renderAdminTab(\\'' + tab + '\\')">Retry</button></div>';
@@ -144,13 +145,14 @@ async function overrideStatus(id, status) {
 }
 
 async function renderAdminImport(el) {
+  const cats = await api('/api/lead-categories').then(r => r.json()).then(d => d.data);
   el.innerHTML = \`
     <div class="panel p fade-up">
       <div class="section-title" style="margin-top:0;">Smart Import</div>
       <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:12px;">Paste leads in any format — CSV, pipe-separated, freeform text, phone numbers with or without separators, local or international. Sensitive data (card numbers, CVVs, passwords) is automatically stripped before anything is stored.</p>
       <textarea id="importText" rows="9" placeholder="John Smith, 555-123-4567, john@email.com, 42 Oak St&#10;or paste freeform data, CSV, or pipe-separated rows"></textarea>
       <div class="row-flex" style="margin-top:12px;">
-        <div class="field"><label>Assign Lead Type</label><input id="importLeadType" placeholder="general" /></div>
+        <div class="field"><label>Assign Category</label><select id="importLeadType">\${cats.map(c => '<option value="' + esc(c.name) + '">' + esc(c.name) + '</option>').join('') || '<option value="general">General</option>'}</select></div>
         <div class="field"><label>Source Label</label><input id="importSource" placeholder="e.g. Facebook Ad" /></div>
       </div>
       <button class="btn btn-gold btn-block" style="margin-top:12px;" onclick="runImportPreview()">Analyze</button>
@@ -263,8 +265,38 @@ async function renderAdminRoster(el) {
     <div class="panel p fade-up"><table><thead><tr><th></th><th>Name</th><th>PIN</th><th>Role</th><th>Call Number</th><th>XP</th><th>Status</th><th></th></tr></thead>
     <tbody>\${rows.map(u => \`<tr><td style="font-size:17px;">\${u.avatar||'🧑'}</td><td>\${esc(u.name)}</td><td class="pin-display">\${u.pin}</td><td><span class="badge \${u.role}">\${u.role}</span></td>
       <td>\${u.call_phone ? '<span class="blur-phone mono" onclick="this.classList.toggle(\\'revealed\\')">' + esc(u.call_phone) + '</span>' : '<span style="color:var(--text-faint);">—</span>'}</td>
-      <td>\${u.xp}</td><td><span class="badge \${u.status}">\${u.status}</span></td>
-      <td style="display:flex;gap:6px;"><select onchange="changeRole(\${u.id}, this.value)" style="width:auto;padding:6px 8px;font-size:11px;"><option value="">Change role…</option><option value="caller">Caller</option><option value="finisher">Finisher</option><option value="admin">Admin</option></select><button class="btn btn-danger btn-sm" onclick="removeUser(\${u.id})">Remove</button></td></tr>\`).join('')}</tbody></table></div>\`;
+      <td>\${u.xp}</td><td><span class="badge \${u.status}">\${u.status}</span>\${u.clocked_in ? ' <span class="mono roster-clock-timer" data-uid="' + u.id + '" style="font-size:10.5px;color:var(--gold-bright);"></span>' : ''}</td>
+      <td style="display:flex;gap:6px;"><select onchange="changeRole(\${u.id}, this.value)" style="width:auto;padding:6px 8px;font-size:11px;"><option value="">Change role…</option><option value="caller">Caller</option><option value="finisher">Finisher</option><option value="admin">Admin</option></select><button class="btn btn-ghost btn-sm" onclick="viewClockHistory(\${u.id},'\${esc(u.name)}')">History</button><button class="btn btn-danger btn-sm" onclick="removeUser(\${u.id})">Remove</button></td></tr>\`).join('')}</tbody></table></div>
+    <div id="clockHistoryPanel"></div>\`;
+  loadRosterClockTimers(rows);
+}
+let rosterClockInterval;
+async function loadRosterClockTimers(rows) {
+  clearInterval(rosterClockInterval);
+  const clockedInUsers = rows.filter(u => u.clocked_in);
+  if (!clockedInUsers.length) return;
+  const sessions = await api('/api/admin/clock-sessions').then(r => r.json()).then(d => d.data);
+  const openByUser = {};
+  for (const s of sessions) if (!s.clocked_out_at) openByUser[s.user_id] = s.clocked_in_at;
+  const tick = () => {
+    document.querySelectorAll('.roster-clock-timer').forEach(el => {
+      const startedAt = openByUser[el.dataset.uid];
+      if (!startedAt) return;
+      const secs = Math.max(0, Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000));
+      el.textContent = String(Math.floor(secs / 3600)).padStart(2, '0') + ':' + String(Math.floor(secs % 3600 / 60)).padStart(2, '0') + ':' + String(secs % 60).padStart(2, '0');
+    });
+  };
+  tick();
+  rosterClockInterval = setInterval(tick, 1000);
+}
+async function viewClockHistory(userId, name) {
+  const res = await api('/api/admin/clock-sessions?userId=' + userId);
+  const rows = (await res.json()).data;
+  const panel = document.getElementById('clockHistoryPanel');
+  panel.innerHTML = \`<div class="panel p fade-up"><div class="section-title" style="margin-top:0;">Clock History — \${esc(name)}</div>
+    <table><thead><tr><th>Clocked In</th><th>Clocked Out</th><th>Duration</th></tr></thead>
+    <tbody>\${rows.map(s => \`<tr><td>\${new Date(s.clocked_in_at).toLocaleString()}</td><td>\${s.clocked_out_at ? new Date(s.clocked_out_at).toLocaleString() : '<span style="color:var(--gold-bright);">still active</span>'}</td><td class="mono">\${s.duration_seconds ? Math.floor(s.duration_seconds/3600)+'h '+Math.floor(s.duration_seconds%3600/60)+'m' : '—'}</td></tr>\`).join('') || '<tr><td colspan="3" style="color:var(--text-dim);">No sessions yet.</td></tr>'}</tbody></table></div>\`;
+  panel.scrollIntoView({ behavior: 'smooth' });
 }
 async function addUser() {
   const name = document.getElementById('ncName').value.trim();
@@ -364,5 +396,39 @@ async function saveTemplate() {
   await api('/api/admin/call-template', { method: 'POST', body: JSON.stringify({ template }) });
   document.getElementById('templateStatus').textContent = 'Saved ✓';
   document.getElementById('templateStatus').style.color = 'var(--success)';
+}
+
+async function renderAdminCategories(el) {
+  const res = await api('/api/lead-categories');
+  const cats = (await res.json()).data;
+  el.innerHTML = \`
+    <div class="panel p fade-up">
+      <div class="section-title" style="margin-top:0;">Add Category</div>
+      <div class="row-flex">
+        <div class="field"><label>Name</label><input id="catName" placeholder="e.g. Priority" /></div>
+        <div class="field"><label>Color</label><input id="catColor" type="color" value="#c9a15e" style="height:44px;padding:4px;" /></div>
+        <button class="btn btn-gold" onclick="addCategory()">Add</button>
+      </div>
+    </div>
+    <div class="panel p fade-up">
+      <div class="section-title" style="margin-top:0;">Categories (\${cats.length})</div>
+      \${cats.map(cat => \`<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">
+        <span style="width:14px;height:14px;border-radius:4px;background:\${cat.color};"></span>
+        <span style="flex:1;font-size:13px;">\${esc(cat.name)}</span>
+        <button class="btn btn-danger btn-sm" onclick="deleteCategory(\${cat.id})">Delete</button>
+      </div>\`).join('') || '<div style="color:var(--text-dim);">No categories yet.</div>'}
+    </div>\`;
+}
+async function addCategory() {
+  const name = document.getElementById('catName').value.trim();
+  const color = document.getElementById('catColor').value;
+  if (!name) return alert('Enter a name');
+  await api('/api/admin/lead-categories', { method: 'POST', body: JSON.stringify({ name, color }) });
+  renderAdminTab('categories');
+}
+async function deleteCategory(id) {
+  if (!confirm('Delete this category?')) return;
+  await api('/api/admin/lead-categories/' + id, { method: 'DELETE' });
+  renderAdminTab('categories');
 }
 `;

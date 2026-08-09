@@ -333,6 +333,7 @@ tr.clickable{cursor:pointer;}
       <div class="side-sec">Configuration</div>
       <div class="side-link" data-tab="scripts" onclick="switchAdminTab('scripts')">${ICONS_SVG.doc} Scripts</div>
       <div class="side-link" data-tab="template" onclick="switchAdminTab('template')">${ICONS_SVG.doc} Call Template</div>
+      <div class="side-link" data-tab="categories" onclick="switchAdminTab('categories')">${ICONS_SVG.flag} Lead Categories</div>
       <div class="side-link" onclick="logout()" style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px;">${ICONS_SVG.exit} Exit</div>
     </div>
     <div class="admin-main">
@@ -523,10 +524,29 @@ async function toggleNotifPanel() {
 async function markAllRead() { await api('/api/notifications/read-all', { method: 'POST' }); refreshNotifBadge(); toggleNotifPanel(); toggleNotifPanel(); }
 
 // ---------- Clock ----------
-function updateClockBtn() {
+let clockDurationInterval;
+async function updateClockBtn() {
   const btn = document.getElementById('clockBtn');
-  btn.textContent = me.clocked_in ? 'Clock Out' : 'Clock In';
-  btn.className = 'btn btn-sm ' + (me.clocked_in ? 'btn-teal' : 'btn-ghost');
+  clearInterval(clockDurationInterval);
+  if (me.clocked_in) {
+    btn.className = 'btn btn-sm btn-teal';
+    let clockedInAt;
+    try {
+      const res = await api('/api/clock/status');
+      const data = (await res.json()).data;
+      clockedInAt = data.clockedInAt ? new Date(data.clockedInAt).getTime() : Date.now();
+    } catch { clockedInAt = Date.now(); }
+    const tick = () => {
+      const s = Math.max(0, Math.floor((Date.now() - clockedInAt) / 1000));
+      const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60;
+      btn.textContent = 'Clocked In — ' + String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0') + ':' + String(ss).padStart(2, '0');
+    };
+    tick();
+    clockDurationInterval = setInterval(tick, 1000);
+  } else {
+    btn.textContent = 'Clock In';
+    btn.className = 'btn btn-sm btn-ghost';
+  }
 }
 async function toggleClock() {
   me.clocked_in = !me.clocked_in;

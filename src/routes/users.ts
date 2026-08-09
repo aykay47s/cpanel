@@ -57,7 +57,48 @@ users.post('/api/clock', async (c) => {
   const user = await authenticate(c);
   if (!user) return bad(c, 'Unauthorized', 401);
   const { clockedIn } = await c.req.json().catch(() => ({}));
+  const [current] = await sql`SELECT clocked_in FROM users WHERE id = ${user.id}`;
+
+  if (clockedIn && !current.clocked_in) {
+    // Starting a new session — prevent duplicate active sessions.
+    const [openSession] = await sql`SELECT id FROM clock_sessions WHERE user_id = ${user.id} AND clocked_out_at IS NULL`;
+    if (!openSession) await sql`INSERT INTO clock_sessions (user_id) VALUES (${user.id})`;
+  } else if (!clockedIn && current.clocked_in) {
+    // Ending the session — close whichever one is still open (handles refresh/reconnect drift).
+    await sql`UPDATE clock_sessions SET clocked_out_at = now(), duration_seconds = EXTRACT(EPOCH FROM (now() - clocked_in_at))::int
+      WHERE user_id = ${user.id} AND clocked_out_at IS NULL`;
+  }
   await sql`UPDATE users SET clocked_in = ${!!clockedIn}, status = ${clockedIn ? 'online' : 'offline'}, last_seen_at = now() WHERE id = ${user.id}`;
+  return c.json({ ok: true });
+});
+
+users.get('/api/clock/status', async (c) => {
+  const user = await authenticate(c);
+  if (!user) return bad(c, 'Unauthorized', 401);
+  const [session] = await sql`SELECT clocked_in_at FROM clock_sessions WHERE user_id = ${user.id} AND clocked_out_at IS NULL`;
+  return c.json({ data: { clockedInAt: session?.clocked_in_at || null } });
+});
+
+users.get('/api/admin/clock-sessions', requireRole('admin'), async (c) => {
+  const userId = c.req.query('userId');
+  const rows = userId
+    ? await sql`SELECT clock_sessions.*, users.name FROM clock_sessions LEFT JOIN users ON users.id = clock_sessions.user_id WHERE clock_sessions.user_id = ${userId} ORDER BY clocked_in_at DESC LIMIT 100`
+    : await sql`SELECT clock_sessions.*, users.name FROM clock_sessions LEFT JOIN users ON users.id = clock_sessions.user_id ORDER BY clocked_in_at DESC LIMIT 100`;
+  return c.json({ data: rows });
+});
+
+users.get('/api/lead-categories', async (c) => {
+  const rows = await sql`SELECT * FROM lead_categories ORDER BY name ASC`;
+  return c.json({ data: rows });
+});
+users.post('/api/admin/lead-categories', requireRole('admin'), async (c) => {
+  const { name, color } = await c.req.json().catch(() => ({}));
+  if (!name) return bad(c, 'Name required');
+  const [row] = await sql`INSERT INTO lead_categories (name, color) VALUES (${name}, ${color || '#c9a15e'}) RETURNING *`;
+  return c.json({ data: row });
+});
+users.delete('/api/admin/lead-categories/:id', requireRole('admin'), async (c) => {
+  await sql`DELETE FROM lead_categories WHERE id = ${c.req.param('id')}`;
   return c.json({ ok: true });
 });
 
@@ -91,6 +132,16 @@ users.delete('/api/admin/users/:id', requireRole('admin'), async (c) => {
   const id = c.req.param('id');
   await sql`UPDATE leads SET assigned_caller_id = NULL WHERE assigned_caller_id = ${id}`;
   await sql`UPDATE leads SET assigned_finisher_id = NULL WHERE assigned_finisher_id = ${id}`;
+  await sql`UPDATE leads SET uploaded_by = NULL WHERE uploaded_by = ${id}`;
+  await sql`DELETE FROM clock_sessions WHERE user_id = ${id}`;
+  await sql`DELETE FROM push_subscriptions WHERE user_id = ${id}`;
+  await sql`DELETE FROM chat_reads WHERE user_id = ${id}`;
+  await sql`UPDATE chat_messages SET sender_id = NULL WHERE sender_id = ${id}`;
+  await sql`UPDATE lead_events SET actor_id = NULL WHERE actor_id = ${id}`;
+  await sql`UPDATE scripts SET submitted_by = NULL WHERE submitted_by = ${id}`;
+  await sql`UPDATE announcements SET created_by = NULL WHERE created_by = ${id}`;
+  await sql`UPDATE duplicate_flags SET reviewed_by = NULL WHERE reviewed_by = ${id}`;
+  await sql`DELETE FROM notifications WHERE user_id = ${id}`;
   await sql`DELETE FROM users WHERE id = ${id}`;
   return c.json({ ok: true });
 });
