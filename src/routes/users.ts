@@ -94,7 +94,7 @@ users.get('/api/lead-categories', async (c) => {
 users.post('/api/admin/lead-categories', requireRole('admin'), async (c) => {
   const { name, color } = await c.req.json().catch(() => ({}));
   if (!name) return bad(c, 'Name required');
-  const [row] = await sql`INSERT INTO lead_categories (name, color) VALUES (${name}, ${color || '#c9a15e'}) RETURNING *`;
+  const [row] = await sql`INSERT INTO lead_categories (name, color) VALUES (${name}, ${color || '#4f8cff'}) RETURNING *`;
   return c.json({ data: row });
 });
 users.delete('/api/admin/lead-categories/:id', requireRole('admin'), async (c) => {

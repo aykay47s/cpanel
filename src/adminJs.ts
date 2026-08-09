@@ -406,7 +406,7 @@ async function renderAdminCategories(el) {
       <div class="section-title" style="margin-top:0;">Add Category</div>
       <div class="row-flex">
         <div class="field"><label>Name</label><input id="catName" placeholder="e.g. Priority" /></div>
-        <div class="field"><label>Color</label><input id="catColor" type="color" value="#c9a15e" style="height:44px;padding:4px;" /></div>
+        <div class="field"><label>Color</label><input id="catColor" type="color" value="#4f8cff" style="height:44px;padding:4px;" /></div>
         <button class="btn btn-gold" onclick="addCategory()">Add</button>
       </div>
     </div>

@@ -129,7 +129,7 @@ export async function ensureDb() {
   await sql`CREATE TABLE IF NOT EXISTS lead_categories (
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,
-    color TEXT NOT NULL DEFAULT '#c9a15e',
+    color TEXT NOT NULL DEFAULT '#4f8cff',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`;
 
@@ -171,7 +171,7 @@ export async function ensureDb() {
   const [catRow] = await sql`SELECT 1 FROM lead_categories LIMIT 1`;
   if (!catRow) {
     await sql`INSERT INTO lead_categories (name, color) VALUES
-      ('General', '#9c9184'), ('Priority', '#c9a15e'), ('UK', '#3fa89a'), ('International', '#8b6fc9'), ('Callback', '#c04b3f')
+      ('General', '#9c9184'), ('Priority', '#4f8cff'), ('UK', '#3fa89a'), ('International', '#8b6fc9'), ('Callback', '#c04b3f')
       ON CONFLICT (name) DO NOTHING`;
   }
 
