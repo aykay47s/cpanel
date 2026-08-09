@@ -10,7 +10,7 @@ function genPin() { return String(Math.floor(1000 + Math.random() * 9000)); }
 users.post('/api/auth/login', async (c) => {
   const { pin } = await c.req.json().catch(() => ({}));
   if (!pin) return bad(c, 'PIN required');
-  const [user] = await sql`SELECT id, name, pin, role, avatar, xp, clocked_in FROM users WHERE pin = ${pin}`;
+  const [user] = await sql`SELECT id, name, pin, role, avatar, pfp_data, xp, clocked_in FROM users WHERE pin = ${pin}`;
   if (!user) return bad(c, 'Invalid PIN', 401);
   return c.json({ data: user });
 });
@@ -18,15 +18,30 @@ users.post('/api/auth/login', async (c) => {
 users.get('/api/me', async (c) => {
   const user = await authenticate(c);
   if (!user) return bad(c, 'Unauthorized', 401);
-  const [fresh] = await sql`SELECT id, name, pin, role, avatar, xp, clocked_in, notif_prefs FROM users WHERE id = ${user.id}`;
+  const [fresh] = await sql`SELECT id, name, pin, role, avatar, pfp_data, xp, clocked_in, notif_prefs FROM users WHERE id = ${user.id}`;
   return c.json({ data: fresh });
 });
 
 users.patch('/api/me/profile', async (c) => {
   const user = await authenticate(c);
   if (!user) return bad(c, 'Unauthorized', 401);
-  const { name, avatar, call_phone } = await c.req.json().catch(() => ({}));
-  const [row] = await sql`UPDATE users SET name = COALESCE(${name || null}, name), avatar = COALESCE(${avatar || null}, avatar), call_phone = COALESCE(${call_phone !== undefined ? call_phone : null}, call_phone) WHERE id = ${user.id} RETURNING id, name, pin, role, avatar, xp, clocked_in, call_phone`;
+  const { name, avatar, call_phone, pfp_data } = await c.req.json().catch(() => ({}));
+  // Guard against oversized payloads — client resizes to a small square before sending,
+  // but enforce a hard cap server-side too (roughly 400KB of base64).
+  if (pfp_data && pfp_data.length > 550000) return bad(c, 'Image too large');
+  const [row] = await sql`UPDATE users SET
+    name = COALESCE(${name || null}, name),
+    avatar = COALESCE(${avatar || null}, avatar),
+    call_phone = COALESCE(${call_phone !== undefined ? call_phone : null}, call_phone),
+    pfp_data = COALESCE(${pfp_data !== undefined ? pfp_data : null}, pfp_data)
+    WHERE id = ${user.id} RETURNING id, name, pin, role, avatar, pfp_data, xp, clocked_in, call_phone`;
+  return c.json({ data: row });
+});
+
+users.post('/api/me/remove-pfp', async (c) => {
+  const user = await authenticate(c);
+  if (!user) return bad(c, 'Unauthorized', 401);
+  const [row] = await sql`UPDATE users SET pfp_data = NULL WHERE id = ${user.id} RETURNING id, name, pin, role, avatar, pfp_data, xp, clocked_in, call_phone`;
   return c.json({ data: row });
 });
 
@@ -48,7 +63,7 @@ users.post('/api/clock', async (c) => {
 
 // ================= ADMIN: ROSTER =================
 users.get('/api/admin/users', requireRole('admin'), async (c) => {
-  const rows = await sql`SELECT id, name, pin, role, avatar, xp, clocked_in, status, call_phone, created_at FROM users ORDER BY created_at DESC`;
+  const rows = await sql`SELECT id, name, pin, role, avatar, pfp_data, xp, clocked_in, status, call_phone, created_at FROM users ORDER BY created_at DESC`;
   return c.json({ data: rows });
 });
 
@@ -82,12 +97,12 @@ users.delete('/api/admin/users/:id', requireRole('admin'), async (c) => {
 
 users.get('/api/leaderboard', async (c) => {
   const rows = await sql`
-    SELECT users.id, users.name, users.avatar, users.role, users.xp,
+    SELECT users.id, users.name, users.avatar, users.pfp_data, users.role, users.xp,
       COUNT(*) FILTER (WHERE lead_events.event_type = 'outcome_recorded' AND lead_events.to_status = 'successful_call' AND lead_events.actor_id = users.id) as successful_calls
     FROM users
     LEFT JOIN lead_events ON lead_events.actor_id = users.id
     WHERE users.role IN ('caller','finisher')
-    GROUP BY users.id, users.name, users.avatar, users.role, users.xp
+    GROUP BY users.id, users.name, users.avatar, users.pfp_data, users.role, users.xp
     ORDER BY users.xp DESC
   `;
   return c.json({ data: rows });

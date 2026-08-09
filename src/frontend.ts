@@ -21,7 +21,11 @@ export const page = `<!DOCTYPE html>
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<title>Dispatch</title>
+<title>Frap Tise</title>
+<link rel="manifest" href="/manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#08080b">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -292,7 +296,8 @@ tr.clickable{cursor:pointer;}
 <div id="loginScreen">
   <div class="login-card panel fade-up">
     <div class="crest"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5"><path d="M12 2l7 4v6c0 5-3.5 8-7 10-3.5-2-7-5-7-10V6l7-4z"/></svg></div>
-    <div class="login-title">Dispatch</div>
+    <div class="login-title">Frap Tise</div>
+    <div class="login-sub" style="font-size:13px;color:var(--text-faint);letter-spacing:1px;text-transform:uppercase;margin-bottom:22px;">Est. Nowhere · Untraceable Since Day One</div>
     <div class="login-sub">Enter your PIN</div>
     <div class="pin-dots" id="pinDots"><div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div></div>
     <div class="keypad" id="keypad">
@@ -328,7 +333,7 @@ tr.clickable{cursor:pointer;}
     </div>
     <div class="admin-main">
       <div class="topbar">
-        <div class="brand"><div class="brand-mark"></div>Dispatch <span style="color:var(--text-faint);font-size:12px;font-family:Inter;font-weight:600;margin-left:4px;">Admin</span></div>
+        <div class="brand"><div class="brand-mark"></div>Frap Tise <span style="color:var(--text-faint);font-size:12px;font-family:Inter;font-weight:600;margin-left:4px;">Control Room</span></div>
         <div class="topbar-actions">
           <div class="icon-btn" onclick="toggleNotifPanel()" id="notifBtn">${ICONS_SVG.bell}</div>
         </div>
@@ -341,7 +346,7 @@ tr.clickable{cursor:pointer;}
 <!-- ===== STAFF SHELL (caller / finisher) ===== -->
 <div id="staffApp" class="hidden">
   <div class="topbar">
-    <div class="brand"><div class="brand-mark"></div>Dispatch</div>
+    <div class="brand"><div class="brand-mark"></div>Frap Tise</div>
     <div class="topbar-actions">
       <div class="icon-btn" onclick="toggleNotifPanel()" id="notifBtnStaff">${ICONS_SVG.bell}</div>
       <button class="btn btn-sm btn-ghost" id="clockBtn" onclick="toggleClock()">Clock In</button>

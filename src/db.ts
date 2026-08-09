@@ -112,6 +112,12 @@ export async function ensureDb() {
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`;
 
+  await sql`CREATE TABLE IF NOT EXISTS push_subscriptions (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id),
+    subscription JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`;
+
   // ---- Idempotent migrations for tables carried over from earlier deploys ----
   const alters = [
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS notif_prefs JSONB DEFAULT '{"lead_assigned":true,"chat":true,"announcements":true}'`,
@@ -131,6 +137,7 @@ export async function ensureDb() {
     `ALTER TABLE announcements ADD COLUMN IF NOT EXISTS target_role TEXT NOT NULL DEFAULT 'all'`,
     `ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS call_phone TEXT`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS pfp_data TEXT`,
   ];
   for (const stmt of alters) {
     await sql.unsafe(`DO $$ BEGIN ${stmt}; EXCEPTION WHEN OTHERS THEN NULL; END $$;`);

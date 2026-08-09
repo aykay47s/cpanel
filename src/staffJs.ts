@@ -63,8 +63,8 @@ async function renderStaffHome() {
 
 async function renderStaffQueue() {
   const body = document.getElementById('staffBody');
-  const mineRes = await api('/api/caller/mine');
   if (me.role === 'caller') {
+    const mineRes = await api('/api/caller/mine');
     const mine = (await mineRes.json()).data;
     if (mine) return renderActiveCall(body, mine, 'caller');
     if (!me.clocked_in) { body.innerHTML = offlineHtml(); return; }
@@ -74,8 +74,8 @@ async function renderStaffQueue() {
   } else if (me.role === 'finisher') {
     const qRes = await api('/api/finisher/queue');
     const rows = (await qRes.json()).data;
-    const active = rows.find(r => r.status === 'assigned_to_finisher');
-    if (active && active._working) return renderActiveCall(body, active, 'finisher');
+    const workingLead = workingFinisherLeadId ? rows.find(r => r.id === workingFinisherLeadId) : null;
+    if (workingLead) return renderActiveCall(body, workingLead, 'finisher');
     body.innerHTML = rows.length ? \`<div class="section-title" style="margin-top:0;">Assigned to You (\${rows.length})</div>\` + rows.map(o => finisherCardHtml(o)).join('') : \`<div class="empty-state panel fade-up">\${ICONS.flag}<div style="font-weight:700;margin:8px 0 4px;">No leads waiting</div><div style="font-size:12.5px;">Admin will assign leads here when ready.</div></div>\`;
   }
 }
@@ -185,13 +185,21 @@ async function renderStaffProfile() {
   me = { ...me, ...fresh }; localStorage.setItem('dispatch_me', JSON.stringify(me));
   body.innerHTML = \`
     <div class="panel p fade-up">
-      <div class="section-title" style="margin-top:0;">Display Name</div>
+      <div class="section-title" style="margin-top:0;">Profile Picture</div>
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:14px;">
+        <div id="pfpPreview" style="width:64px;height:64px;border-radius:16px;background:var(--s3);display:flex;align-items:center;justify-content:center;font-size:30px;border:1px solid var(--border-2);overflow:hidden;">\${me.pfp_data ? '<img src="' + me.pfp_data + '" style="width:100%;height:100%;object-fit:cover;" />' : (me.avatar || '🧑')}</div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <label class="btn btn-ghost btn-sm" style="text-align:center;cursor:pointer;">Upload Photo<input type="file" accept="image/*" id="pfpFile" style="display:none;" onchange="handlePfpUpload(event)" /></label>
+          \${me.pfp_data ? '<button class="btn btn-danger btn-sm" onclick="removePfp()">Remove Photo</button>' : ''}
+        </div>
+      </div>
+      <div class="section-title">Or Pick an Avatar</div>
+      <div class="avatar-grid" id="avatarGrid"></div>
+      <div class="section-title">Display Name</div>
       <div class="field"><input id="pfName" value="\${esc(me.name)}" /></div>
       <div class="section-title">Your Call-From Number</div>
       <p style="font-size:11.5px;color:var(--text-dim);margin-bottom:8px;">The number you're actually dialing from. Only admins can see this, and it's blurred by default.</p>
       <div class="field"><input id="pfPhone" value="\${esc(me.call_phone || '')}" placeholder="e.g. +44 7911 123456" /></div>
-      <div class="section-title">Avatar</div>
-      <div class="avatar-grid" id="avatarGrid"></div>
       <button class="btn btn-gold btn-block" onclick="saveProfile()">Save Changes</button>
       <div id="profileStatus" style="font-size:12px;margin-top:10px;"></div>
     </div>
@@ -202,23 +210,115 @@ async function renderStaffProfile() {
       <label style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;text-transform:none;letter-spacing:0;font-weight:500;color:var(--text);font-size:13px;"><span>Announcements</span><input type="checkbox" id="prefAnn" checked style="width:auto;" /></label>
       <button class="btn btn-ghost btn-block" style="margin-top:10px;" onclick="saveNotifPrefs()">Save Preferences</button>
     </div>
+    <div class="panel p fade-up" id="pushSection"></div>
     <div class="panel p fade-up"><button class="btn btn-danger btn-block" onclick="logout()">Log Out</button></div>
   \`;
   const grid = document.getElementById('avatarGrid');
-  grid.innerHTML = AVATARS.map(a => '<div class="avatar-opt ' + (a === me.avatar ? 'sel' : '') + '" data-av="' + a + '">' + a + '</div>').join('');
-  grid.addEventListener('click', (e) => { const opt = e.target.closest('.avatar-opt'); if (!opt) return; grid.querySelectorAll('.avatar-opt').forEach(o => o.classList.remove('sel')); opt.classList.add('sel'); });
+  grid.innerHTML = AVATARS.map(a => '<div class="avatar-opt ' + (a === me.avatar && !me.pfp_data ? 'sel' : '') + '" data-av="' + a + '">' + a + '</div>').join('');
+  grid.addEventListener('click', (e) => {
+    const opt = e.target.closest('.avatar-opt'); if (!opt) return;
+    grid.querySelectorAll('.avatar-opt').forEach(o => o.classList.remove('sel'));
+    opt.classList.add('sel');
+    document.getElementById('pfpPreview').innerHTML = opt.dataset.av;
+    pendingRemovePfp = true;
+  });
+  renderPushSection();
+}
+let pendingRemovePfp = false;
+let pendingPfpData = null;
+function handlePfpUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const img = new Image();
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    img.onload = () => {
+      const size = 256;
+      const canvas = document.createElement('canvas');
+      canvas.width = size; canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      const scale = Math.max(size / img.width, size / img.height);
+      const w = img.width * scale, h = img.height * scale;
+      ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+      pendingPfpData = canvas.toDataURL('image/jpeg', 0.82);
+      pendingRemovePfp = false;
+      document.getElementById('pfpPreview').innerHTML = '<img src="' + pendingPfpData + '" style="width:100%;height:100%;object-fit:cover;" />';
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+async function removePfp() {
+  await api('/api/me/remove-pfp', { method: 'POST' });
+  me.pfp_data = null; localStorage.setItem('dispatch_me', JSON.stringify(me));
+  renderStaffProfile();
 }
 async function saveProfile() {
   const name = document.getElementById('pfName').value.trim();
   const call_phone = document.getElementById('pfPhone').value.trim();
-  const avatar = document.querySelector('.avatar-opt.sel');
-  const res = await api('/api/me/profile', { method: 'PATCH', body: JSON.stringify({ name, call_phone, avatar: avatar ? avatar.dataset.av : undefined }) });
+  const avatarOpt = document.querySelector('.avatar-opt.sel');
+  const body = { name, call_phone, avatar: avatarOpt ? avatarOpt.dataset.av : undefined };
+  if (pendingPfpData) body.pfp_data = pendingPfpData;
+  const res = await api('/api/me/profile', { method: 'PATCH', body: JSON.stringify(body) });
   const data = await res.json();
   me = { ...me, ...data.data }; localStorage.setItem('dispatch_me', JSON.stringify(me));
+  pendingPfpData = null;
   document.getElementById('profileStatus').textContent = 'Saved ✓'; document.getElementById('profileStatus').style.color = 'var(--success)';
 }
 async function saveNotifPrefs() {
   await api('/api/me/notif-prefs', { method: 'PATCH', body: JSON.stringify({ lead_assigned: document.getElementById('prefLead').checked, chat: document.getElementById('prefChat').checked, announcements: document.getElementById('prefAnn').checked }) });
   alert('Preferences saved');
+}
+
+// ---------- Real push notifications (arrive even with the app closed) ----------
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; i++) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+}
+async function renderPushSection() {
+  const section = document.getElementById('pushSection');
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    section.innerHTML = '<div class="section-title" style="margin-top:0;">Push Notifications</div><p style="font-size:12.5px;color:var(--text-dim);">Not supported in this browser.</p>';
+    return;
+  }
+  let isSubscribed = false;
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    const sub = reg && await reg.pushManager.getSubscription();
+    isSubscribed = !!sub;
+  } catch {}
+  section.innerHTML = \`
+    <div class="section-title" style="margin-top:0;">Push Notifications</div>
+    <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:12px;">Get a real notification on your phone the instant a lead drops — even with the app closed. On iPhone, add this to your Home Screen first (Share → Add to Home Screen) for it to work.</p>
+    <button class="btn \${isSubscribed ? 'btn-danger' : 'btn-gold'} btn-block" id="pushToggleBtn" onclick="togglePush()">\${isSubscribed ? 'Turn Off Push Notifications' : 'Enable Push Notifications'}</button>
+    <div id="pushStatus" style="font-size:12px;margin-top:10px;"></div>
+  \`;
+}
+async function togglePush() {
+  const status = document.getElementById('pushStatus');
+  const btn = document.getElementById('pushToggleBtn');
+  const reg = await navigator.serviceWorker.getRegistration() || await navigator.serviceWorker.register('/sw.js');
+  const existing = await reg.pushManager.getSubscription();
+  if (existing) {
+    await existing.unsubscribe();
+    await api('/api/push/unsubscribe', { method: 'POST' });
+    renderPushSection();
+    return;
+  }
+  const perm = await Notification.requestPermission();
+  if (perm !== 'granted') {
+    status.textContent = 'Notification permission was denied in your browser settings.';
+    status.style.color = 'var(--danger)';
+    return;
+  }
+  const keyRes = await fetch('/api/push/vapid-key');
+  const { key } = (await keyRes.json()).data;
+  const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(key) });
+  await api('/api/push/subscribe', { method: 'POST', body: JSON.stringify({ subscription: sub.toJSON() }) });
+  renderPushSection();
 }
 `;

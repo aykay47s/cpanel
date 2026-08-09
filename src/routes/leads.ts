@@ -4,6 +4,7 @@ import { requireRole, authenticate } from '../auth';
 import { logEvent } from '../audit';
 import { broadcast, notify, notifyRole } from '../realtime';
 import { smartParse, compareForDuplicate, type ParsedLead } from '../parser';
+import { sendPushToRole, sendPush } from '../push';
 
 export const leads = new Hono();
 
@@ -60,6 +61,10 @@ leads.post('/api/admin/leads/import/confirm', requireRole('admin'), async (c) =>
     }
     existing.push({ id: lead.id, first_name: lead.first_name, last_name: lead.last_name, phone: lead.phone, email: lead.email });
     broadcast('new_lead', lead);
+  }
+  if (inserted > 0) {
+    const name = inserted === 1 ? (rows[0] as ParsedLead).first_name || 'A lead' : `${inserted} leads`;
+    await sendPushToRole('caller', 'New lead available', `${name} just came in — first to claim it wins.`, '/');
   }
   return c.json({ inserted, flagged });
 });
@@ -179,6 +184,7 @@ leads.post('/api/admin/leads/:id/assign-finisher', requireRole('admin'), async (
   const [updated] = await sql`UPDATE leads SET status = 'assigned_to_finisher', assigned_finisher_id = ${finisherId}, updated_at = now() WHERE id = ${c.req.param('id')} RETURNING *`;
   await logEvent(updated.id, lead.assigned_finisher_id ? 'reassigned_finisher' : 'assigned_finisher', user, lead.status, 'assigned_to_finisher', { finisher_id: finisherId, finisher_name: finisher.name });
   await notify(finisherId, 'lead_assigned', `You've been assigned a lead: ${updated.first_name || 'Unknown'} ${updated.last_name || ''}`.trim(), updated.id);
+  await sendPush(finisherId, 'Lead assigned to you', `${updated.first_name || 'Unknown'} ${updated.last_name || ''} is ready for you to close.`.trim(), '/');
   broadcast('lead_updated', updated);
   return c.json({ data: updated });
 });

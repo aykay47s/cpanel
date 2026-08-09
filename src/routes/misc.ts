@@ -2,8 +2,27 @@ import { Hono } from 'hono';
 import { sql } from '../db';
 import { requireRole, authenticate } from '../auth';
 import { registerClient, unregisterClient } from '../realtime';
+import { VAPID_PUBLIC_KEY, saveSubscription, removeSubscription } from '../push';
 
 export const misc = new Hono();
+
+misc.get('/api/push/vapid-key', (c) => c.json({ data: { key: VAPID_PUBLIC_KEY } }));
+
+misc.post('/api/push/subscribe', async (c) => {
+  const user = await authenticate(c);
+  if (!user) return c.json({ error: 'Unauthorized' }, 401);
+  const { subscription } = await c.req.json().catch(() => ({}));
+  if (!subscription) return c.json({ error: 'subscription required' }, 400);
+  await saveSubscription(user.id, subscription);
+  return c.json({ ok: true });
+});
+
+misc.post('/api/push/unsubscribe', async (c) => {
+  const user = await authenticate(c);
+  if (!user) return c.json({ error: 'Unauthorized' }, 401);
+  await removeSubscription(user.id);
+  return c.json({ ok: true });
+});
 
 misc.get('/api/call-template', requireRole('admin', 'caller', 'finisher'), async (c) => {
   const [row] = await sql`SELECT value FROM settings WHERE key = 'call_template'`;

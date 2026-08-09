@@ -30,6 +30,24 @@ app.route('/', announcements);
 app.route('/', scripts);
 app.route('/', misc);
 
+app.get('/sw.js', async (c) => {
+  const file = Bun.file('./public/sw.js');
+  c.header('Content-Type', 'application/javascript');
+  c.header('Service-Worker-Allowed', '/');
+  return c.body(await file.text());
+});
+
+app.get('/manifest.json', (c) => {
+  return c.json({
+    name: 'Frap Tise',
+    short_name: 'Frap Tise',
+    start_url: '/',
+    display: 'standalone',
+    background_color: '#08080b',
+    theme_color: '#08080b',
+  });
+});
+
 app.get('/', (c) => {
   c.header('Cache-Control', 'no-store, no-cache, must-revalidate');
   return c.html(page);
