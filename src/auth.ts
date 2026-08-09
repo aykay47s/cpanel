@@ -12,10 +12,11 @@ export interface AuthUser {
 }
 
 // Verifies the caller is who they claim to be by checking id+pin against the DB on
-// every request — never trusts a client-supplied role string.
+// every request — never trusts a client-supplied role string. Falls back to query
+// params for the SSE endpoint, since browsers' native EventSource cannot set headers.
 export async function authenticate(c: Context): Promise<AuthUser | null> {
-  const uid = c.req.header('x-user-id');
-  const pin = c.req.header('x-user-pin');
+  const uid = c.req.header('x-user-id') || c.req.query('uid');
+  const pin = c.req.header('x-user-pin') || c.req.query('pin');
   if (!uid || !pin) return null;
   const [user] = await sql`SELECT id, name, pin, role, avatar, xp, clocked_in FROM users WHERE id = ${uid} AND pin = ${pin}`;
   return (user as AuthUser) || null;

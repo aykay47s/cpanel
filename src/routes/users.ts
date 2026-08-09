@@ -25,8 +25,8 @@ users.get('/api/me', async (c) => {
 users.patch('/api/me/profile', async (c) => {
   const user = await authenticate(c);
   if (!user) return bad(c, 'Unauthorized', 401);
-  const { name, avatar } = await c.req.json().catch(() => ({}));
-  const [row] = await sql`UPDATE users SET name = COALESCE(${name || null}, name), avatar = COALESCE(${avatar || null}, avatar) WHERE id = ${user.id} RETURNING id, name, pin, role, avatar, xp, clocked_in`;
+  const { name, avatar, call_phone } = await c.req.json().catch(() => ({}));
+  const [row] = await sql`UPDATE users SET name = COALESCE(${name || null}, name), avatar = COALESCE(${avatar || null}, avatar), call_phone = COALESCE(${call_phone !== undefined ? call_phone : null}, call_phone) WHERE id = ${user.id} RETURNING id, name, pin, role, avatar, xp, clocked_in, call_phone`;
   return c.json({ data: row });
 });
 
@@ -48,7 +48,7 @@ users.post('/api/clock', async (c) => {
 
 // ================= ADMIN: ROSTER =================
 users.get('/api/admin/users', requireRole('admin'), async (c) => {
-  const rows = await sql`SELECT id, name, pin, role, avatar, xp, clocked_in, status, created_at FROM users ORDER BY created_at DESC`;
+  const rows = await sql`SELECT id, name, pin, role, avatar, xp, clocked_in, status, call_phone, created_at FROM users ORDER BY created_at DESC`;
   return c.json({ data: rows });
 });
 

@@ -166,6 +166,9 @@ td{padding:11px;border-bottom:1px solid var(--border);}
 tr:hover td{background:rgba(255,255,255,.012);}
 tr.clickable{cursor:pointer;}
 .pin-display{font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:var(--gold-bright);letter-spacing:1.5px;}
+.blur-phone{cursor:pointer;filter:blur(5px);transition:filter .2s;user-select:none;}
+.blur-phone.revealed{filter:blur(0);}
+.blur-phone::after{content:' 👁';font-size:10px;filter:none;opacity:.5;}
 .row-flex{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;}
 .row-flex .field{flex:1;min-width:130px;margin-bottom:0;}
 .new-pin-banner{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-radius:12px;background:rgba(201,161,94,.07);border:1px solid var(--gold-glow);margin-top:14px;}
@@ -320,6 +323,7 @@ tr.clickable{cursor:pointer;}
       <div class="side-link" data-tab="goal" onclick="switchAdminTab('goal')">${ICONS_SVG.target} Team Goal</div>
       <div class="side-sec">Configuration</div>
       <div class="side-link" data-tab="scripts" onclick="switchAdminTab('scripts')">${ICONS_SVG.doc} Scripts</div>
+      <div class="side-link" data-tab="template" onclick="switchAdminTab('template')">${ICONS_SVG.doc} Call Template</div>
       <div class="side-link" onclick="logout()" style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px;">${ICONS_SVG.exit} Exit</div>
     </div>
     <div class="admin-main">
@@ -443,7 +447,7 @@ function renderStaffNav() {
 // ---------- Realtime ----------
 function connectEvents() {
   if (es) es.close();
-  es = new EventSource('/api/events?x-user-id=' + me.id);
+  es = new EventSource('/api/events?uid=' + me.id + '&pin=' + me.pin);
   es.addEventListener('new_lead', () => { if (staffTab === 'queue') renderStaffQueue(); pingNav('queue'); if (me.role==='admin') maybeRefreshAdmin('leads'); });
   es.addEventListener('lead_claimed', (e) => { const d = JSON.parse(e.data); const card = document.querySelector('[data-lead-id="' + d.id + '"]'); if (card) card.remove(); });
   es.addEventListener('lead_updated', () => { if (me.role === 'admin') maybeRefreshAdmin(['dashboard','leads','finishing']); });
@@ -513,11 +517,22 @@ async function renderChatInto(containerEl) {
     <div class="presence-strip">\${presence.map(p => '<div class="presence-chip ' + (p.clocked_in ? 'online' : '') + '"><span class="dot"></span>' + (p.avatar || '🧑') + ' ' + esc(p.name) + '</div>').join('')}</div>
     <div class="chat-shell panel" style="padding:14px;">
       <div class="chat-messages" id="chatMessages">\${msgs.map(chatMsgHtml).join('')}</div>
-      <div class="chat-input-row">
-        <input id="chatInput" placeholder="Message the team…" onkeydown="if(event.key==='Enter') sendChatMessage()" />
-        <button class="btn btn-gold" onclick="sendChatMessage()">Send</button>
+      <div class="chat-input-row" style="flex-direction:column;gap:8px;">
+        <div style="display:flex;gap:8px;">
+          <input id="chatInput" placeholder="Message the team…" onkeydown="if(event.key==='Enter') sendChatMessage()" />
+          <button class="btn btn-gold" onclick="sendChatMessage()">Send</button>
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-dim);text-transform:none;letter-spacing:0;font-weight:500;">
+          <input type="checkbox" id="disappearToggle" style="width:auto;" /> Disappearing message
+          <select id="disappearDuration" style="width:auto;padding:4px 8px;font-size:11px;display:none;">
+            <option value="60">1 minute</option><option value="3600">1 hour</option><option value="86400" selected>24 hours</option><option value="604800">7 days</option>
+          </select>
+        </label>
       </div>
     </div>\`;
+  document.getElementById('disappearToggle').addEventListener('change', (e) => {
+    document.getElementById('disappearDuration').style.display = e.target.checked ? 'inline-block' : 'none';
+  });
   const box = document.getElementById('chatMessages');
   box.scrollTop = box.scrollHeight;
   api('/api/chat/read', { method: 'POST', body: JSON.stringify({ lastReadMessageId: msgs.length ? msgs[msgs.length - 1].id : 0 }) });
@@ -525,9 +540,9 @@ async function renderChatInto(containerEl) {
 }
 function chatMsgHtml(m) {
   const own = m.sender_id === me.id;
-  return \`<div class="chat-msg \${own ? 'own' : ''}"><div class="chat-av">\${m.sender_avatar || '🧑'}</div>
-    <div class="chat-bubble"><div class="chat-sender">\${esc(m.sender_name || 'Unknown')}\${m.sender_role === 'admin' ? ' <span class="badge admin" style="margin-left:4px;">admin</span>' : ''}</div>
-    <div class="chat-text">\${esc(m.content)}</div><div class="chat-time">\${timeAgo(m.created_at)}</div></div></div>\`;
+  return \`<div class="chat-msg \${own ? 'own' : ''}" data-msg-id="\${m.id}"><div class="chat-av">\${m.sender_avatar || '🧑'}</div>
+    <div class="chat-bubble"><div class="chat-sender">\${esc(m.sender_name || 'Unknown')}\${m.sender_role === 'admin' ? ' <span class="badge admin" style="margin-left:4px;">admin</span>' : ''}\${m.expires_at ? ' <span title="Disappears ' + timeAgo(m.expires_at) + '" style="opacity:.5;">⏱</span>' : ''}</div>
+    <div class="chat-text">\${esc(m.content)}</div><div class="chat-time">\${timeAgo(m.created_at)}\${(own || me.role === 'admin') ? ' · <span style="cursor:pointer;text-decoration:underline;" onclick="deleteChatMessage(' + m.id + ')">delete</span>' : ''}</div></div></div>\`;
 }
 function appendChatMessage(m) {
   const box = document.getElementById('chatMessages');
@@ -539,8 +554,15 @@ async function sendChatMessage() {
   const input = document.getElementById('chatInput');
   const content = input.value.trim();
   if (!content) return;
+  const disappear = document.getElementById('disappearToggle');
+  const expiresInSeconds = disappear && disappear.checked ? Number(document.getElementById('disappearDuration').value) : undefined;
   input.value = '';
-  await api('/api/chat/messages', { method: 'POST', body: JSON.stringify({ content }) });
+  await api('/api/chat/messages', { method: 'POST', body: JSON.stringify({ content, expiresInSeconds }) });
+}
+async function deleteChatMessage(id) {
+  await api('/api/chat/messages/' + id, { method: 'DELETE' });
+  const el = document.querySelector('[data-msg-id="' + id + '"]');
+  if (el) el.remove();
 }
 </script>
 <script>

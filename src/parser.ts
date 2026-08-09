@@ -48,19 +48,85 @@ export function redactSensitive(text: string): RedactionResult {
 }
 
 // ---------- Field classification ----------
-const PHONE_RE = /(\+?1?[\s\-.]?\(?\d{3}\)?[\s\-.]?\d{3}[\s\-.]?\d{4})/;
+// Phone detection is digit-count based, not pattern based — real-world leads come in
+// every format imaginable (local 7-digit, international +44, extensions, no separators
+// at all). Anything with 7-15 digits clustered together is treated as a phone candidate,
+// which is the actual range of valid phone number lengths worldwide (ITU E.164 max is 15).
+const PHONE_CANDIDATE_RE = /(\+?\(?\d[\d\s\-.()]{4,}\d)/g;
 const EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/;
 const DATE_RE = /\b(\d{1,4}[\/\-]\d{1,2}[\/\-]\d{1,4})\b/;
-const STREET_WORDS = /\b(st|street|ave|avenue|rd|road|blvd|boulevard|dr|drive|ln|lane|way|ct|court|pl|place|hwy|highway|apt|suite|ste)\b/i;
-const NAME_RE = /^[A-Za-z][a-zA-Z'-]*(\s[A-Za-z][a-zA-Z'-]*){0,3}$/;
+const STREET_WORDS = /\b(st|street|ave|avenue|rd|road|blvd|boulevard|dr|drive|ln|lane|way|ct|court|pl|place|hwy|highway|apt|suite|ste|close|terrace|crescent|gardens|grove|mews|row|walk|park|circle|square)\b/i;
+// Unicode-aware so accented names (José, Zoë) and hyphenated/apostrophe names (O'Brien, Mary-Jane) match.
+const NAME_RE = /^\p{L}[\p{L}'-]*(\s\p{L}[\p{L}'-]*){0,4}$/u;
+
+function extractPhone(text: string): { phone: string | null; remainder: string } {
+  const matches = [...text.matchAll(PHONE_CANDIDATE_RE)];
+  for (const m of matches) {
+    const digits = m[0].replace(/[^\d]/g, '');
+    if (digits.length >= 7 && digits.length <= 15) {
+      const remainder = (text.slice(0, m.index) + ' ' + text.slice((m.index || 0) + m[0].length)).trim();
+      return { phone: m[0].trim(), remainder };
+    }
+  }
+  return { phone: null, remainder: text };
+}
 
 export interface ParsedLead {
   first_name: string | null;
   last_name: string | null;
   phone: string;
+
   email: string | null;
   address: string | null;
   notes: string | null;
+}
+
+// Detects the delimiter style (pipe, comma, tab) and normalizes into structured rows,
+// or falls back to freeform line-by-line classification if no consistent delimiter exists.
+// Never silently returns empty when the text clearly contains phone-like data — falls
+// back to a permissive last-resort scan rather than dropping everything.
+export function smartParse(rawText: string): { leads: ParsedLead[]; redacted: RedactionResult } {
+  const redacted = redactSensitive(rawText);
+  const text = redacted.cleanText;
+  const rawLines = text.split('\n').map(l => l.trim()).filter(Boolean);
+  if (!rawLines.length) return { leads: [], redacted };
+
+  let leads: ParsedLead[] = [];
+
+  // Try delimiter-based parsing first (CSV / pipe / tab), if most lines share a delimiter count.
+  for (const delim of ['|', '\t', ',']) {
+    const counts = rawLines.map(l => l.split(delim).length);
+    const mode = counts.slice().sort((a, b) => counts.filter(v => v === a).length - counts.filter(v => v === b).length).pop();
+    const consistent = counts.filter(c => c === mode).length / counts.length;
+    if (mode && mode > 1 && consistent > 0.7) {
+      leads = parseDelimited(rawLines, delim);
+      break;
+    }
+  }
+  if (!leads.length) leads = parseFreeform(rawLines);
+
+  // Last resort: if structured parsing still found nothing but there's clearly phone-like
+  // data in the text, do a permissive scan so nothing is silently dropped.
+  if (!leads.length) leads = lastResortScan(rawLines);
+
+  return { leads, redacted };
+}
+
+function lastResortScan(lines: string[]): ParsedLead[] {
+  const leads: ParsedLead[] = [];
+  for (const line of lines) {
+    const { phone, remainder } = extractPhone(line);
+    if (!phone) continue;
+    const email = remainder.match(EMAIL_RE)?.[0] || null;
+    const withoutEmail = email ? remainder.replace(email, '').trim() : remainder;
+    const cleaned = withoutEmail.replace(/[,;|]+/g, ' ').replace(/\s+/g, ' ').trim();
+    let name: string | null = null, notes: string | null = null;
+    if (cleaned && NAME_RE.test(cleaned)) name = cleaned;
+    else if (cleaned) notes = cleaned;
+    const [f, l] = name ? splitName(name) : [null, null];
+    leads.push({ first_name: f, last_name: l, phone, email, address: null, notes });
+  }
+  return leads;
 }
 
 function splitName(full: string): [string | null, string | null] {
@@ -69,32 +135,13 @@ function splitName(full: string): [string | null, string | null] {
   return [parts[0], parts.slice(1).join(' ')];
 }
 
-// Detects the delimiter style (pipe, comma, tab) and normalizes into structured rows,
-// or falls back to freeform line-by-line classification if no consistent delimiter exists.
-export function smartParse(rawText: string): { leads: ParsedLead[]; redacted: RedactionResult } {
-  const redacted = redactSensitive(rawText);
-  const text = redacted.cleanText;
-  const rawLines = text.split('\n').map(l => l.trim()).filter(Boolean);
-  if (!rawLines.length) return { leads: [], redacted };
-
-  // Try delimiter-based parsing first (CSV / pipe / tab), if most lines share a delimiter count.
-  for (const delim of ['|', '\t', ',']) {
-    const counts = rawLines.map(l => l.split(delim).length);
-    const mode = counts.sort((a, b) => counts.filter(v => v === a).length - counts.filter(v => v === b).length).pop();
-    const consistent = counts.filter(c => c === mode).length / counts.length;
-    if (mode && mode > 1 && consistent > 0.7) {
-      return { leads: parseDelimited(rawLines, delim), redacted };
-    }
-  }
-  return { leads: parseFreeform(rawLines), redacted };
-}
-
 function parseDelimited(lines: string[], delim: string): ParsedLead[] {
   const leads: ParsedLead[] = [];
   // Detect a header row (contains words like "name","phone","email" and no actual phone/email itself).
   let startIdx = 0;
   const first = lines[0].toLowerCase();
-  if (/name|phone|email|address/.test(first) && !PHONE_RE.test(first) && !EMAIL_RE.test(first)) startIdx = 1;
+  const firstPhone = extractPhone(first).phone;
+  if (/name|phone|email|address/.test(first) && !firstPhone && !EMAIL_RE.test(first)) startIdx = 1;
 
   for (let i = startIdx; i < lines.length; i++) {
     const cells = lines[i].split(delim).map(c => c.trim()).filter(c => c !== '');
@@ -102,7 +149,8 @@ function parseDelimited(lines: string[], delim: string): ParsedLead[] {
     let phone: string | null = null, email: string | null = null, address: string | null = null;
     const leftovers: string[] = [];
     for (const cell of cells) {
-      if (!phone && PHONE_RE.test(cell) && cell.replace(/[^\d]/g, '').length >= 10) { phone = cell.match(PHONE_RE)![0].trim(); continue; }
+      const { phone: cellPhone } = extractPhone(cell);
+      if (!phone && cellPhone) { phone = cellPhone; continue; }
       if (!email && EMAIL_RE.test(cell)) { email = cell.match(EMAIL_RE)![0]; continue; }
       if (!address && STREET_WORDS.test(cell) && /\d/.test(cell)) { address = cell; continue; }
       if (!first_name && !/\d/.test(cell) && NAME_RE.test(cell)) {
@@ -132,9 +180,12 @@ function parseFreeform(lines: string[]): ParsedLead[] {
       if (open) open.email = val; else pending.email = val;
       continue;
     }
-    if (PHONE_RE.test(line) && line.replace(/[^\d]/g, '').length >= 10 && line.replace(/[^\d]/g, '').length <= 12 && (line.match(PHONE_RE)![0].length / line.length) > 0.45) {
+    const { phone: linePhone, remainder } = extractPhone(line);
+    // Treat as a phone line if the phone candidate makes up most of the line's content
+    // (a stray 7+ digit number inside a longer sentence shouldn't be misread as a contact line).
+    if (linePhone && remainder.length < line.length * 0.5) {
       flush();
-      open = { _rawName: pending.name, phone: line.match(PHONE_RE)![0].trim(), email: pending.email, address: pending.address, notes: pending.notes, first_name: null, last_name: null };
+      open = { _rawName: pending.name, phone: linePhone, email: pending.email, address: pending.address, notes: pending.notes, first_name: null, last_name: null };
       pending = { name: null, address: null, email: null, notes: null };
       continue;
     }

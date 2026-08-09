@@ -1,13 +1,19 @@
 export const STAFF_JS = `
-function switchStaffTab(tab) {
+async function switchStaffTab(tab) {
   staffTab = tab;
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   if (tab === 'queue' || tab === 'chat') clearNavBadge(tab);
-  if (tab === 'home') renderStaffHome();
-  else if (tab === 'queue') renderStaffQueue();
-  else if (tab === 'chat') { const body = document.getElementById('staffBody'); body.innerHTML = '<div class="fade-up" id="staffChatWrap"></div>'; renderChatInto(document.getElementById('staffChatWrap')); }
-  else if (tab === 'board') renderStaffBoard();
-  else if (tab === 'profile') renderStaffProfile();
+  const body = document.getElementById('staffBody');
+  try {
+    if (tab === 'home') await renderStaffHome();
+    else if (tab === 'queue') await renderStaffQueue();
+    else if (tab === 'chat') { body.innerHTML = '<div class="fade-up" id="staffChatWrap"></div>'; await renderChatInto(document.getElementById('staffChatWrap')); }
+    else if (tab === 'board') await renderStaffBoard();
+    else if (tab === 'profile') await renderStaffProfile();
+  } catch (err) {
+    console.error('Staff tab render failed:', tab, err);
+    body.innerHTML = '<div class="panel p fade-up" style="text-align:center;"><div style="font-size:14px;margin-bottom:10px;">Something went wrong loading this.</div><div style="font-size:12px;color:var(--text-dim);margin-bottom:14px;">' + esc(String(err && err.message || err)) + '</div><button class="btn btn-gold" onclick="switchStaffTab(\\'' + tab + '\\')">Retry</button></div>';
+  }
 }
 
 async function renderStaffHome() {
@@ -94,19 +100,30 @@ async function claimLead(id) {
 
 async function renderActiveCall(body, lead, role) {
   let scripts = [];
+  let template = '';
   try { const sRes = await api('/api/scripts?type=' + encodeURIComponent(lead.lead_type || 'general')); scripts = (await sRes.json()).data; } catch {}
+  try { const tRes = await api('/api/call-template'); template = (await tRes.json()).data.template; } catch {}
   const isFinisher = role === 'finisher';
   body.innerHTML = \`
+    \${template && !isFinisher ? \`<div class="panel p fade-up" style="border-color:var(--gold-glow);"><div class="section-title" style="margin-top:0;">Call Guide</div><div style="font-size:13px;line-height:1.7;white-space:pre-wrap;color:var(--text);">\${esc(template)}</div></div>\` : ''}
     <div class="panel call-card fade-up">
       <div class="call-status-row"><span class="badge \${lead.status}">\${lead.status.replace(/_/g,' ')}</span><span class="call-timer mono" id="callTimer">00:00</span></div>
       <div class="info-row"><span class="k">Name</span><span class="v">\${fullName(lead)}</span></div>
       <div class="info-row"><span class="k">Phone</span><span class="v mono">\${lead.phone}</span></div>
       \${lead.email ? '<div class="info-row"><span class="k">Email</span><span class="v">' + lead.email + '</span></div>' : ''}
-      \${lead.notes ? '<div class="info-row"><span class="k">Notes</span><span class="v">' + esc(lead.notes) + '</span></div>' : ''}
+      \${lead.address ? '<div class="info-row"><span class="k">Address</span><span class="v">' + esc(lead.address) + '</span></div>' : ''}
+      \${lead.notes ? '<div class="info-row"><span class="k">Notes</span><span class="v" style="white-space:pre-wrap;text-align:left;">' + esc(lead.notes) + '</span></div>' : ''}
       \${!isFinisher ? \`<div class="call-action-row">
         <a class="dial-btn" href="tel:\${lead.phone}">\${ICONS.phone} Dial</a>
         \${lead.status === 'calling' ? '<button class="oncall-btn" onclick="connectCall(' + lead.id + ')">Mark On Call</button>' : '<button class="endcall-btn" style="grid-column:auto;" onclick="endCall(' + lead.id + ')">End Call</button>'}
       </div>\` : \`<div class="call-action-row"><a class="dial-btn" href="tel:\${lead.phone}" style="grid-column:1/-1;">\${ICONS.phone} Dial \${lead.phone}</a></div>\`}
+      \${!isFinisher ? \`<div class="field" style="margin-top:4px;">
+        <label>Push a note to admin now</label>
+        <div style="display:flex;gap:8px;">
+          <input id="liveNoteInput" placeholder="e.g. asked for a callback tomorrow" onkeydown="if(event.key==='Enter') pushLiveNote(\${lead.id})" />
+          <button class="btn btn-ghost btn-sm" onclick="pushLiveNote(\${lead.id})">Add</button>
+        </div>
+      </div>\` : ''}
       \${scripts.length ? \`<div class="scripts-toggle" onclick="this.nextElementSibling.classList.toggle('open')"><span>\${ICONS.doc || ''} Scripts (\${scripts.length})</span><span>▾</span></div><div class="scripts-panel">\${scripts.map(s => '<div class="script-item"><div class="title">' + esc(s.title) + '</div><div class="content">' + esc(s.content) + '</div></div>').join('')}</div>\` : ''}
       \${!isFinisher && lead.status === 'call_ended' ? \`<div class="outcome-grid">
         <button class="win-btn" style="grid-column:1/-1;" onclick="recordOutcome(\${lead.id},'successful_call')">Successful Call</button>
@@ -121,6 +138,14 @@ async function renderActiveCall(body, lead, role) {
     </div>\`;
   if (!callStart) callStart = Date.now();
   startCallTimer();
+}
+async function pushLiveNote(leadId) {
+  const input = document.getElementById('liveNoteInput');
+  const note = input.value.trim();
+  if (!note) return;
+  input.value = '';
+  await api('/api/caller/leads/' + leadId + '/note', { method: 'POST', body: JSON.stringify({ note }) });
+  renderStaffQueue();
 }
 function startCallTimer() {
   clearInterval(callTimerInterval);
@@ -155,10 +180,16 @@ async function renderStaffBoard() {
 
 async function renderStaffProfile() {
   const body = document.getElementById('staffBody');
+  const meRes = await api('/api/me');
+  const fresh = (await meRes.json()).data;
+  me = { ...me, ...fresh }; localStorage.setItem('dispatch_me', JSON.stringify(me));
   body.innerHTML = \`
     <div class="panel p fade-up">
       <div class="section-title" style="margin-top:0;">Display Name</div>
       <div class="field"><input id="pfName" value="\${esc(me.name)}" /></div>
+      <div class="section-title">Your Call-From Number</div>
+      <p style="font-size:11.5px;color:var(--text-dim);margin-bottom:8px;">The number you're actually dialing from. Only admins can see this, and it's blurred by default.</p>
+      <div class="field"><input id="pfPhone" value="\${esc(me.call_phone || '')}" placeholder="e.g. +44 7911 123456" /></div>
       <div class="section-title">Avatar</div>
       <div class="avatar-grid" id="avatarGrid"></div>
       <button class="btn btn-gold btn-block" onclick="saveProfile()">Save Changes</button>
@@ -179,8 +210,9 @@ async function renderStaffProfile() {
 }
 async function saveProfile() {
   const name = document.getElementById('pfName').value.trim();
+  const call_phone = document.getElementById('pfPhone').value.trim();
   const avatar = document.querySelector('.avatar-opt.sel');
-  const res = await api('/api/me/profile', { method: 'PATCH', body: JSON.stringify({ name, avatar: avatar ? avatar.dataset.av : undefined }) });
+  const res = await api('/api/me/profile', { method: 'PATCH', body: JSON.stringify({ name, call_phone, avatar: avatar ? avatar.dataset.av : undefined }) });
   const data = await res.json();
   me = { ...me, ...data.data }; localStorage.setItem('dispatch_me', JSON.stringify(me));
   document.getElementById('profileStatus').textContent = 'Saved ✓'; document.getElementById('profileStatus').style.color = 'var(--success)';

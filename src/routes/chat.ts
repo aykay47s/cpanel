@@ -14,9 +14,11 @@ chat.get('/api/chat/messages', async (c) => {
   const rows = before
     ? await sql`SELECT chat_messages.*, users.name as sender_name, users.avatar as sender_avatar, users.role as sender_role
         FROM chat_messages LEFT JOIN users ON users.id = chat_messages.sender_id
-        WHERE chat_messages.id < ${before} ORDER BY chat_messages.id DESC LIMIT 50`
+        WHERE chat_messages.id < ${before} AND (chat_messages.expires_at IS NULL OR chat_messages.expires_at > now())
+        ORDER BY chat_messages.id DESC LIMIT 50`
     : await sql`SELECT chat_messages.*, users.name as sender_name, users.avatar as sender_avatar, users.role as sender_role
         FROM chat_messages LEFT JOIN users ON users.id = chat_messages.sender_id
+        WHERE chat_messages.expires_at IS NULL OR chat_messages.expires_at > now()
         ORDER BY chat_messages.id DESC LIMIT 50`;
   return c.json({ data: rows.reverse() });
 });
@@ -35,16 +37,24 @@ chat.get('/api/chat/search', async (c) => {
 chat.post('/api/chat/messages', async (c) => {
   const user = await authenticate(c);
   if (!user) return bad(c, 'Unauthorized', 401);
-  const { content, replyToId } = await c.req.json().catch(() => ({}));
+  const { content, replyToId, expiresInSeconds } = await c.req.json().catch(() => ({}));
   if (!content || !content.trim()) return bad(c, 'Message cannot be empty');
-  const [row] = await sql`INSERT INTO chat_messages (sender_id, content, reply_to_id) VALUES (${user.id}, ${content.trim()}, ${replyToId || null}) RETURNING *`;
+  const expiresAt = expiresInSeconds ? new Date(Date.now() + expiresInSeconds * 1000) : null;
+  const [row] = await sql`INSERT INTO chat_messages (sender_id, content, reply_to_id, expires_at) VALUES (${user.id}, ${content.trim()}, ${replyToId || null}, ${expiresAt}) RETURNING *`;
   const full = { ...row, sender_name: user.name, sender_avatar: user.avatar, sender_role: user.role };
   broadcast('chat_message', full);
   await notifyRole('all', 'chat', `${user.name}: ${content.trim().slice(0, 80)}`, undefined, user.id);
   return c.json({ data: full });
 });
 
-chat.delete('/api/admin/chat/messages/:id', requireRole('admin'), async (c) => {
+// Manual delete — removes the row entirely from the database, not a soft-delete flag.
+// Anyone can delete their own message; admins can delete any message.
+chat.delete('/api/chat/messages/:id', async (c) => {
+  const user = await authenticate(c);
+  if (!user) return bad(c, 'Unauthorized', 401);
+  const [msg] = await sql`SELECT sender_id FROM chat_messages WHERE id = ${c.req.param('id')}`;
+  if (!msg) return bad(c, 'Not found', 404);
+  if (msg.sender_id !== user.id && user.role !== 'admin') return bad(c, 'Unauthorized', 403);
   await sql`DELETE FROM chat_messages WHERE id = ${c.req.param('id')}`;
   broadcast('chat_deleted', { id: Number(c.req.param('id')) });
   return c.json({ ok: true });

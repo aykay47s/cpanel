@@ -5,6 +5,17 @@ import { registerClient, unregisterClient } from '../realtime';
 
 export const misc = new Hono();
 
+misc.get('/api/call-template', requireRole('admin', 'caller', 'finisher'), async (c) => {
+  const [row] = await sql`SELECT value FROM settings WHERE key = 'call_template'`;
+  return c.json({ data: { template: row?.value || '' } });
+});
+misc.post('/api/admin/call-template', requireRole('admin'), async (c) => {
+  const { template } = await c.req.json().catch(() => ({}));
+  if (typeof template !== 'string') return c.json({ error: 'template required' }, 400);
+  await sql`INSERT INTO settings (key, value) VALUES ('call_template', ${template}) ON CONFLICT (key) DO UPDATE SET value = ${template}`;
+  return c.json({ ok: true });
+});
+
 misc.get('/api/goal', async (c) => {
   const rows = await sql`SELECT key, value FROM settings WHERE key IN ('goal_target', 'goal_label')`;
   const map = Object.fromEntries(rows.map((r: any) => [r.key, r.value]));

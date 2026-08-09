@@ -234,6 +234,21 @@ leads.post('/api/caller/leads/:id/end-call', requireRole('caller'), async (c) =>
   return c.json({ data: updated });
 });
 
+// Live note: callers can push notes WHILE still on the call, so admins see them
+// immediately rather than waiting for the final disposition.
+leads.post('/api/caller/leads/:id/note', requireRole('caller'), async (c) => {
+  const user = c.get('user');
+  const { note } = await c.req.json().catch(() => ({}));
+  if (!note || !note.trim()) return bad(c, 'Note cannot be empty');
+  const [lead] = await sql`SELECT status, assigned_caller_id, notes FROM leads WHERE id = ${c.req.param('id')}`;
+  if (!lead || lead.assigned_caller_id !== user.id) return bad(c, 'Not your lead', 403);
+  const combined = lead.notes ? lead.notes + '\n' + note.trim() : note.trim();
+  const [updated] = await sql`UPDATE leads SET notes = ${combined}, updated_at = now() WHERE id = ${c.req.param('id')} RETURNING *`;
+  await logEvent(updated.id, 'note_added', user, null, null, { note: note.trim() });
+  broadcast('lead_updated', updated);
+  return c.json({ data: updated });
+});
+
 const XP_MAP: Record<string, number> = { successful_call: 30, failed: 5, requires_review: 5 };
 
 leads.post('/api/caller/leads/:id/outcome', requireRole('caller'), async (c) => {

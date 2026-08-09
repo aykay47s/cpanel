@@ -3,6 +3,9 @@ import postgres from 'postgres';
 export const sql = postgres(process.env.DATABASE_URL!, { ssl: false });
 
 let ready = false;
+let cleanupStarted = false;
+
+const DEFAULT_CALL_TEMPLATE = 'Greeting: Introduce yourself and confirm you\'re speaking with the right person.\nPurpose: Explain why you\'re calling in one clear sentence.\nQualify: Ask about their current situation and needs.\nNext step: Confirm interest and agree on what happens next.';
 
 export async function ensureDb() {
   if (ready) return;
@@ -90,6 +93,7 @@ export async function ensureDb() {
     sender_id INTEGER REFERENCES users(id),
     content TEXT NOT NULL,
     reply_to_id INTEGER REFERENCES chat_messages(id),
+    expires_at TIMESTAMPTZ,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`;
 
@@ -125,6 +129,8 @@ export async function ensureDb() {
     `ALTER TABLE leads ADD COLUMN IF NOT EXISTS merged_into_id INTEGER`,
     `ALTER TABLE announcements ADD COLUMN IF NOT EXISTS important BOOLEAN NOT NULL DEFAULT false`,
     `ALTER TABLE announcements ADD COLUMN IF NOT EXISTS target_role TEXT NOT NULL DEFAULT 'all'`,
+    `ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS call_phone TEXT`,
   ];
   for (const stmt of alters) {
     await sql.unsafe(`DO $$ BEGIN ${stmt}; EXCEPTION WHEN OTHERS THEN NULL; END $$;`);
@@ -133,6 +139,19 @@ export async function ensureDb() {
   const [goalRow] = await sql`SELECT 1 FROM settings WHERE key = 'goal_target'`;
   if (!goalRow) {
     await sql`INSERT INTO settings (key, value) VALUES ('goal_target', '50'), ('goal_label', 'Successful calls this week') ON CONFLICT (key) DO NOTHING`;
+  }
+  const [templateRow] = await sql`SELECT 1 FROM settings WHERE key = 'call_template'`;
+  if (!templateRow) {
+    await sql`INSERT INTO settings (key, value) VALUES ('call_template', ${DEFAULT_CALL_TEMPLATE}) ON CONFLICT (key) DO NOTHING`;
+  }
+
+  // Hard-delete expired disappearing messages every 30s. This actually removes the
+  // rows from Postgres — not a soft-delete/hidden flag.
+  if (!cleanupStarted) {
+    cleanupStarted = true;
+    setInterval(async () => {
+      try { await sql`DELETE FROM chat_messages WHERE expires_at IS NOT NULL AND expires_at < now()`; } catch {}
+    }, 30000);
   }
 
   ready = true;

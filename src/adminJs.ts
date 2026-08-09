@@ -8,17 +8,22 @@ function switchAdminTab(tab) {
 async function renderAdminTab(tab) {
   const el = document.getElementById('adminContent');
   if (tab !== 'chat') el.innerHTML = '<div class="loading-shimmer"></div><div class="loading-shimmer" style="width:70%;"></div>';
-
-  if (tab === 'dashboard') return renderAdminDashboard(el);
-  if (tab === 'leads') return renderAdminLeads(el);
-  if (tab === 'import') return renderAdminImport(el);
-  if (tab === 'duplicates') return renderAdminDuplicates(el);
-  if (tab === 'finishing') return renderAdminFinishing(el);
-  if (tab === 'roster') return renderAdminRoster(el);
-  if (tab === 'chat') { el.innerHTML = '<div class="fade-up" id="adminChatWrap"></div>'; return renderChatInto(document.getElementById('adminChatWrap')); }
-  if (tab === 'announcements') return renderAdminAnnouncements(el);
-  if (tab === 'goal') return renderAdminGoal(el);
-  if (tab === 'scripts') return renderAdminScripts(el);
+  try {
+    if (tab === 'dashboard') return await renderAdminDashboard(el);
+    if (tab === 'leads') return await renderAdminLeads(el);
+    if (tab === 'import') return await renderAdminImport(el);
+    if (tab === 'duplicates') return await renderAdminDuplicates(el);
+    if (tab === 'finishing') return await renderAdminFinishing(el);
+    if (tab === 'roster') return await renderAdminRoster(el);
+    if (tab === 'chat') { el.innerHTML = '<div class="fade-up" id="adminChatWrap"></div>'; return await renderChatInto(document.getElementById('adminChatWrap')); }
+    if (tab === 'announcements') return await renderAdminAnnouncements(el);
+    if (tab === 'goal') return await renderAdminGoal(el);
+    if (tab === 'scripts') return await renderAdminScripts(el);
+    if (tab === 'template') return await renderAdminTemplate(el);
+  } catch (err) {
+    console.error('Tab render failed:', tab, err);
+    el.innerHTML = '<div class="panel p fade-up" style="text-align:center;"><div style="font-size:14px;margin-bottom:10px;">Something went wrong loading this.</div><div style="font-size:12px;color:var(--text-dim);margin-bottom:14px;">' + esc(String(err && err.message || err)) + '</div><button class="btn btn-gold" onclick="renderAdminTab(\\'' + tab + '\\')">Retry</button></div>';
+  }
 }
 
 async function renderAdminDashboard(el) {
@@ -112,8 +117,12 @@ async function renderAdminImport(el) {
   el.innerHTML = \`
     <div class="panel p fade-up">
       <div class="section-title" style="margin-top:0;">Smart Import</div>
-      <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:12px;">Paste leads in any format — CSV, pipe-separated, freeform text with names/phones/addresses on random lines. Sensitive data (card numbers, CVVs, passwords) is automatically stripped before anything is stored.</p>
+      <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:12px;">Paste leads in any format — CSV, pipe-separated, freeform text, phone numbers with or without separators, local or international. Sensitive data (card numbers, CVVs, passwords) is automatically stripped before anything is stored.</p>
       <textarea id="importText" rows="9" placeholder="John Smith, 555-123-4567, john@email.com, 42 Oak St&#10;or paste freeform data, CSV, or pipe-separated rows"></textarea>
+      <div class="row-flex" style="margin-top:12px;">
+        <div class="field"><label>Assign Lead Type</label><input id="importLeadType" placeholder="general" /></div>
+        <div class="field"><label>Source Label</label><input id="importSource" placeholder="e.g. Facebook Ad" /></div>
+      </div>
       <button class="btn btn-gold btn-block" style="margin-top:12px;" onclick="runImportPreview()">Analyze</button>
     </div>
     <div id="importPreview"></div>\`;
@@ -122,23 +131,59 @@ let lastImportPreview = [];
 async function runImportPreview() {
   const text = document.getElementById('importText').value.trim();
   if (!text) return;
+  const preview = document.getElementById('importPreview');
+  preview.innerHTML = '<div class="loading-shimmer"></div>';
   const res = await api('/api/admin/leads/import/preview', { method: 'POST', body: JSON.stringify({ text }) });
+  if (!res.ok) { const e = await res.json().catch(() => ({})); preview.innerHTML = '<div class="panel p" style="color:var(--danger);">' + (e.error || 'Import failed') + '</div>'; return; }
   const data = (await res.json()).data;
   lastImportPreview = data.leads;
-  const preview = document.getElementById('importPreview');
+  let html = '';
   if (data.redacted.redactedCount > 0) {
-    preview.innerHTML = \`<div class="panel p fade-up" style="border-color:var(--gold-glow);"><b style="color:var(--gold-bright);">\${data.redacted.redactedCount} sensitive field(s) removed</b> before parsing (\${data.redacted.redactedTypes.join(', ')}). These are never stored.</div>\`;
-  } else { preview.innerHTML = ''; }
-  if (!lastImportPreview.length) { preview.innerHTML += '<div class="panel p" style="color:var(--text-dim);">No valid leads detected in that text.</div>'; return; }
-  preview.innerHTML += \`
+    html += \`<div class="panel p fade-up" style="border-color:var(--gold-glow);"><b style="color:var(--gold-bright);">\${data.redacted.redactedCount} sensitive field(s) removed</b> before parsing (\${data.redacted.redactedTypes.join(', ')}). These are never stored.</div>\`;
+  }
+  if (!lastImportPreview.length) {
+    html += '<div class="panel p" style="color:var(--text-dim);">No phone numbers detected anywhere in that text. Double check the paste — every lead needs at least a phone number (7-15 digits) to be importable.</div>';
+    preview.innerHTML = html;
+    return;
+  }
+  html += \`
     <div class="panel p fade-up">
-      <div class="section-title" style="margin-top:0;">Found \${lastImportPreview.length} lead\${lastImportPreview.length === 1 ? '' : 's'} — review before importing</div>
-      \${lastImportPreview.map((r, i) => \`<div class="parse-row"><span>\${[r.first_name,r.last_name].filter(Boolean).join(' ') || '<span class="miss">no name</span>'}</span><span class="mono">\${r.phone}</span><span>\${r.address || r.email || r.notes || '<span class="miss">—</span>'}</span><span>\${r.potentialDuplicate ? '<span class="dup-warn">' + r.potentialDuplicate.confidence + '% match #' + r.potentialDuplicate.leadId + '</span>' : ''}</span></div>\`).join('')}
-      <button class="btn btn-gold btn-block" style="margin-top:16px;" onclick="confirmImport()">Import All \${lastImportPreview.length} Leads</button>
+      <div class="section-title" style="margin-top:0;">Found \${lastImportPreview.length} lead\${lastImportPreview.length === 1 ? '' : 's'} — review and edit before importing</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr auto;gap:8px;padding-bottom:8px;margin-bottom:6px;border-bottom:1px solid var(--border);font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px;font-weight:700;">
+        <span>First Name</span><span>Last Name</span><span>Phone</span><span>Email / Notes</span><span></span>
+      </div>
+      <div id="importRows">\${lastImportPreview.map((r, i) => importRowHtml(r, i)).join('')}</div>
+      <button class="btn btn-ghost btn-sm" style="margin-top:10px;" onclick="addBlankImportRow()">+ Add row manually</button>
+      <button class="btn btn-gold btn-block" style="margin-top:16px;" onclick="confirmImport()">Import <span id="importCount">\${lastImportPreview.length}</span> Leads</button>
     </div>\`;
+  preview.innerHTML = html;
+}
+function importRowHtml(r, i) {
+  return \`<div class="row-flex" style="margin-bottom:8px;" data-row="\${i}">
+    <input style="flex:1;min-width:0;" value="\${esc(r.first_name || '')}" oninput="lastImportPreview[\${i}].first_name = this.value || null" placeholder="First name" />
+    <input style="flex:1;min-width:0;" value="\${esc(r.last_name || '')}" oninput="lastImportPreview[\${i}].last_name = this.value || null" placeholder="Last name" />
+    <input style="flex:1;min-width:0;" value="\${esc(r.phone || '')}" oninput="lastImportPreview[\${i}].phone = this.value" placeholder="Phone" class="mono" />
+    <input style="flex:1;min-width:0;" value="\${esc(r.email || r.notes || '')}" oninput="lastImportPreview[\${i}].notes = this.value" placeholder="Email / notes" />
+    <button class="btn btn-danger btn-sm" onclick="removeImportRow(\${i})">✕</button>
+    \${r.potentialDuplicate ? '<div class="dup-warn" style="grid-column:1/-1;">' + r.potentialDuplicate.confidence + '% possible match with existing lead #' + r.potentialDuplicate.leadId + '</div>' : ''}
+  </div>\`;
+}
+function removeImportRow(i) {
+  lastImportPreview.splice(i, 1);
+  document.getElementById('importRows').innerHTML = lastImportPreview.map((r, j) => importRowHtml(r, j)).join('');
+  document.getElementById('importCount').textContent = lastImportPreview.length;
+}
+function addBlankImportRow() {
+  lastImportPreview.push({ first_name: null, last_name: null, phone: '', email: null, address: null, notes: null });
+  document.getElementById('importRows').innerHTML = lastImportPreview.map((r, j) => importRowHtml(r, j)).join('');
+  document.getElementById('importCount').textContent = lastImportPreview.length;
 }
 async function confirmImport() {
-  const res = await api('/api/admin/leads/import/confirm', { method: 'POST', body: JSON.stringify({ leads: lastImportPreview }) });
+  const lead_type = document.getElementById('importLeadType').value.trim() || 'general';
+  const source = document.getElementById('importSource').value.trim() || 'import';
+  const validLeads = lastImportPreview.filter(r => r.phone && r.phone.replace(/[^\d]/g, '').length >= 7);
+  if (!validLeads.length) return alert('No rows have a valid phone number');
+  const res = await api('/api/admin/leads/import/confirm', { method: 'POST', body: JSON.stringify({ leads: validLeads, lead_type, source }) });
   const data = await res.json();
   alert('Imported ' + data.inserted + ' leads' + (data.flagged ? ' (' + data.flagged + ' flagged as possible duplicates for review)' : ''));
   switchAdminTab('leads');
@@ -185,8 +230,10 @@ async function renderAdminRoster(el) {
       </div>
       <div id="newPinBanner"></div>
     </div>
-    <div class="panel p fade-up"><table><thead><tr><th></th><th>Name</th><th>PIN</th><th>Role</th><th>XP</th><th>Status</th><th></th></tr></thead>
-    <tbody>\${rows.map(u => \`<tr><td style="font-size:17px;">\${u.avatar||'🧑'}</td><td>\${u.name}</td><td class="pin-display">\${u.pin}</td><td><span class="badge \${u.role}">\${u.role}</span></td><td>\${u.xp}</td><td><span class="badge \${u.status}">\${u.status}</span></td>
+    <div class="panel p fade-up"><table><thead><tr><th></th><th>Name</th><th>PIN</th><th>Role</th><th>Call Number</th><th>XP</th><th>Status</th><th></th></tr></thead>
+    <tbody>\${rows.map(u => \`<tr><td style="font-size:17px;">\${u.avatar||'🧑'}</td><td>\${esc(u.name)}</td><td class="pin-display">\${u.pin}</td><td><span class="badge \${u.role}">\${u.role}</span></td>
+      <td>\${u.call_phone ? '<span class="blur-phone mono" onclick="this.classList.toggle(\\'revealed\\')">' + esc(u.call_phone) + '</span>' : '<span style="color:var(--text-faint);">—</span>'}</td>
+      <td>\${u.xp}</td><td><span class="badge \${u.status}">\${u.status}</span></td>
       <td style="display:flex;gap:6px;"><select onchange="changeRole(\${u.id}, this.value)" style="width:auto;padding:6px 8px;font-size:11px;"><option value="">Change role…</option><option value="caller">Caller</option><option value="finisher">Finisher</option><option value="admin">Admin</option></select><button class="btn btn-danger btn-sm" onclick="removeUser(\${u.id})">Remove</button></td></tr>\`).join('')}</tbody></table></div>\`;
 }
 async function addUser() {
@@ -269,4 +316,23 @@ async function addScript() {
   renderAdminTab('scripts');
 }
 async function deleteScript(id) { await api('/api/admin/scripts/' + id, { method: 'DELETE' }); renderAdminTab('scripts'); }
+
+async function renderAdminTemplate(el) {
+  const res = await api('/api/call-template');
+  const data = (await res.json()).data;
+  el.innerHTML = \`
+    <div class="panel p fade-up">
+      <div class="section-title" style="margin-top:0;">Call Template</div>
+      <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:12px;">This is what every caller sees on screen the moment they connect a call. Structure it however works for your team — greeting, qualifying questions, next steps.</p>
+      <textarea id="templateText" rows="10">\${esc(data.template)}</textarea>
+      <button class="btn btn-gold btn-block" style="margin-top:12px;" onclick="saveTemplate()">Save Template</button>
+      <div id="templateStatus" style="font-size:12px;margin-top:10px;"></div>
+    </div>\`;
+}
+async function saveTemplate() {
+  const template = document.getElementById('templateText').value;
+  await api('/api/admin/call-template', { method: 'POST', body: JSON.stringify({ template }) });
+  document.getElementById('templateStatus').textContent = 'Saved ✓';
+  document.getElementById('templateStatus').style.color = 'var(--success)';
+}
 `;
