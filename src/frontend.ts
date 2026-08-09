@@ -25,6 +25,9 @@ export const page = `<!DOCTYPE html>
 <link rel="manifest" href="/manifest.json">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Frap Tise">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<link rel="icon" href="/icon.png">
 <meta name="theme-color" content="#08080b">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
@@ -39,10 +42,11 @@ export const page = `<!DOCTYPE html>
   --text:#ece5d8; --text-dim:#9c9184; --text-faint:#5f584e;
   --success:#5fae6e; --danger:#c0554a; --warn:#c9a15e;
 }
-*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
-html,body{height:100%;}
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
+html,body{height:100%;overscroll-behavior-y:contain;}
 body{
-  font-family:'Inter',sans-serif;color:var(--text);min-height:100vh;overflow-x:hidden;
+  font-family:'Inter',sans-serif;color:var(--text);min-height:100vh;min-height:100dvh;overflow-x:hidden;
+  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
   background:
     radial-gradient(ellipse 70% 40% at 50% 0%, rgba(201,161,94,.06), transparent),
     radial-gradient(ellipse 60% 50% at 100% 100%, rgba(63,168,154,.05), transparent),
@@ -87,7 +91,7 @@ button{font-family:'Inter',sans-serif;cursor:pointer;border:none;outline:none;tr
 .btn-ghost:hover{color:var(--text);}
 .btn-block{width:100%;}
 .btn-sm{padding:8px 13px;font-size:12px;border-radius:8px;}
-input,select,textarea{width:100%;padding:11px 14px;border-radius:9px;border:1px solid var(--border-2);background:var(--bg-2);color:var(--text);font-size:14px;outline:none;font-family:inherit;}
+input,select,textarea{width:100%;padding:11px 14px;border-radius:9px;border:1px solid var(--border-2);background:var(--bg-2);color:var(--text);font-size:16px;outline:none;font-family:inherit;-webkit-appearance:none;appearance:none;}
 input:focus,select:focus,textarea:focus{border-color:var(--gold);}
 label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.8px;display:block;margin-bottom:6px;font-weight:700;}
 .field{margin-bottom:13px;}
@@ -108,7 +112,7 @@ label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spa
 .ic{width:17px;height:17px;display:inline-block;vertical-align:-3px;stroke:currentColor;stroke-width:1.7;fill:none;stroke-linecap:round;stroke-linejoin:round;}
 
 /* ---------- Login ---------- */
-#loginScreen{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;position:relative;overflow:hidden;}
+#loginScreen{min-height:100vh;min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:24px;position:relative;overflow:hidden;}
 #loginScreen::before{content:'';position:absolute;inset:0;background:radial-gradient(circle at 50% 30%, rgba(201,161,94,.1), transparent 60%);pointer-events:none;}
 .login-card{width:100%;max-width:360px;padding:44px 34px;text-align:center;position:relative;}
 .crest{width:52px;height:52px;margin:0 auto 20px;border:1.5px solid var(--gold-glow);border-radius:50%;display:flex;align-items:center;justify-content:center;position:relative;}
@@ -129,7 +133,7 @@ label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spa
 .login-error{color:var(--danger);font-size:12.5px;margin-top:12px;min-height:16px;}
 
 /* ---------- Shell layout ---------- */
-.topbar{position:sticky;top:0;z-index:60;display:flex;justify-content:space-between;align-items:center;padding:14px 20px;background:rgba(11,9,8,.88);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);}
+.topbar{position:sticky;top:0;z-index:60;display:flex;justify-content:space-between;align-items:center;padding:calc(14px + env(safe-area-inset-top)) 20px 14px;background:rgba(11,9,8,.88);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);}
 .brand{font-family:'Cormorant Garamond',serif;font-weight:700;font-size:19px;display:flex;align-items:center;gap:9px;letter-spacing:.3px;}
 .brand-mark{width:20px;height:20px;border:1px solid var(--gold-glow);border-radius:50%;position:relative;flex-shrink:0;}
 .brand-mark::after{content:'';position:absolute;inset:5px;border-radius:50%;background:var(--gold);box-shadow:0 0 8px var(--gold-glow);}
@@ -139,8 +143,8 @@ label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spa
 .icon-btn .dot{position:absolute;top:6px;right:6px;width:7px;height:7px;border-radius:50%;background:var(--crimson);box-shadow:0 0 6px var(--crimson-glow);}
 
 /* Admin: sidebar */
-.admin-shell{display:flex;min-height:100vh;}
-.admin-sidebar{width:230px;flex-shrink:0;background:var(--bg-2);border-right:1px solid var(--border);padding:18px 12px;position:sticky;top:0;height:100vh;overflow-y:auto;}
+.admin-shell{display:flex;min-height:100vh;min-height:100dvh;}
+.admin-sidebar{width:230px;flex-shrink:0;background:var(--bg-2);border-right:1px solid var(--border);padding:18px 12px;position:sticky;top:0;height:100vh;height:100dvh;overflow-y:auto;-webkit-overflow-scrolling:touch;}
 .side-link{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:9px;font-size:13px;font-weight:600;color:var(--text-dim);cursor:pointer;margin-bottom:2px;}
 .side-link:hover{background:var(--s2);color:var(--text);}
 .side-link.active{background:linear-gradient(135deg,rgba(201,161,94,.16),rgba(201,161,94,.03));color:var(--gold-bright);}
@@ -225,7 +229,7 @@ tr.clickable{cursor:pointer;}
 .fail-btn{background:rgba(192,85,74,.12);color:var(--danger);border:1px solid rgba(192,85,74,.3);}
 .scripts-toggle{display:flex;justify-content:space-between;align-items:center;padding:12px 15px;border-radius:10px;background:var(--s2);margin-bottom:12px;cursor:pointer;font-size:12.5px;font-weight:600;color:var(--text-dim);}
 .scripts-panel{max-height:0;overflow:hidden;transition:max-height .3s ease;}
-.scripts-panel.open{max-height:400px;overflow-y:auto;margin-bottom:12px;}
+.scripts-panel.open{max-height:400px;overflow-y:auto;margin-bottom:12px;-webkit-overflow-scrolling:touch;}
 .script-item{padding:12px 15px;border-radius:10px;background:var(--s2);margin-bottom:7px;}
 .script-item .title{font-weight:700;font-size:12.5px;margin-bottom:4px;color:var(--gold-bright);}
 .script-item .content{font-size:12.5px;color:var(--text-dim);line-height:1.5;white-space:pre-wrap;}
@@ -242,8 +246,8 @@ tr.clickable{cursor:pointer;}
 .lb-stats b{color:var(--text);font-size:12.5px;}
 
 /* chat */
-.chat-shell{display:flex;flex-direction:column;height:calc(100vh - 120px);}
-.chat-messages{flex:1;overflow-y:auto;padding:6px 2px;display:flex;flex-direction:column;gap:12px;}
+.chat-shell{display:flex;flex-direction:column;height:calc(100dvh - 190px);}
+.chat-messages{flex:1;overflow-y:auto;padding:6px 2px;display:flex;flex-direction:column;gap:12px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;}
 .chat-msg{display:flex;gap:10px;max-width:85%;}
 .chat-msg.own{align-self:flex-end;flex-direction:row-reverse;}
 .chat-av{width:32px;height:32px;border-radius:9px;background:var(--s2);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;border:1px solid var(--border);}
@@ -357,6 +361,13 @@ tr.clickable{cursor:pointer;}
 </div>
 
 <div id="notifPanel" class="hidden" style="position:fixed;top:60px;right:16px;width:320px;max-height:70vh;overflow-y:auto;z-index:200;"></div>
+<div id="iosInstallBanner" class="hidden" style="position:fixed;left:12px;right:12px;bottom:calc(84px + env(safe-area-inset-bottom));z-index:150;">
+  <div class="panel" style="padding:14px 16px;display:flex;align-items:center;gap:12px;border-color:var(--gold-glow);">
+    <span style="font-size:20px;">📲</span>
+    <div style="flex:1;font-size:12px;line-height:1.5;">Add to your Home Screen to get real push notifications for new leads: tap <b>Share</b> ↗ then <b>Add to Home Screen</b>.</div>
+    <button class="btn btn-ghost btn-sm" onclick="document.getElementById('iosInstallBanner').classList.add('hidden');localStorage.setItem('ios_banner_dismissed','1');">✕</button>
+  </div>
+</div>
 
 <script>
 const ICONS = {
@@ -387,7 +398,28 @@ let staffTab = 'home';
 const AVATARS = ['🧑','👨','👩','🧔','👱','👨‍💼','👩‍💼','🦸','🕵️','👨‍💻','👩‍💻','🤠','🥷','👽','🤖','🦊','🦁','🐯','🦉','🐙'];
 
 function authHeaders(extra) { return Object.assign({ 'x-user-id': me.id, 'x-user-pin': me.pin, 'Content-Type': 'application/json' }, extra || {}); }
-async function api(url, opts = {}) { opts.headers = authHeaders(opts.headers); return fetch(url, opts); }
+async function api(url, opts = {}) {
+  opts.headers = authHeaders(opts.headers);
+  let res;
+  try {
+    res = await fetch(url, opts);
+  } catch (netErr) {
+    return { ok: false, status: 0, json: async () => ({ error: 'Network error — check your connection' }) };
+  }
+  const clone = res.clone();
+  const originalJson = res.json.bind(res);
+  res.json = async () => {
+    try {
+      return await originalJson();
+    } catch (parseErr) {
+      let text = '';
+      try { text = await clone.text(); } catch {}
+      const friendly = res.status >= 500 ? 'Server error — please try again' : (text ? text.slice(0, 200) : ('Request failed (' + res.status + ')'));
+      return { error: friendly };
+    }
+  };
+  return res;
+}
 
 // ---------- Login ----------
 document.getElementById('keypad').addEventListener('click', (e) => {
@@ -436,6 +468,7 @@ async function enterApp() {
     renderStaffNav();
     switchStaffTab('home');
   }
+  checkIosInstallPrompt();
 }
 function renderStaffNav() {
   const nav = document.getElementById('staffNav');
@@ -577,7 +610,17 @@ ${ADMIN_JS}
 ${STAFF_JS}
 </script>
 <script>
+function checkIosInstallPrompt() {
+  const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const isStandalone = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+  const dismissed = localStorage.getItem('ios_banner_dismissed');
+  if (isIos && !isStandalone && !dismissed && me) {
+    document.getElementById('iosInstallBanner').classList.remove('hidden');
+  }
+}
+
 if (me) enterApp();
+checkIosInstallPrompt();
 </script>
 </body>
 </html>`;

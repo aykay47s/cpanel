@@ -135,6 +135,7 @@ export async function ensureDb() {
     `ALTER TABLE leads ADD COLUMN IF NOT EXISTS merged_into_id INTEGER`,
     `ALTER TABLE announcements ADD COLUMN IF NOT EXISTS important BOOLEAN NOT NULL DEFAULT false`,
     `ALTER TABLE announcements ADD COLUMN IF NOT EXISTS target_role TEXT NOT NULL DEFAULT 'all'`,
+    `ALTER TABLE announcements ADD COLUMN IF NOT EXISTS created_by INTEGER REFERENCES users(id)`,
     `ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS call_phone TEXT`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS pfp_data TEXT`,

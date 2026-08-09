@@ -12,6 +12,14 @@ import { page } from './src/frontend';
 const app = new Hono();
 const ADMIN_PIN = process.env.ADMIN_PIN || '9247';
 
+// Every uncaught error becomes a proper JSON response with the real error message
+// logged server-side — never Bun's default plain-text crash page, which is what was
+// breaking the frontend's res.json() calls with "Unexpected token 'I'" errors.
+app.onError((err, c) => {
+  console.error(`[${c.req.method} ${c.req.path}] Unhandled error:`, err);
+  return c.json({ error: err.message || 'Internal server error' }, 500);
+});
+
 app.use('*', async (c, next) => {
   await ensureDb();
   // Bootstrap: ensure at least one admin exists, seeded from ADMIN_PIN.
@@ -45,8 +53,17 @@ app.get('/manifest.json', (c) => {
     display: 'standalone',
     background_color: '#08080b',
     theme_color: '#08080b',
+    icons: [
+      { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+    ],
   });
 });
+
+app.get('/icon.png', async (c) => { c.header('Content-Type', 'image/png'); return c.body(await Bun.file('./public/icon.png').arrayBuffer()); });
+app.get('/icon-192.png', async (c) => { c.header('Content-Type', 'image/png'); return c.body(await Bun.file('./public/icon-192.png').arrayBuffer()); });
+app.get('/icon-512.png', async (c) => { c.header('Content-Type', 'image/png'); return c.body(await Bun.file('./public/icon-512.png').arrayBuffer()); });
+app.get('/apple-touch-icon.png', async (c) => { c.header('Content-Type', 'image/png'); return c.body(await Bun.file('./public/apple-touch-icon.png').arrayBuffer()); });
 
 app.get('/', (c) => {
   c.header('Cache-Control', 'no-store, no-cache, must-revalidate');

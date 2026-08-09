@@ -277,7 +277,7 @@ async function postAnnouncement() {
 async function deleteAnnouncement(id) { await api('/api/admin/announcements/' + id, { method: 'DELETE' }); renderAdminTab('announcements'); }
 
 async function renderAdminGoal(el) {
-  const res = await fetch('/api/goal');
+  const res = await api('/api/goal');
   const goal = (await res.json()).data;
   el.innerHTML = \`<div class="panel p fade-up">
     <div class="section-title" style="margin-top:0;">Team Goal</div>

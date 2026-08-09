@@ -19,7 +19,7 @@ async function switchStaffTab(tab) {
 async function renderStaffHome() {
   const body = document.getElementById('staffBody');
   const [meRes, goalRes, annRes, lbRes] = await Promise.all([
-    api('/api/me'), fetch('/api/goal'), api('/api/announcements'), api('/api/leaderboard'),
+    api('/api/me'), api('/api/goal'), api('/api/announcements'), api('/api/leaderboard'),
   ]);
   const fresh = (await meRes.json()).data; me = { ...me, ...fresh }; localStorage.setItem('dispatch_me', JSON.stringify(me));
   const goal = (await goalRes.json()).data;
@@ -315,7 +315,7 @@ async function togglePush() {
     status.style.color = 'var(--danger)';
     return;
   }
-  const keyRes = await fetch('/api/push/vapid-key');
+  const keyRes = await api('/api/push/vapid-key');
   const { key } = (await keyRes.json()).data;
   const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlBase64ToUint8Array(key) });
   await api('/api/push/subscribe', { method: 'POST', body: JSON.stringify({ subscription: sub.toJSON() }) });
