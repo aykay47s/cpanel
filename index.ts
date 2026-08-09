@@ -35,4 +35,7 @@ app.get('/', (c) => {
   return c.html(page);
 });
 
-export default app;
+export default {
+  port: Number(process.env.PORT) || 8080,
+  fetch: app.fetch,
+};
