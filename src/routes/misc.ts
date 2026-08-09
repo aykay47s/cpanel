@@ -1,0 +1,41 @@
+import { Hono } from 'hono';
+import { sql } from '../db';
+import { requireRole, authenticate } from '../auth';
+import { registerClient, unregisterClient } from '../realtime';
+
+export const misc = new Hono();
+
+misc.get('/api/goal', async (c) => {
+  const rows = await sql`SELECT key, value FROM settings WHERE key IN ('goal_target', 'goal_label')`;
+  const map = Object.fromEntries(rows.map((r: any) => [r.key, r.value]));
+  const [{ count }] = await sql`SELECT COUNT(*)::int as count FROM leads WHERE status IN ('completed') OR outcome = 'successful_call'`;
+  return c.json({ data: { label: map.goal_label || 'Successful calls', target: Number(map.goal_target || 50), current: count } });
+});
+
+misc.post('/api/admin/goal', requireRole('admin'), async (c) => {
+  const { label, target } = await c.req.json().catch(() => ({}));
+  if (label !== undefined) await sql`INSERT INTO settings (key, value) VALUES ('goal_label', ${label}) ON CONFLICT (key) DO UPDATE SET value = ${label}`;
+  if (target !== undefined) await sql`INSERT INTO settings (key, value) VALUES ('goal_target', ${String(target)}) ON CONFLICT (key) DO UPDATE SET value = ${String(target)}`;
+  return c.json({ ok: true });
+});
+
+misc.get('/api/events', async (c) => {
+  const user = await authenticate(c);
+  const userId = user?.id || 0;
+  return new Response(
+    new ReadableStream({
+      start(controller) {
+        const encoder = new TextEncoder();
+        const client = registerClient(userId, (msg: string) => controller.enqueue(encoder.encode(msg)));
+        client.write(': connected\n\n');
+        const keepAlive = setInterval(() => { try { client.write(': ping\n\n'); } catch {} }, 25000);
+        c.req.raw.signal.addEventListener('abort', () => {
+          clearInterval(keepAlive);
+          unregisterClient(client);
+          try { controller.close(); } catch {}
+        });
+      },
+    }),
+    { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' } }
+  );
+});
