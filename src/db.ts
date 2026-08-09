@@ -111,6 +111,15 @@ export async function ensureDb() {
   // ---- Idempotent migrations for tables carried over from earlier deploys ----
   const alters = [
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS notif_prefs JSONB DEFAULT '{"lead_assigned":true,"chat":true,"announcements":true}'`,
+    `ALTER TABLE leads ADD COLUMN IF NOT EXISTS first_name TEXT`,
+    `ALTER TABLE leads ADD COLUMN IF NOT EXISTS last_name TEXT`,
+    `ALTER TABLE leads ADD COLUMN IF NOT EXISTS address TEXT`,
+    `ALTER TABLE leads ADD COLUMN IF NOT EXISTS assigned_caller_id INTEGER REFERENCES users(id)`,
+    `ALTER TABLE leads ADD COLUMN IF NOT EXISTS assigned_finisher_id INTEGER REFERENCES users(id)`,
+    `ALTER TABLE leads ADD COLUMN IF NOT EXISTS uploaded_by INTEGER REFERENCES users(id)`,
+    `ALTER TABLE leads ADD COLUMN IF NOT EXISTS call_started_at TIMESTAMPTZ`,
+    `ALTER TABLE leads ADD COLUMN IF NOT EXISTS call_ended_at TIMESTAMPTZ`,
+    `ALTER TABLE leads ALTER COLUMN status SET DEFAULT 'not_called'`,
     `ALTER TABLE leads ADD COLUMN IF NOT EXISTS dedup_status TEXT DEFAULT 'clear'`,
     `ALTER TABLE leads ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now()`,
     `ALTER TABLE leads ADD COLUMN IF NOT EXISTS merged_into_id INTEGER`,
