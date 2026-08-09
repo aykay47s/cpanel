@@ -133,6 +133,7 @@ export async function ensureDb() {
     `ALTER TABLE leads ADD COLUMN IF NOT EXISTS dedup_status TEXT DEFAULT 'clear'`,
     `ALTER TABLE leads ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now()`,
     `ALTER TABLE leads ADD COLUMN IF NOT EXISTS merged_into_id INTEGER`,
+    `ALTER TABLE leads ADD COLUMN IF NOT EXISTS phone_e164 TEXT`,
     `ALTER TABLE announcements ADD COLUMN IF NOT EXISTS important BOOLEAN NOT NULL DEFAULT false`,
     `ALTER TABLE announcements ADD COLUMN IF NOT EXISTS target_role TEXT NOT NULL DEFAULT 'all'`,
     `ALTER TABLE announcements ADD COLUMN IF NOT EXISTS created_by INTEGER REFERENCES users(id)`,

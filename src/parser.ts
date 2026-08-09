@@ -1,3 +1,5 @@
+import { parsePhoneNumberFromString } from 'libphonenumber-js';
+
 // ---------- Sensitive data detection (never stored) ----------
 // Luhn check for card-number-like sequences.
 function luhnValid(digits: string): boolean {
@@ -206,8 +208,41 @@ function parseFreeform(lines: string[]): ParsedLead[] {
   return leads;
 }
 
+export interface NormalizedPhone { e164: string | null; display: string; valid: boolean; }
+
+// Only attempts full E.164 parsing when there's real signal to work with — an explicit
+// country code, or a UK-shaped domestic number (0 followed by 10 digits). Ambiguous
+// bare digit strings (e.g. a US-style "555-123-4567") are NOT guessed at, since
+// libphonenumber will happily call a wrong-country interpretation "valid" — instead
+// they're kept as typed. Never blocks import either way.
+export function normalizePhone(raw: string): NormalizedPhone {
+  const trimmed = raw.trim();
+  const hasExplicitCountry = /^\+|^00/.test(trimmed);
+  const digitsOnly = trimmed.replace(/[^\d]/g, '');
+  const looksLikeUkDomestic = /^0\d{10}$/.test(digitsOnly);
+  // UK, Guernsey, Jersey, Isle of Man all share the +44 code and libphonenumber
+  // sometimes assigns UK-range mobile numbers to the smaller territories.
+  const ukFamily = ['GB', 'GG', 'JE', 'IM'];
+
+  if (hasExplicitCountry) {
+    const forParsing = trimmed.startsWith('00') ? '+' + trimmed.slice(2) : trimmed;
+    try {
+      const parsed = parsePhoneNumberFromString(forParsing);
+      if (parsed && parsed.isValid()) return { e164: parsed.number, display: parsed.formatNational(), valid: true };
+    } catch {}
+  } else if (looksLikeUkDomestic) {
+    try {
+      const parsed = parsePhoneNumberFromString(trimmed, 'GB');
+      if (parsed && parsed.isValid() && parsed.country && ukFamily.includes(parsed.country)) {
+        return { e164: parsed.number, display: parsed.formatNational(), valid: true };
+      }
+    } catch {}
+  }
+  return { e164: null, display: trimmed, valid: false };
+}
+
 // ---------- Duplicate detection ----------
-function normalizePhone(p: string) { return p.replace(/[^\d]/g, '').replace(/^1/, ''); }
+function normalizePhoneDigits(p: string) { return p.replace(/[^\d]/g, '').replace(/^1/, ''); }
 function normalizeName(n: string | null) { return (n || '').toLowerCase().trim(); }
 function levenshtein(a: string, b: string): number {
   const dp = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
@@ -223,12 +258,16 @@ function levenshtein(a: string, b: string): number {
 export interface DupCandidate { confidence: number; reasons: string[]; }
 
 // Never auto-merges. Returns a confidence score + reasons for human review only.
-export function compareForDuplicate(a: { first_name?: string | null; last_name?: string | null; phone: string; email?: string | null }, b: { first_name?: string | null; last_name?: string | null; phone: string; email?: string | null }): DupCandidate | null {
+export function compareForDuplicate(a: { first_name?: string | null; last_name?: string | null; phone: string; phone_e164?: string | null; email?: string | null }, b: { first_name?: string | null; last_name?: string | null; phone: string; phone_e164?: string | null; email?: string | null }): DupCandidate | null {
   const reasons: string[] = [];
   let score = 0;
 
-  const phoneA = normalizePhone(a.phone), phoneB = normalizePhone(b.phone);
-  const samePhone = phoneA && phoneB && phoneA === phoneB;
+  // Prefer the canonical E.164 form when both sides have it — far more reliable
+  // than comparing raw digit strings, which can't tell "07911123456" and a US
+  // number with the same trailing digits apart.
+  const samePhone = a.phone_e164 && b.phone_e164
+    ? a.phone_e164 === b.phone_e164
+    : (() => { const pa = normalizePhoneDigits(a.phone), pb = normalizePhoneDigits(b.phone); return !!pa && !!pb && pa === pb; })();
   if (samePhone) { score += 50; reasons.push('Same phone number'); }
 
   const emailA = (a.email || '').toLowerCase().trim(), emailB = (b.email || '').toLowerCase().trim();

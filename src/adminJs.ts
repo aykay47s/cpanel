@@ -1,5 +1,6 @@
 export const ADMIN_JS = `
 function switchAdminTab(tab) {
+  if (typeof onCallTimerInterval !== 'undefined') clearInterval(onCallTimerInterval);
   currentAdminTab = tab;
   document.querySelectorAll('.side-link[data-tab]').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
   renderAdminTab(tab);
@@ -33,7 +34,7 @@ async function renderAdminDashboard(el) {
     <div class="stat-grid stagger">
       <div class="stat-box panel accent"><div class="num">\${d.total}</div><div class="lbl">Total Leads</div></div>
       <div class="stat-box panel"><div class="num">\${d.uncalled}</div><div class="lbl">Not Called</div></div>
-      <div class="stat-box panel"><div class="num">\${d.active_calls}</div><div class="lbl">Active Calls</div></div>
+      <div class="stat-box panel" style="border-color:\${d.active_calls > 0 ? 'var(--gold-glow)' : ''};"><div class="num">\${d.active_calls}</div><div class="lbl">🔴 On Call Now</div></div>
       <div class="stat-box panel"><div class="num">\${d.successful}</div><div class="lbl">Successful</div></div>
       <div class="stat-box panel"><div class="num">\${d.awaiting_finishing}</div><div class="lbl">Awaiting Finishing</div></div>
       <div class="stat-box panel"><div class="num">\${d.assigned_finishing}</div><div class="lbl">With Finishers</div></div>
@@ -44,10 +45,39 @@ async function renderAdminDashboard(el) {
       <div class="stat-box panel"><div class="num">\${d.callers_online}</div><div class="lbl">Callers Online</div></div>
       <div class="stat-box panel"><div class="num">\${d.finishers_online}</div><div class="lbl">Finishers Online</div></div>
     </div>
+    <div class="section-title">On Call — Live</div>
+    <div class="panel p" id="onCallPanel">\${onCallHtml(d.onCall)}</div>
     <div class="section-title">Recent Activity</div>
     <div class="panel p">
       <div class="timeline">\${d.recentEvents.map(e => \`<div class="timeline-item"><div class="ev">\${eventLabel(e)}</div><div class="meta">\${e.actor_name || 'System'} · \${fullName(e)} · \${timeAgo(e.created_at)}</div></div>\`).join('') || '<div style="color:var(--text-dim);">No activity yet.</div>'}</div>
     </div>\`;
+  startOnCallTimers();
+}
+function onCallHtml(rows) {
+  if (!rows.length) return '<div style="color:var(--text-dim);font-size:13px;">Nobody is on a call right now.</div>';
+  return rows.map(r => \`
+    <div style="display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--border);">
+      <div style="width:34px;height:34px;border-radius:9px;background:var(--s3);display:flex;align-items:center;justify-content:center;font-size:16px;">\${r.caller_avatar || '🧑'}</div>
+      <div style="flex:1;">
+        <div style="font-size:13px;font-weight:700;">\${esc(r.caller_name)} <span style="color:var(--text-dim);font-weight:500;">→ \${fullName(r)}</span></div>
+        <div style="font-size:11px;color:var(--text-dim);" class="mono">\${r.phone}</div>
+      </div>
+      <span class="badge \${r.status}">\${r.status === 'active_call' ? 'Live' : 'Dialing'}</span>
+      <span class="mono on-call-timer" data-started="\${r.call_started_at}" style="font-size:13px;color:var(--gold-bright);min-width:48px;text-align:right;">00:00</span>
+    </div>\`).join('');
+}
+let onCallTimerInterval;
+function startOnCallTimers() {
+  clearInterval(onCallTimerInterval);
+  const tick = () => {
+    document.querySelectorAll('.on-call-timer').forEach(el => {
+      const started = new Date(el.dataset.started).getTime();
+      const s = Math.max(0, Math.floor((Date.now() - started) / 1000));
+      el.textContent = String(Math.floor(s / 60)).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
+    });
+  };
+  tick();
+  onCallTimerInterval = setInterval(tick, 1000);
 }
 function eventLabel(e) {
   const map = { uploaded: 'Lead uploaded', claimed: 'Lead claimed', call_connected: 'Call connected', call_ended: 'Call ended', outcome_recorded: 'Outcome: ' + (e.to_status || ''), queued_for_finishing: 'Queued for finishing', assigned_finisher: 'Assigned to finisher', reassigned_finisher: 'Reassigned finisher', finisher_outcome: 'Finisher outcome: ' + (e.to_status || ''), admin_override: 'Admin override', merged: 'Marked duplicate', duplicate_dismissed: 'Duplicate dismissed' };

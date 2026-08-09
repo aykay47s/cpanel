@@ -125,10 +125,15 @@ async function renderActiveCall(body, lead, role) {
         </div>
       </div>\` : ''}
       \${scripts.length ? \`<div class="scripts-toggle" onclick="this.nextElementSibling.classList.toggle('open')"><span>\${ICONS.doc || ''} Scripts (\${scripts.length})</span><span>▾</span></div><div class="scripts-panel">\${scripts.map(s => '<div class="script-item"><div class="title">' + esc(s.title) + '</div><div class="content">' + esc(s.content) + '</div></div>').join('')}</div>\` : ''}
-      \${!isFinisher && lead.status === 'call_ended' ? \`<div class="outcome-grid">
+      \${!isFinisher && lead.status === 'call_ended' ? \`<div class="outcome-grid" style="grid-template-columns:1fr 1fr;">
+        <button class="btn btn-ghost" onclick="recordOutcome(\${lead.id},'voicemail')">Voicemail</button>
+        <button class="btn btn-ghost" onclick="recordOutcome(\${lead.id},'no_answer')">No Answer</button>
+        <button class="btn btn-ghost" onclick="recordOutcome(\${lead.id},'hung_up')">Hung Up</button>
+        <button class="btn btn-ghost" onclick="recordOutcome(\${lead.id},'busy')">Busy</button>
+        <button class="review-btn" style="grid-column:1/-1;" onclick="recordOutcome(\${lead.id},'callback_requested')">Callback Requested</button>
         <button class="win-btn" style="grid-column:1/-1;" onclick="recordOutcome(\${lead.id},'successful_call')">Successful Call</button>
+        <button class="fail-btn" onclick="recordOutcome(\${lead.id},'failed')">Unsuccessful</button>
         <button class="review-btn" onclick="recordOutcome(\${lead.id},'requires_review')">Requires Review</button>
-        <button class="fail-btn" style="grid-column:2/4;" onclick="recordOutcome(\${lead.id},'failed')">Unsuccessful</button>
       </div>\` : ''}
       \${isFinisher ? \`<div class="outcome-grid">
         <button class="win-btn" style="grid-column:1/-1;" onclick="finisherOutcome(\${lead.id},'completed')">Mark Completed</button>

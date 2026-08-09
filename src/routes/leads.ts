@@ -3,7 +3,7 @@ import { sql } from '../db';
 import { requireRole, authenticate } from '../auth';
 import { logEvent } from '../audit';
 import { broadcast, notify, notifyRole } from '../realtime';
-import { smartParse, compareForDuplicate, type ParsedLead } from '../parser';
+import { smartParse, compareForDuplicate, normalizePhone, type ParsedLead } from '../parser';
 import { sendPushToRole, sendPush } from '../push';
 
 export const leads = new Hono();
@@ -37,13 +37,15 @@ leads.post('/api/admin/leads/import/confirm', requireRole('admin'), async (c) =>
   const { leads: rows, source, lead_type } = await c.req.json().catch(() => ({ leads: [] }));
   if (!Array.isArray(rows) || !rows.length) return bad(c, 'No leads to import');
 
-  const existing = await sql`SELECT id, first_name, last_name, phone, email FROM leads WHERE merged_into_id IS NULL`;
+  const existing = await sql`SELECT id, first_name, last_name, phone, phone_e164, email FROM leads WHERE merged_into_id IS NULL`;
   let inserted = 0, flagged = 0;
   for (const r of rows as ParsedLead[]) {
     if (!r.phone) continue;
+    const norm = normalizePhone(r.phone);
+    const displayPhone = norm.valid ? norm.display : r.phone;
     const [lead] = await sql`
-      INSERT INTO leads (first_name, last_name, phone, email, address, notes, source, lead_type, uploaded_by)
-      VALUES (${r.first_name || null}, ${r.last_name || null}, ${r.phone}, ${r.email || null}, ${r.address || null}, ${r.notes || null}, ${source || 'import'}, ${lead_type || 'general'}, ${user.id})
+      INSERT INTO leads (first_name, last_name, phone, phone_e164, email, address, notes, source, lead_type, uploaded_by)
+      VALUES (${r.first_name || null}, ${r.last_name || null}, ${displayPhone}, ${norm.e164}, ${r.email || null}, ${r.address || null}, ${r.notes || null}, ${source || 'import'}, ${lead_type || 'general'}, ${user.id})
       RETURNING *
     `;
     inserted++;
@@ -59,7 +61,7 @@ leads.post('/api/admin/leads/import/confirm', requireRole('admin'), async (c) =>
       await sql`INSERT INTO duplicate_flags (lead_id_a, lead_id_b, confidence, reasons) VALUES (${lead.id}, ${bestMatch.leadId}, ${bestMatch.confidence}, ${sql.json(bestMatch.reasons)})`;
       flagged++;
     }
-    existing.push({ id: lead.id, first_name: lead.first_name, last_name: lead.last_name, phone: lead.phone, email: lead.email });
+    existing.push({ id: lead.id, first_name: lead.first_name, last_name: lead.last_name, phone: lead.phone, phone_e164: lead.phone_e164, email: lead.email });
     broadcast('new_lead', lead);
   }
   if (inserted > 0) {
@@ -161,7 +163,13 @@ leads.get('/api/admin/dashboard', requireRole('admin'), async (c) => {
     SELECT lead_events.*, users.name as actor_name, leads.first_name, leads.last_name, leads.phone
     FROM lead_events LEFT JOIN users ON users.id = lead_events.actor_id LEFT JOIN leads ON leads.id = lead_events.lead_id
     ORDER BY lead_events.created_at DESC LIMIT 25`;
-  return c.json({ data: { ...counts, ...staff, recentEvents } });
+  const onCall = await sql`
+    SELECT leads.id as lead_id, leads.first_name, leads.last_name, leads.phone, leads.status, leads.call_started_at,
+      users.id as caller_id, users.name as caller_name, users.avatar as caller_avatar
+    FROM leads JOIN users ON users.id = leads.assigned_caller_id
+    WHERE leads.status IN ('calling', 'active_call')
+    ORDER BY leads.call_started_at ASC`;
+  return c.json({ data: { ...counts, ...staff, recentEvents, onCall } });
 });
 
 // ================= FINISHING QUEUE (ADMIN) =================
@@ -255,22 +263,34 @@ leads.post('/api/caller/leads/:id/note', requireRole('caller'), async (c) => {
   return c.json({ data: updated });
 });
 
-const XP_MAP: Record<string, number> = { successful_call: 30, failed: 5, requires_review: 5 };
+const XP_MAP: Record<string, number> = {
+  successful_call: 30, failed: 5, requires_review: 5,
+  voicemail: 2, hung_up: 2, no_answer: 2, busy: 1, callback_requested: 4,
+};
+const REQUEUE_OUTCOMES = ['voicemail', 'hung_up', 'no_answer', 'busy', 'callback_requested'];
 
 leads.post('/api/caller/leads/:id/outcome', requireRole('caller'), async (c) => {
   const user = c.get('user');
   const { outcome, notes } = await c.req.json().catch(() => ({}));
-  if (!['successful_call', 'failed', 'requires_review'].includes(outcome)) return bad(c, 'Invalid outcome');
+  const validOutcomes = ['successful_call', 'failed', 'requires_review', ...REQUEUE_OUTCOMES];
+  if (!validOutcomes.includes(outcome)) return bad(c, 'Invalid outcome');
   const [lead] = await sql`SELECT status, assigned_caller_id FROM leads WHERE id = ${c.req.param('id')}`;
   if (!lead || lead.assigned_caller_id !== user.id) return bad(c, 'Not your lead', 403);
 
-  const finalStatus = outcome === 'successful_call' ? 'ready_for_finishing' : outcome;
-  const [updated] = await sql`UPDATE leads SET status = ${finalStatus}, outcome = ${outcome}, notes = COALESCE(${notes || null}, notes), updated_at = now() WHERE id = ${c.req.param('id')} RETURNING *`;
+  let finalStatus: string;
+  if (outcome === 'successful_call') finalStatus = 'ready_for_finishing';
+  else if (REQUEUE_OUTCOMES.includes(outcome)) finalStatus = 'not_called';
+  else finalStatus = outcome; // 'failed' | 'requires_review'
+
+  const [updated] = REQUEUE_OUTCOMES.includes(outcome)
+    ? await sql`UPDATE leads SET status = ${finalStatus}, outcome = ${outcome}, notes = COALESCE(${notes || null}, notes), assigned_caller_id = NULL, updated_at = now() WHERE id = ${c.req.param('id')} RETURNING *`
+    : await sql`UPDATE leads SET status = ${finalStatus}, outcome = ${outcome}, notes = COALESCE(${notes || null}, notes), updated_at = now() WHERE id = ${c.req.param('id')} RETURNING *`;
   await logEvent(updated.id, 'outcome_recorded', user, lead.status, outcome, { notes: notes || null });
   if (outcome === 'successful_call') {
     await logEvent(updated.id, 'queued_for_finishing', user, outcome, 'ready_for_finishing', {});
     await notifyRole('admin', 'successful_call', `${user.name} logged a successful call: ${updated.first_name || 'Unknown'} ${updated.last_name || ''}`.trim(), updated.id);
   }
+  if (REQUEUE_OUTCOMES.includes(outcome)) broadcast('new_lead', updated);
   await sql`UPDATE users SET xp = xp + ${XP_MAP[outcome] || 0} WHERE id = ${user.id}`;
   broadcast('lead_updated', updated);
   return c.json({ data: updated });
