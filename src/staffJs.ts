@@ -34,7 +34,7 @@ async function renderStaffHome() {
   body.innerHTML = \`
     <div class="panel p fade-up" style="position:relative;overflow:hidden;">
       <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;">
-        <div style="width:52px;height:52px;border-radius:14px;background:var(--s3);display:flex;align-items:center;justify-content:center;font-size:26px;border:1px solid var(--border-2);">\${me.avatar || '🧑'}</div>
+        <div style="width:52px;height:52px;border-radius:14px;background:var(--s3);display:flex;align-items:center;justify-content:center;font-size:26px;border:1px solid var(--border-2);overflow:hidden;">\${me.pfp_data ? '<img src="' + me.pfp_data + '" style="width:100%;height:100%;object-fit:cover;" />' : (me.avatar || '🧑')}</div>
         <div style="flex:1;">
           <div style="font-size:19px;">\${esc(me.name)}</div>
           <div style="display:flex;gap:6px;margin-top:5px;">
@@ -202,14 +202,43 @@ async function finisherOutcome(id, outcome) {
   renderStaffQueue();
 }
 
+function avatarHtml(r, size) {
+  return r.pfp_data
+    ? \`<img src="\${r.pfp_data}" style="width:\${size}px;height:\${size}px;border-radius:50%;object-fit:cover;" />\`
+    : \`<div style="width:\${size}px;height:\${size}px;border-radius:50%;background:var(--s3);display:flex;align-items:center;justify-content:center;font-size:\${Math.round(size*0.5)}px;">\${r.avatar || '🧑'}</div>\`;
+}
 async function renderStaffBoard() {
   const body = document.getElementById('staffBody');
   const res = await api('/api/leaderboard');
   const rows = (await res.json()).data;
-  body.innerHTML = '<div class="panel p fade-up">' + rows.map((r, i) => \`
-    <div class="lb-row"><div class="rank \${i===0?'r1':i===1?'r2':i===2?'r3':''}">\${i+1}</div><div class="lb-av">\${r.avatar||'🧑'}</div>
-      <div class="lb-name">\${esc(r.name)}\${r.id===me.id?' <span style="color:var(--gold-bright);">(you)</span>':''} <span class="badge \${r.role}" style="margin-left:4px;">\${r.role}</span></div>
-      <div class="lb-stats"><span><b>\${r.successful_calls||0}</b> success</span><span style="color:var(--violet);"><b>\${r.xp}</b> xp</span></div></div>\`).join('') + '</div>';
+  const podium = rows.slice(0, 3);
+  const rest = rows.slice(3);
+  const [first, second, third] = podium;
+  body.innerHTML = \`
+    \${podium.length ? \`<div class="panel p fade-up" style="padding:28px 16px 16px;">
+      <div style="display:flex;align-items:flex-end;justify-content:center;gap:10px;">
+        \${second ? podiumSlotHtml(second, 2, 78) : '<div style="flex:1;"></div>'}
+        \${first ? podiumSlotHtml(first, 1, 96) : '<div style="flex:1;"></div>'}
+        \${third ? podiumSlotHtml(third, 3, 66) : '<div style="flex:1;"></div>'}
+      </div>
+    </div>\` : ''}
+    <div class="panel p fade-up">
+      \${rest.length ? rest.map((r, i) => \`
+        <div class="lb-row"><div class="rank">\${i+4}</div>\${avatarHtml(r, 30)}
+          <div class="lb-name" style="margin-left:6px;">\${esc(r.name)}\${r.id===me.id?' <span style="color:var(--gold-bright);">(you)</span>':''} <span class="badge \${r.role}" style="margin-left:4px;">\${r.role}</span></div>
+          <div class="lb-stats"><span><b>\${r.successful_calls||0}</b> success</span><span style="color:var(--violet);"><b>\${r.xp}</b> xp</span></div></div>\`).join('') : (podium.length ? '' : '<div style="color:var(--text-dim);text-align:center;padding:20px;">No one on the board yet.</div>')}
+    </div>\`;
+}
+function podiumSlotHtml(r, place, height) {
+  const medal = place === 1 ? '🥇' : place === 2 ? '🥈' : '🥉';
+  const barColor = place === 1 ? 'linear-gradient(180deg,#fbbf24,#b8860b)' : place === 2 ? 'linear-gradient(180deg,#d1d5db,#9ca3af)' : 'linear-gradient(180deg,#d97706,#92400e)';
+  return \`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;">
+    <div style="font-size:20px;">\${medal}</div>
+    \${avatarHtml(r, place === 1 ? 52 : 42)}
+    <div style="font-size:11.5px;font-weight:700;text-align:center;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">\${esc(r.name)}\${r.id===me.id?' 👋':''}</div>
+    <div style="font-size:10px;color:var(--violet);font-weight:600;">\${r.xp} xp</div>
+    <div style="width:100%;height:\${height}px;border-radius:10px 10px 0 0;background:\${barColor};display:flex;align-items:flex-start;justify-content:center;padding-top:6px;font-size:15px;font-weight:800;color:rgba(0,0,0,.55);">#\${place}</div>
+  </div>\`;
 }
 
 async function renderStaffProfile() {
