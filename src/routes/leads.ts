@@ -147,6 +147,9 @@ leads.delete('/api/admin/leads/:id', requireRole('admin'), async (c) => {
   await sql`DELETE FROM duplicate_flags WHERE lead_id_a = ${id} OR lead_id_b = ${id}`;
   await sql`DELETE FROM lead_events WHERE lead_id = ${id}`;
   await sql`DELETE FROM notifications WHERE related_lead_id = ${id}`;
+  // Older deployments left a 'calls' table behind with a lead_id FK — clean it up if
+  // present, but don't fail on environments where it never existed.
+  try { await sql`DELETE FROM calls WHERE lead_id = ${id}`; } catch {}
   await sql`UPDATE leads SET merged_into_id = NULL WHERE merged_into_id = ${id}`;
   await sql`DELETE FROM leads WHERE id = ${id}`;
   return c.json({ ok: true });
