@@ -86,18 +86,33 @@ function eventLabel(e) {
 }
 
 async function renderAdminLeads(el) {
-  const res = await api('/api/admin/leads');
+  const [res, callersRes] = await Promise.all([api('/api/admin/leads'), api('/api/admin/users')]);
   const rows = (await res.json()).data;
+  callerListCache = (await callersRes.json()).data.filter(u => u.role === 'caller');
   el.innerHTML = \`
     <div class="row-flex fade-up" style="margin-bottom:16px;">
       <div class="field"><input id="leadSearch" placeholder="Search name, phone, email…" oninput="debouncedLeadSearch()" /></div>
       <select id="leadStatusFilter" style="max-width:220px;" onchange="filterLeadsByStatus()"><option value="">All statuses</option>\${LEAD_STATUSES.map(s => '<option value="' + s + '">' + s.replace(/_/g,' ') + '</option>').join('')}</select>
     </div>
-    <div class="panel p fade-up"><table><thead><tr><th>Lead</th><th>Phone</th><th>Status</th><th>Caller</th><th>Finisher</th><th>Uploaded</th></tr></thead>
+    <div class="panel p fade-up"><table><thead><tr><th>Lead</th><th>Phone</th><th>Status</th><th>Caller</th><th>Finisher</th><th>Uploaded</th><th>Send To</th><th></th></tr></thead>
     <tbody id="leadsTbody">\${rows.map(leadRowHtml).join('')}</tbody></table></div>\`;
 }
+let callerListCache = [];
 function leadRowHtml(l) {
-  return \`<tr class="clickable" onclick="openLeadDetail(\${l.id})"><td>\${esc(fullName(l))} \${l.dedup_status === 'flagged' ? '<span class="dup-warn">possible dup</span>' : ''}</td><td class="mono">\${l.phone}</td><td><span class="badge \${l.status}">\${l.status.replace(/_/g,' ')}</span></td><td>\${l.caller_name || '—'}</td><td>\${l.finisher_name || '—'}</td><td>\${timeAgo(l.created_at)}</td></tr>\`;
+  const sendCell = l.status === 'not_called'
+    ? \`<select onclick="event.stopPropagation()" onchange="event.stopPropagation(); sendLeadToCaller(\${l.id}, this.value)"><option value="">Send to…</option>\${callerListCache.map(c => '<option value="' + c.id + '">' + esc(c.name) + '</option>').join('')}</select>\`
+    : '<span style="color:var(--text-faint);">—</span>';
+  return \`<tr class="clickable" data-lead-row="\${l.id}"><td onclick="openLeadDetail(\${l.id})">\${esc(fullName(l))} \${l.dedup_status === 'flagged' ? '<span class="dup-warn">possible dup</span>' : ''}</td><td class="mono" onclick="openLeadDetail(\${l.id})">\${l.phone}</td><td onclick="openLeadDetail(\${l.id})"><span class="badge \${l.status}">\${l.status.replace(/_/g,' ')}</span></td><td onclick="openLeadDetail(\${l.id})">\${l.caller_name || '—'}</td><td onclick="openLeadDetail(\${l.id})">\${l.finisher_name || '—'}</td><td onclick="openLeadDetail(\${l.id})">\${timeAgo(l.created_at)}</td><td>\${sendCell}</td><td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); deleteLead(\${l.id})">Delete</button></td></tr>\`;
+}
+async function sendLeadToCaller(leadId, callerId) {
+  if (!callerId) return;
+  await api('/api/admin/leads/' + leadId + '/assign-caller', { method: 'POST', body: JSON.stringify({ callerId: Number(callerId) }) });
+  renderAdminTab('leads');
+}
+async function deleteLead(leadId) {
+  if (!confirm('Permanently delete this lead? This cannot be undone.')) return;
+  await api('/api/admin/leads/' + leadId, { method: 'DELETE' });
+  renderAdminTab('leads');
 }
 let leadSearchTimeout;
 function debouncedLeadSearch() { clearTimeout(leadSearchTimeout); leadSearchTimeout = setTimeout(runLeadSearch, 300); }

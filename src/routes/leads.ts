@@ -142,6 +142,16 @@ leads.get('/api/admin/leads/:id', requireRole('admin'), async (c) => {
   return c.json({ data: { ...lead, events, duplicates: dupes } });
 });
 
+leads.delete('/api/admin/leads/:id', requireRole('admin'), async (c) => {
+  const id = c.req.param('id');
+  await sql`DELETE FROM duplicate_flags WHERE lead_id_a = ${id} OR lead_id_b = ${id}`;
+  await sql`DELETE FROM lead_events WHERE lead_id = ${id}`;
+  await sql`DELETE FROM notifications WHERE related_lead_id = ${id}`;
+  await sql`UPDATE leads SET merged_into_id = NULL WHERE merged_into_id = ${id}`;
+  await sql`DELETE FROM leads WHERE id = ${id}`;
+  return c.json({ ok: true });
+});
+
 leads.get('/api/admin/dashboard', requireRole('admin'), async (c) => {
   const [counts] = await sql`
     SELECT
@@ -197,6 +207,26 @@ leads.post('/api/admin/leads/:id/assign-finisher', requireRole('admin'), async (
   return c.json({ data: updated });
 });
 
+// Send a still-open lead directly to a specific caller instead of leaving it in the
+// race-to-claim pool. It stays 'not_called' (so the normal call flow still applies)
+// but is reserved — only that caller (or admin) can claim it.
+leads.post('/api/admin/leads/:id/assign-caller', requireRole('admin'), async (c) => {
+  const user = c.get('user');
+  const { callerId } = await c.req.json().catch(() => ({}));
+  if (!callerId) return bad(c, 'callerId required');
+  const [caller] = await sql`SELECT id, name, role FROM users WHERE id = ${callerId}`;
+  if (!caller || caller.role !== 'caller') return bad(c, 'Target user is not a caller');
+  const [lead] = await sql`SELECT status, assigned_caller_id FROM leads WHERE id = ${c.req.param('id')}`;
+  if (!lead) return bad(c, 'Not found', 404);
+  if (lead.status !== 'not_called') return bad(c, 'Only unclaimed leads can be sent to a caller');
+  const [updated] = await sql`UPDATE leads SET assigned_caller_id = ${callerId}, updated_at = now() WHERE id = ${c.req.param('id')} RETURNING *`;
+  await logEvent(updated.id, lead.assigned_caller_id ? 'reassigned_caller' : 'sent_to_caller', user, lead.status, lead.status, { caller_id: callerId, caller_name: caller.name });
+  await notify(callerId, 'lead_assigned', `A lead was sent to you: ${updated.first_name || 'Unknown'} ${updated.last_name || ''}`.trim(), updated.id);
+  await sendPush(callerId, 'Lead sent to you', `${updated.first_name || 'Unknown'} ${updated.last_name || ''} is waiting in your queue.`.trim(), '/');
+  broadcast('new_lead', updated);
+  return c.json({ data: updated });
+});
+
 leads.post('/api/admin/leads/:id/override-status', requireRole('admin'), async (c) => {
   const user = c.get('user');
   const { status, note } = await c.req.json().catch(() => ({}));
@@ -210,7 +240,8 @@ leads.post('/api/admin/leads/:id/override-status', requireRole('admin'), async (
 
 // ================= CALLER LIFECYCLE =================
 leads.get('/api/caller/queue', requireRole('caller'), async (c) => {
-  const rows = await sql`SELECT * FROM leads WHERE status = 'not_called' AND assigned_caller_id IS NULL AND merged_into_id IS NULL ORDER BY created_at ASC LIMIT 20`;
+  const user = c.get('user');
+  const rows = await sql`SELECT * FROM leads WHERE status = 'not_called' AND (assigned_caller_id IS NULL OR assigned_caller_id = ${user.id}) AND merged_into_id IS NULL ORDER BY (assigned_caller_id = ${user.id}) DESC, created_at ASC LIMIT 20`;
   return c.json({ data: rows });
 });
 
@@ -223,7 +254,9 @@ leads.get('/api/caller/mine', requireRole('caller'), async (c) => {
 leads.post('/api/caller/leads/:id/claim', requireRole('caller'), async (c) => {
   const user = c.get('user');
   const id = c.req.param('id');
-  const [updated] = await sql`UPDATE leads SET status = 'calling', assigned_caller_id = ${user.id}, call_started_at = now(), updated_at = now() WHERE id = ${id} AND status = 'not_called' AND assigned_caller_id IS NULL RETURNING *`;
+  // Claimable if genuinely open, OR if an admin specifically sent it to this caller.
+  const [updated] = await sql`UPDATE leads SET status = 'calling', assigned_caller_id = ${user.id}, call_started_at = now(), updated_at = now()
+    WHERE id = ${id} AND status = 'not_called' AND (assigned_caller_id IS NULL OR assigned_caller_id = ${user.id}) RETURNING *`;
   if (!updated) return c.json({ claimed: false, reason: 'Already taken' }, 409);
   await logEvent(updated.id, 'claimed', user, 'not_called', 'calling', {});
   broadcast('lead_claimed', { id: Number(id) });
@@ -266,21 +299,28 @@ leads.post('/api/caller/leads/:id/note', requireRole('caller'), async (c) => {
 const XP_MAP: Record<string, number> = {
   successful_call: 30, failed: 5, requires_review: 5,
   voicemail: 2, hung_up: 2, no_answer: 2, busy: 1, callback_requested: 4,
+  cancelled: 0, chopped_previously: 1,
 };
-const REQUEUE_OUTCOMES = ['voicemail', 'hung_up', 'no_answer', 'busy', 'callback_requested'];
+// Outcomes where nothing meaningful happened yet — the lead goes back to the open
+// pool for someone else (or the same caller later) to try again.
+const REQUEUE_OUTCOMES = ['voicemail', 'hung_up', 'no_answer', 'busy', 'callback_requested', 'cancelled'];
+// chopped_previously: someone else already worked this lead — terminal, not retried.
+const OUTCOME_STATUS_MAP: Record<string, string> = {
+  successful_call: 'ready_for_finishing',
+  chopped_previously: 'failed',
+};
 
 leads.post('/api/caller/leads/:id/outcome', requireRole('caller'), async (c) => {
   const user = c.get('user');
   const { outcome, notes } = await c.req.json().catch(() => ({}));
-  const validOutcomes = ['successful_call', 'failed', 'requires_review', ...REQUEUE_OUTCOMES];
+  const validOutcomes = ['successful_call', 'failed', 'requires_review', 'chopped_previously', ...REQUEUE_OUTCOMES];
   if (!validOutcomes.includes(outcome)) return bad(c, 'Invalid outcome');
   const [lead] = await sql`SELECT status, assigned_caller_id FROM leads WHERE id = ${c.req.param('id')}`;
   if (!lead || lead.assigned_caller_id !== user.id) return bad(c, 'Not your lead', 403);
 
   let finalStatus: string;
-  if (outcome === 'successful_call') finalStatus = 'ready_for_finishing';
-  else if (REQUEUE_OUTCOMES.includes(outcome)) finalStatus = 'not_called';
-  else finalStatus = outcome; // 'failed' | 'requires_review'
+  if (REQUEUE_OUTCOMES.includes(outcome)) finalStatus = 'not_called';
+  else finalStatus = OUTCOME_STATUS_MAP[outcome] || outcome; // 'failed' | 'requires_review' | mapped
 
   const [updated] = REQUEUE_OUTCOMES.includes(outcome)
     ? await sql`UPDATE leads SET status = ${finalStatus}, outcome = ${outcome}, notes = COALESCE(${notes || null}, notes), assigned_caller_id = NULL, updated_at = now() WHERE id = ${c.req.param('id')} RETURNING *`
