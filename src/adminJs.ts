@@ -214,7 +214,11 @@ async function confirmImport() {
   const lead_type = document.getElementById('importLeadType').value.trim() || 'general';
   const source = document.getElementById('importSource').value.trim() || 'import';
   const validLeads = lastImportPreview.filter(r => r.phone && r.phone.replace(/[^\d]/g, '').length >= 7);
-  if (!validLeads.length) return alert('No rows have a valid phone number');
+  const invalidCount = lastImportPreview.length - validLeads.length;
+  if (!validLeads.length) {
+    return alert('None of the ' + lastImportPreview.length + ' row(s) have a phone number with at least 7 digits. Edit the Phone field directly in the row(s) above, then hit Import again.');
+  }
+  if (invalidCount > 0 && !confirm(invalidCount + ' row(s) are missing a valid phone and will be skipped. Import the remaining ' + validLeads.length + '?')) return;
   const res = await api('/api/admin/leads/import/confirm', { method: 'POST', body: JSON.stringify({ leads: validLeads, lead_type, source }) });
   const data = await res.json();
   alert('Imported ' + data.inserted + ' leads' + (data.flagged ? ' (' + data.flagged + ' flagged as possible duplicates for review)' : ''));

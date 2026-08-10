@@ -1,20 +1,16 @@
 import { parsePhoneNumberFromString } from 'libphonenumber-js';
 
 // ---------- Sensitive data detection (never stored) ----------
-// Luhn check for card-number-like sequences.
-function luhnValid(digits: string): boolean {
-  let sum = 0, alt = false;
-  for (let i = digits.length - 1; i >= 0; i--) {
-    let n = parseInt(digits[i], 10);
-    if (alt) { n *= 2; if (n > 9) n -= 9; }
-    sum += n; alt = !alt;
-  }
-  return sum % 10 === 0;
-}
-
 const CVV_LABEL_RE = /\b(cvv|cvc|security code|card verification)\b/i;
 const PASSWORD_LABEL_RE = /\b(password|pwd|passcode|pin code|ssn|social security)\b/i;
-const CARD_DIGITS_RE = /\b(?:\d[ -]*?){13,19}\b/g;
+// Shape-based, not validity-based — a placeholder like "1111111111111111" or a typo'd
+// real card number won't pass a Luhn checksum, but it still needs to never be stored.
+// Redaction is a safety net: false positives (over-redacting) are far cheaper than
+// false negatives (a card number slipping through), so we redact on shape alone.
+const BARE_CARD_DIGITS_RE = /^\d{13,19}$/;
+const CVV_SHAPE_RE = /^\d{3,4}$/;
+const EXPIRY_SHAPE_RE = /^\d{1,2}[\/\-]\d{2,4}$/;
+const SPLIT_RE = /[|,\t]/;
 
 export interface RedactionResult {
   cleanText: string;
@@ -22,8 +18,10 @@ export interface RedactionResult {
   redactedTypes: string[];
 }
 
-// Strips lines/tokens that look like payment card numbers, CVVs, passwords, or SSNs
-// before any parsing or storage happens. Never persisted, never logged.
+// Strips fields that look like payment card numbers, CVVs, card expiry dates,
+// passwords, or SSNs before any parsing or storage happens — field-level, not
+// line-level, so a name sharing a line with card data survives while the card
+// data itself never touches storage or logs.
 export function redactSensitive(text: string): RedactionResult {
   let redactedCount = 0;
   const types = new Set<string>();
@@ -35,14 +33,38 @@ export function redactSensitive(text: string): RedactionResult {
       redactedCount++; types.add('credential_or_cvv');
       continue;
     }
-    const cardMatches = line.match(CARD_DIGITS_RE);
-    if (cardMatches) {
-      let hasCard = false;
-      for (const m of cardMatches) {
-        const digits = m.replace(/[^\d]/g, '');
-        if (digits.length >= 13 && digits.length <= 19 && luhnValid(digits)) hasCard = true;
-      }
-      if (hasCard) { redactedCount++; types.add('card_number'); continue; }
+
+    // If the line is delimited, redact at the field level so adjacent legitimate
+    // data (a name, an address) isn't collateral damage.
+    if (SPLIT_RE.test(line)) {
+      const delim = line.includes('|') ? '|' : line.includes('\t') ? '\t' : ',';
+      const fields = line.split(delim);
+      const trimmedFields = fields.map(f => f.trim());
+      const cardIndices = trimmedFields.map((f, i) => BARE_CARD_DIGITS_RE.test(f) ? i : -1).filter(i => i !== -1);
+      const hasCardInRow = cardIndices.length > 0;
+
+      const redactedFields = fields.map((f, i) => {
+        const trimmed = trimmedFields[i];
+        if (BARE_CARD_DIGITS_RE.test(trimmed)) { redactedCount++; types.add('card_number'); return ''; }
+        // Expiry/CVV shapes are only redacted when a card number is present in the
+        // same row — alone, "3/22" or "222" are too ambiguous to safely nuke.
+        if (hasCardInRow && EXPIRY_SHAPE_RE.test(trimmed)) { redactedCount++; types.add('card_expiry'); return ''; }
+        if (hasCardInRow && CVV_SHAPE_RE.test(trimmed) && cardIndices.some(ci => Math.abs(ci - i) === 1)) {
+          redactedCount++; types.add('cvv'); return '';
+        }
+        return f;
+      });
+      kept.push(redactedFields.join(delim));
+      continue;
+    }
+
+    // Freeform (undelimited) line: only redact if the WHOLE line is essentially
+    // just the sensitive token, so we don't nuke a sentence that happens to
+    // contain a long number.
+    const trimmedLine = line.trim();
+    if (BARE_CARD_DIGITS_RE.test(trimmedLine.replace(/[\s-]/g, ''))) {
+      redactedCount++; types.add('card_number');
+      continue;
     }
     kept.push(line);
   }
@@ -61,9 +83,14 @@ const STREET_WORDS = /\b(st|street|ave|avenue|rd|road|blvd|boulevard|dr|drive|ln
 // Unicode-aware so accented names (José, Zoë) and hyphenated/apostrophe names (O'Brien, Mary-Jane) match.
 const NAME_RE = /^\p{L}[\p{L}'-]*(\s\p{L}[\p{L}'-]*){0,4}$/u;
 
+const IPV4_SHAPE_RE = /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/;
+
 function extractPhone(text: string): { phone: string | null; remainder: string } {
   const matches = [...text.matchAll(PHONE_CANDIDATE_RE)];
   for (const m of matches) {
+    // A dotted-quad shape (four groups separated by periods) reads as an IP address,
+    // not a phone number — real phone numbers don't format this way.
+    if (IPV4_SHAPE_RE.test(m[0].trim())) continue;
     const digits = m[0].replace(/[^\d]/g, '');
     if (digits.length >= 7 && digits.length <= 15) {
       const remainder = (text.slice(0, m.index) + ' ' + text.slice((m.index || 0) + m[0].length)).trim();
@@ -165,6 +192,21 @@ function parseDelimited(lines: string[], delim: string): ParsedLead[] {
   return leads;
 }
 
+function classifyToken(token: string): { type: 'phone' | 'email' | 'address' | 'name' | 'notes'; value: string } {
+  const trimmed = token.trim();
+  if (!trimmed) return { type: 'notes', value: '' };
+  if (EMAIL_RE.test(trimmed) && trimmed.replace(EMAIL_RE, '').trim().length < 3) {
+    return { type: 'email', value: trimmed.match(EMAIL_RE)![0] };
+  }
+  const { phone, remainder } = extractPhone(trimmed);
+  if (phone && remainder.length < trimmed.length * 0.5) return { type: 'phone', value: phone };
+  if (STREET_WORDS.test(trimmed) && /\d/.test(trimmed)) return { type: 'address', value: trimmed };
+  // A UK postcode on its own token (e.g. "WS1 4AF") reads as an address fragment too.
+  if (/^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i.test(trimmed)) return { type: 'address', value: trimmed };
+  if (!/\d/.test(trimmed) && NAME_RE.test(trimmed)) return { type: 'name', value: trimmed };
+  return { type: 'notes', value: trimmed };
+}
+
 function parseFreeform(lines: string[]): ParsedLead[] {
   const leads: ParsedLead[] = [];
   let pending: { name: string | null; address: string | null; email: string | null; notes: string | null } = { name: null, address: null, email: null, notes: null };
@@ -176,33 +218,52 @@ function parseFreeform(lines: string[]): ParsedLead[] {
     }
     open = null;
   };
-  for (const line of lines) {
-    if (EMAIL_RE.test(line) && line.replace(EMAIL_RE, '').trim().length < 3) {
-      const val = line.match(EMAIL_RE)![0];
-      if (open) open.email = val; else pending.email = val;
-      continue;
-    }
-    const { phone: linePhone, remainder } = extractPhone(line);
-    // Treat as a phone line if the phone candidate makes up most of the line's content
-    // (a stray 7+ digit number inside a longer sentence shouldn't be misread as a contact line).
-    if (linePhone && remainder.length < line.length * 0.5) {
+  const applyToken = (t: { type: string; value: string }) => {
+    if (!t.value) return;
+    if (t.type === 'phone') {
       flush();
-      open = { _rawName: pending.name, phone: linePhone, email: pending.email, address: pending.address, notes: pending.notes, first_name: null, last_name: null };
+      open = { _rawName: pending.name, phone: t.value, email: pending.email, address: pending.address, notes: pending.notes, first_name: null, last_name: null };
       pending = { name: null, address: null, email: null, notes: null };
-      continue;
+    } else if (t.type === 'email') {
+      if (open) open.email = t.value; else pending.email = t.value;
+    } else if (t.type === 'address') {
+      if (open) open.address = open.address ? open.address + ', ' + t.value : t.value;
+      else pending.address = pending.address ? pending.address + ', ' + t.value : t.value;
+    } else if (t.type === 'name') {
+      // Consecutive name-shaped tokens with nothing else in between (e.g. first name
+      // and last name arriving as separate pipe fields, or split across lines) are
+      // parts of the same name — concatenate rather than treating each as a new record.
+      if (!open && pending.name && !pending.address && !pending.notes) {
+        pending.name = pending.name + ' ' + t.value;
+      } else {
+        flush();
+        pending = { name: t.value, address: null, email: null, notes: null };
+      }
+    } else {
+      if (open) open.notes = open.notes ? open.notes + ' ' + t.value : t.value;
+      else pending.notes = pending.notes ? pending.notes + ' ' + t.value : t.value;
     }
-    if (STREET_WORDS.test(line) && /\d/.test(line)) {
-      if (open) open.address = open.address ? open.address + ', ' + line : line;
-      else pending.address = pending.address ? pending.address + ', ' + line : line;
-      continue;
+  };
+
+  for (const line of lines) {
+    // Tokenize by delimiter WHEN PRESENT, even in freeform mode — real-world exports
+    // are often a hybrid: multiple lines of ragged, inconsistently-shaped delimited
+    // data rather than either a clean CSV grid or plain prose.
+    const hasDelim = SPLIT_RE.test(line);
+    if (hasDelim) {
+      const delim = line.includes('|') ? '|' : line.includes('\t') ? '\t' : ',';
+      const tokens = line.split(delim).map(t => classifyToken(t));
+      // If this row already has a clear address signal (a street or postcode match),
+      // a lone capitalized word is far more likely to be a city than a second person's
+      // name — reclassify it as address so it doesn't wipe out the name we already have.
+      const rowHasAddress = tokens.some(t => t.type === 'address');
+      for (const t of tokens) {
+        if (rowHasAddress && t.type === 'name' && pending.name) t.type = 'address';
+        applyToken(t);
+      }
+    } else {
+      applyToken(classifyToken(line));
     }
-    if (!/\d/.test(line) && NAME_RE.test(line)) {
-      flush();
-      pending = { name: line, address: null, email: null, notes: null };
-      continue;
-    }
-    if (open) open.notes = open.notes ? open.notes + ' ' + line : line;
-    else pending.notes = pending.notes ? pending.notes + ' ' + line : line;
   }
   flush();
   return leads;
