@@ -179,7 +179,7 @@ tr.clickable{cursor:pointer;}
 .pin-display{font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:var(--gold-bright);letter-spacing:1.5px;}
 .blur-phone{cursor:pointer;filter:blur(5px);transition:filter .2s;user-select:none;}
 .blur-phone.revealed{filter:blur(0);}
-.blur-phone::after{content:' 👁';font-size:10px;filter:none;opacity:.5;}
+.blur-phone::after{content:' (tap to reveal)';font-size:9px;filter:none;opacity:.5;text-transform:uppercase;letter-spacing:.4px;}
 .row-flex{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;}
 .row-flex .field{flex:1;min-width:130px;margin-bottom:0;}
 .new-pin-banner{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-radius:12px;background:rgba(201,161,94,.07);border:1px solid var(--gold-glow);margin-top:14px;}
@@ -374,7 +374,7 @@ tr.clickable{cursor:pointer;}
 <div id="notifPanel" class="hidden notif-panel" style="position:fixed;z-index:200;overflow-y:auto;-webkit-overflow-scrolling:touch;"></div>
 <div id="iosInstallBanner" class="hidden" style="position:fixed;left:12px;right:12px;bottom:calc(84px + env(safe-area-inset-bottom));z-index:150;">
   <div class="panel" style="padding:14px 16px;display:flex;align-items:center;gap:12px;border-color:var(--gold-glow);">
-    <span style="font-size:20px;">📲</span>
+    <span class="ic" style="color:var(--gold-bright);flex-shrink:0;"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke="currentColor"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg></span>
     <div style="flex:1;font-size:12px;line-height:1.5;">Add to your Home Screen to get real push notifications for new leads: tap <b>Share</b> ↗ then <b>Add to Home Screen</b>.</div>
     <button class="btn btn-ghost btn-sm" onclick="document.getElementById('iosInstallBanner').classList.add('hidden');localStorage.setItem('ios_banner_dismissed','1');">✕</button>
   </div>
@@ -406,7 +406,6 @@ let pinBuffer = '';
 let es = null;
 let callTimerInterval = null, callStart = null;
 let staffTab = 'home';
-const AVATARS = ['🧑','👨','👩','🧔','👱','👨‍💼','👩‍💼','🦸','🕵️','👨‍💻','👩‍💻','🤠','🥷','👽','🤖','🦊','🦁','🐯','🦉','🐙'];
 
 function authHeaders(extra) { return Object.assign({ 'x-user-id': me.id, 'x-user-pin': me.pin, 'Content-Type': 'application/json' }, extra || {}); }
 async function api(url, opts = {}) {
@@ -602,6 +601,28 @@ function timeAgo(ts) {
 }
 function esc(s) { return (s || '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 function fullName(l) { return [l.first_name, l.last_name].filter(Boolean).join(' ') || 'Unknown'; }
+function initials(name) {
+  const parts = (name || '').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+const AVATAR_PALETTE = ['#4f8cff','#2dd4bf','#a78bfa','#f59e0b','#ef4444','#10b981','#6366f1','#ec4899','#14b8a6','#f97316'];
+function avatarColor(seed) {
+  let hash = 0;
+  const s = String(seed || '');
+  for (let i = 0; i < s.length; i++) hash = (hash * 31 + s.charCodeAt(i)) | 0;
+  return AVATAR_PALETTE[Math.abs(hash) % AVATAR_PALETTE.length];
+}
+// Single shared avatar renderer used everywhere a person needs a picture: a real
+// uploaded photo when set, otherwise a colored initials circle — no emoji.
+function avatarHtml(person, size) {
+  if (person && person.pfp_data) return '<img src="' + person.pfp_data + '" style="width:' + size + 'px;height:' + size + 'px;border-radius:50%;object-fit:cover;flex-shrink:0;" />';
+  const name = person ? (person.name || fullName(person)) : '';
+  const color = avatarColor((person && person.id) || name);
+  const fontSize = Math.round(size * 0.4);
+  return '<div style="width:' + size + 'px;height:' + size + 'px;border-radius:50%;background:' + color + ';display:flex;align-items:center;justify-content:center;font-size:' + fontSize + 'px;font-weight:700;color:#fff;flex-shrink:0;letter-spacing:-.02em;">' + initials(name) + '</div>';
+}
 
 // ---------- Shared chat panel (used by both admin and staff shells) ----------
 async function renderChatInto(containerEl) {
@@ -609,7 +630,7 @@ async function renderChatInto(containerEl) {
   const msgs = (await msgsRes.json()).data;
   const presence = (await presenceRes.json()).data;
   containerEl.innerHTML = \`
-    <div class="presence-strip">\${presence.map(p => '<div class="presence-chip ' + (p.clocked_in ? 'online' : '') + '"><span class="dot"></span>' + (p.avatar || '🧑') + ' ' + esc(p.name) + '</div>').join('')}</div>
+    <div class="presence-strip">\${presence.map(p => '<div class="presence-chip ' + (p.clocked_in ? 'online' : '') + '"><span class="dot"></span>' + avatarHtml(p, 16) + ' ' + esc(p.name) + '</div>').join('')}</div>
     <div class="chat-shell panel" style="padding:14px;">
       <div class="chat-messages" id="chatMessages">\${msgs.map(chatMsgHtml).join('')}</div>
       <div class="chat-input-row" style="flex-direction:column;gap:8px;">
@@ -635,8 +656,8 @@ async function renderChatInto(containerEl) {
 }
 function chatMsgHtml(m) {
   const own = m.sender_id === me.id;
-  return \`<div class="chat-msg \${own ? 'own' : ''}" data-msg-id="\${m.id}"><div class="chat-av">\${m.sender_avatar || '🧑'}</div>
-    <div class="chat-bubble"><div class="chat-sender">\${esc(m.sender_name || 'Unknown')}\${m.sender_role === 'admin' ? ' <span class="badge admin" style="margin-left:4px;">admin</span>' : ''}\${m.expires_at ? ' <span title="Disappears ' + timeAgo(m.expires_at) + '" style="opacity:.5;">⏱</span>' : ''}</div>
+  return \`<div class="chat-msg \${own ? 'own' : ''}" data-msg-id="\${m.id}">\${avatarHtml({ name: m.sender_name, pfp_data: m.sender_pfp_data }, 32)}
+    <div class="chat-bubble"><div class="chat-sender">\${esc(m.sender_name || 'Unknown')}\${m.sender_role === 'admin' ? ' <span class="badge admin" style="margin-left:4px;">admin</span>' : ''}\${m.expires_at ? ' <span title="Disappears ' + timeAgo(m.expires_at) + '" style="opacity:.6;font-size:9.5px;text-transform:uppercase;letter-spacing:.4px;">· expires \${timeAgo(m.expires_at)}</span>' : ''}</div>
     <div class="chat-text">\${esc(m.content)}</div><div class="chat-time">\${timeAgo(m.created_at)}\${(own || me.role === 'admin') ? ' · <span style="cursor:pointer;text-decoration:underline;" onclick="deleteChatMessage(' + m.id + ')">delete</span>' : ''}</div></div></div>\`;
 }
 function appendChatMessage(m) {

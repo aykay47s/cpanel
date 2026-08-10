@@ -34,7 +34,7 @@ async function renderStaffHome() {
   body.innerHTML = \`
     <div class="panel p fade-up" style="position:relative;overflow:hidden;">
       <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;">
-        <div style="width:52px;height:52px;border-radius:14px;background:var(--s3);display:flex;align-items:center;justify-content:center;font-size:26px;border:1px solid var(--border-2);overflow:hidden;">\${me.pfp_data ? '<img src="' + me.pfp_data + '" style="width:100%;height:100%;object-fit:cover;" />' : (me.avatar || '🧑')}</div>
+        <div style="width:52px;height:52px;">\${avatarHtml(me, 52)}</div>
         <div style="flex:1;">
           <div style="font-size:19px;">\${esc(me.name)}</div>
           <div style="display:flex;gap:6px;margin-top:5px;">
@@ -202,11 +202,6 @@ async function finisherOutcome(id, outcome) {
   renderStaffQueue();
 }
 
-function avatarHtml(r, size) {
-  return r.pfp_data
-    ? \`<img src="\${r.pfp_data}" style="width:\${size}px;height:\${size}px;border-radius:50%;object-fit:cover;" />\`
-    : \`<div style="width:\${size}px;height:\${size}px;border-radius:50%;background:var(--s3);display:flex;align-items:center;justify-content:center;font-size:\${Math.round(size*0.5)}px;">\${r.avatar || '🧑'}</div>\`;
-}
 async function renderStaffBoard() {
   const body = document.getElementById('staffBody');
   const res = await api('/api/leaderboard');
@@ -230,12 +225,12 @@ async function renderStaffBoard() {
     </div>\`;
 }
 function podiumSlotHtml(r, place, height) {
-  const medal = place === 1 ? '🥇' : place === 2 ? '🥈' : '🥉';
+  const medalLabel = place === 1 ? 'GOLD' : place === 2 ? 'SILVER' : 'BRONZE';
   const barColor = place === 1 ? 'linear-gradient(180deg,#fbbf24,#b8860b)' : place === 2 ? 'linear-gradient(180deg,#d1d5db,#9ca3af)' : 'linear-gradient(180deg,#d97706,#92400e)';
   return \`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;">
-    <div style="font-size:20px;">\${medal}</div>
+    <div style="font-size:9px;font-weight:800;letter-spacing:.6px;color:var(--text-faint);">\${medalLabel}</div>
     \${avatarHtml(r, place === 1 ? 52 : 42)}
-    <div style="font-size:11.5px;font-weight:700;text-align:center;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">\${esc(r.name)}\${r.id===me.id?' 👋':''}</div>
+    <div style="font-size:11.5px;font-weight:700;text-align:center;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">\${esc(r.name)}\${r.id===me.id?' <span style=\"color:var(--gold-bright);\">(you)</span>':''}</div>
     <div style="font-size:10px;color:var(--violet);font-weight:600;">\${r.xp} xp</div>
     <div style="width:100%;height:\${height}px;border-radius:10px 10px 0 0;background:\${barColor};display:flex;align-items:flex-start;justify-content:center;padding-top:6px;font-size:15px;font-weight:800;color:rgba(0,0,0,.55);">#\${place}</div>
   </div>\`;
@@ -250,14 +245,12 @@ async function renderStaffProfile() {
     <div class="panel p fade-up">
       <div class="section-title" style="margin-top:0;">Profile Picture</div>
       <div style="display:flex;align-items:center;gap:16px;margin-bottom:14px;">
-        <div id="pfpPreview" style="width:64px;height:64px;border-radius:16px;background:var(--s3);display:flex;align-items:center;justify-content:center;font-size:30px;border:1px solid var(--border-2);overflow:hidden;">\${me.pfp_data ? '<img src="' + me.pfp_data + '" style="width:100%;height:100%;object-fit:cover;" />' : (me.avatar || '🧑')}</div>
+        <div id="pfpPreview">\${avatarHtml(me, 64)}</div>
         <div style="display:flex;flex-direction:column;gap:8px;">
           <label class="btn btn-ghost btn-sm" style="text-align:center;cursor:pointer;">Upload Photo<input type="file" accept="image/*" id="pfpFile" style="display:none;" onchange="handlePfpUpload(event)" /></label>
           \${me.pfp_data ? '<button class="btn btn-danger btn-sm" onclick="removePfp()">Remove Photo</button>' : ''}
         </div>
       </div>
-      <div class="section-title">Or Pick an Avatar</div>
-      <div class="avatar-grid" id="avatarGrid"></div>
       <div class="section-title">Display Name</div>
       <div class="field"><input id="pfName" value="\${esc(me.name)}" /></div>
       <div class="section-title">Your Call-From Number</div>
@@ -276,15 +269,6 @@ async function renderStaffProfile() {
     <div class="panel p fade-up" id="pushSection"></div>
     <div class="panel p fade-up"><button class="btn btn-danger btn-block" onclick="logout()">Log Out</button></div>
   \`;
-  const grid = document.getElementById('avatarGrid');
-  grid.innerHTML = AVATARS.map(a => '<div class="avatar-opt ' + (a === me.avatar && !me.pfp_data ? 'sel' : '') + '" data-av="' + a + '">' + a + '</div>').join('');
-  grid.addEventListener('click', (e) => {
-    const opt = e.target.closest('.avatar-opt'); if (!opt) return;
-    grid.querySelectorAll('.avatar-opt').forEach(o => o.classList.remove('sel'));
-    opt.classList.add('sel');
-    document.getElementById('pfpPreview').innerHTML = opt.dataset.av;
-    pendingRemovePfp = true;
-  });
   renderPushSection();
 }
 let pendingRemovePfp = false;
@@ -305,7 +289,7 @@ function handlePfpUpload(event) {
       ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
       pendingPfpData = canvas.toDataURL('image/jpeg', 0.82);
       pendingRemovePfp = false;
-      document.getElementById('pfpPreview').innerHTML = '<img src="' + pendingPfpData + '" style="width:100%;height:100%;object-fit:cover;" />';
+      document.getElementById('pfpPreview').innerHTML = '<img src="' + pendingPfpData + '" style="width:64px;height:64px;border-radius:50%;object-fit:cover;" />';
     };
     img.src = e.target.result;
   };
@@ -319,8 +303,7 @@ async function removePfp() {
 async function saveProfile() {
   const name = document.getElementById('pfName').value.trim();
   const call_phone = document.getElementById('pfPhone').value.trim();
-  const avatarOpt = document.querySelector('.avatar-opt.sel');
-  const body = { name, call_phone, avatar: avatarOpt ? avatarOpt.dataset.av : undefined };
+  const body = { name, call_phone };
   if (pendingPfpData) body.pfp_data = pendingPfpData;
   const res = await api('/api/me/profile', { method: 'PATCH', body: JSON.stringify(body) });
   const data = await res.json();

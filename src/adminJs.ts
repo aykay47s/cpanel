@@ -36,7 +36,7 @@ async function renderAdminDashboard(el) {
     <div class="stat-grid stagger">
       <div class="stat-box panel accent"><div class="num">\${d.total}</div><div class="lbl">Total Leads</div></div>
       <div class="stat-box panel"><div class="num">\${d.uncalled}</div><div class="lbl">Not Called</div></div>
-      <div class="stat-box panel" style="border-color:\${d.active_calls > 0 ? 'var(--gold-glow)' : ''};"><div class="num">\${d.active_calls}</div><div class="lbl">🔴 On Call Now</div></div>
+      <div class="stat-box panel" style="border-color:\${d.active_calls > 0 ? 'var(--gold-glow)' : ''};"><div class="num">\${d.active_calls}</div><div class="lbl">On Call Now</div></div>
       <div class="stat-box panel"><div class="num">\${d.successful}</div><div class="lbl">Successful</div></div>
       <div class="stat-box panel"><div class="num">\${d.awaiting_finishing}</div><div class="lbl">Awaiting Finishing</div></div>
       <div class="stat-box panel"><div class="num">\${d.assigned_finishing}</div><div class="lbl">With Finishers</div></div>
@@ -59,7 +59,7 @@ function onCallHtml(rows) {
   if (!rows.length) return '<div style="color:var(--text-dim);font-size:13px;">Nobody is on a call right now.</div>';
   return rows.map(r => \`
     <div style="display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--border);">
-      <div style="width:34px;height:34px;border-radius:9px;background:var(--s3);display:flex;align-items:center;justify-content:center;font-size:16px;overflow:hidden;">\${r.caller_pfp_data ? '<img src="' + r.caller_pfp_data + '" style="width:100%;height:100%;object-fit:cover;" />' : (r.caller_avatar || '🧑')}</div>
+      \${avatarHtml({ id: r.caller_id, name: r.caller_name, pfp_data: r.caller_pfp_data }, 34)}
       <div style="flex:1;">
         <div style="font-size:13px;font-weight:700;">\${esc(r.caller_name)} <span style="color:var(--text-dim);font-weight:500;">→ \${fullName(r)}</span></div>
         <div style="font-size:11px;color:var(--text-dim);" class="mono">\${r.phone} · started \${new Date(r.call_started_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</div>
@@ -103,7 +103,7 @@ function leadRowHtml(l) {
   const sendCell = l.status === 'not_called'
     ? \`<select onclick="event.stopPropagation()" onchange="event.stopPropagation(); sendLeadToCaller(\${l.id}, this.value)"><option value="">Send to…</option>\${callerListCache.map(c => '<option value="' + c.id + '">' + esc(c.name) + '</option>').join('')}</select>\`
     : '<span style="color:var(--text-faint);">—</span>';
-  return \`<tr class="clickable" data-lead-row="\${l.id}"><td onclick="openLeadDetail(\${l.id})">\${esc(fullName(l))} \${l.dedup_status === 'flagged' ? '<span class="dup-warn">possible dup</span>' : ''}\${l.note_count > 0 ? ' <span class="badge" style="background:rgba(79,140,255,.15);color:var(--gold-bright);" title="' + l.note_count + ' caller note(s)">💬 ' + l.note_count + '</span>' : ''}\${l.extra_info ? ' <span class="badge" style="background:rgba(239,68,68,.15);color:var(--danger);" title="Sensitive info was flagged in this import">🔒</span>' : ''}</td><td class="mono" onclick="openLeadDetail(\${l.id})">\${l.phone}</td><td onclick="openLeadDetail(\${l.id})"><span class="badge \${l.status}">\${l.status.replace(/_/g,' ')}</span></td><td onclick="openLeadDetail(\${l.id})">\${l.caller_name || '—'}</td><td onclick="openLeadDetail(\${l.id})">\${l.finisher_name || '—'}</td><td onclick="openLeadDetail(\${l.id})">\${timeAgo(l.created_at)}</td><td>\${sendCell}</td><td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); deleteLead(\${l.id})">Delete</button></td></tr>\`;
+  return \`<tr class="clickable" data-lead-row="\${l.id}"><td onclick="openLeadDetail(\${l.id})">\${esc(fullName(l))} \${l.dedup_status === 'flagged' ? '<span class="dup-warn">possible dup</span>' : ''}\${l.note_count > 0 ? ' <span class="badge" style="background:rgba(79,140,255,.15);color:var(--gold-bright);" title="' + l.note_count + ' caller note(s)">' + l.note_count + ' note' + (l.note_count === 1 ? '' : 's') + '</span>' : ''}\${l.extra_info ? ' <span class="badge" style="background:rgba(239,68,68,.15);color:var(--danger);" title="Sensitive info was flagged in this import">FLAGGED</span>' : ''}</td><td class="mono" onclick="openLeadDetail(\${l.id})">\${l.phone}</td><td onclick="openLeadDetail(\${l.id})"><span class="badge \${l.status}">\${l.status.replace(/_/g,' ')}</span></td><td onclick="openLeadDetail(\${l.id})">\${l.caller_name || '—'}</td><td onclick="openLeadDetail(\${l.id})">\${l.finisher_name || '—'}</td><td onclick="openLeadDetail(\${l.id})">\${timeAgo(l.created_at)}</td><td>\${sendCell}</td><td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); deleteLead(\${l.id})">Delete</button></td></tr>\`;
 }
 async function sendLeadToCaller(leadId, callerId) {
   if (!callerId) return;
@@ -152,7 +152,7 @@ async function openLeadDetail(id) {
     <div class="panel p fade-up" style="border-color:var(--gold-glow);">
       \${l.callerNotes.length ? l.callerNotes.map(n => \`
         <div style="display:flex;gap:10px;padding:12px 0;border-bottom:1px solid var(--border);">
-          <div style="width:30px;height:30px;border-radius:50%;background:var(--s3);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;">\${n.author_avatar || '🧑'}</div>
+          \${avatarHtml({ name: n.author_name, pfp_data: n.author_pfp_data }, 30)}
           <div style="flex:1;">
             <div style="font-size:13px;line-height:1.5;">\${esc(n.content)}</div>
             <div style="font-size:10.5px;color:var(--text-faint);margin-top:3px;">\${esc(n.author_name || 'Unknown')} · \${new Date(n.created_at).toLocaleString()}</div>
@@ -295,7 +295,7 @@ async function renderAdminRoster(el) {
       <div id="newPinBanner"></div>
     </div>
     <div class="panel p fade-up"><table><thead><tr><th></th><th>Name</th><th>PIN</th><th>Role</th><th>Call Number</th><th>XP</th><th>Status</th><th></th></tr></thead>
-    <tbody>\${rows.map(u => \`<tr><td style="font-size:17px;">\${u.pfp_data ? '<img src="' + u.pfp_data + '" style="width:24px;height:24px;border-radius:50%;object-fit:cover;" />' : (u.avatar||'🧑')}</td><td>\${esc(u.name)}</td><td class="pin-display">\${u.pin}</td><td><span class="badge \${u.role}">\${u.role}</span></td>
+    <tbody>\${rows.map(u => \`<tr><td>\${avatarHtml(u, 24)}</td><td>\${esc(u.name)}</td><td class="pin-display">\${u.pin}</td><td><span class="badge \${u.role}">\${u.role}</span></td>
       <td>\${u.call_phone ? '<span class="blur-phone mono" onclick="this.classList.toggle(\\'revealed\\')">' + esc(u.call_phone) + '</span>' : '<span style="color:var(--text-faint);">—</span>'}</td>
       <td>\${u.xp}</td><td><span class="badge \${u.status}">\${u.status}</span>\${u.clocked_in ? ' <span class="mono roster-clock-timer" data-uid="' + u.id + '" style="font-size:10.5px;color:var(--gold-bright);"></span>' : ''}</td>
       <td style="display:flex;gap:6px;"><select onchange="changeRole(\${u.id}, this.value)" style="width:auto;padding:6px 8px;font-size:11px;"><option value="">Change role…</option><option value="caller">Caller</option><option value="finisher">Finisher</option><option value="admin">Admin</option></select><button class="btn btn-ghost btn-sm" onclick="viewClockHistory(\${u.id},'\${esc(u.name)}')">History</button><button class="btn btn-danger btn-sm" onclick="removeUser(\${u.id})">Remove</button></td></tr>\`).join('')}</tbody></table></div>
@@ -477,11 +477,6 @@ async function deleteCategory(id) {
 }
 
 
-function adminAvatarHtml(r, size) {
-  return r.pfp_data
-    ? \`<img src="\${r.pfp_data}" style="width:\${size}px;height:\${size}px;border-radius:50%;object-fit:cover;" />\`
-    : \`<div style="width:\${size}px;height:\${size}px;border-radius:50%;background:var(--s3);display:flex;align-items:center;justify-content:center;font-size:\${Math.round(size*0.5)}px;">\${r.avatar || '🧑'}</div>\`;
-}
 async function renderAdminLeaderboard(el) {
   const res = await api('/api/leaderboard');
   const rows = (await res.json()).data;
@@ -498,17 +493,17 @@ async function renderAdminLeaderboard(el) {
       </div>
     </div>\` : '<div class="panel p" style="color:var(--text-dim);">No activity yet.</div>'}
     \${rest.length ? \`<div class="panel p fade-up"><div class="section-title" style="margin-top:0;">Full Board</div>
-      \${rest.map((r, i) => \`<div class="lb-row"><div class="rank">\${i+4}</div>\${adminAvatarHtml(r, 30)}
+      \${rest.map((r, i) => \`<div class="lb-row"><div class="rank">\${i+4}</div>\${avatarHtml(r, 30)}
         <div class="lb-name" style="margin-left:6px;">\${esc(r.name)} <span class="badge \${r.role}" style="margin-left:4px;">\${r.role}</span></div>
         <div class="lb-stats"><span><b>\${r.successful_calls||0}</b> success</span><span style="color:var(--violet);"><b>\${r.xp}</b> xp</span></div></div>\`).join('')}
     </div>\` : ''}\`;
 }
 function adminPodiumSlot(r, place, height) {
-  const medal = place === 1 ? '🥇' : place === 2 ? '🥈' : '🥉';
+  const medalLabel = place === 1 ? 'GOLD' : place === 2 ? 'SILVER' : 'BRONZE';
   const barColor = place === 1 ? 'linear-gradient(180deg,#fbbf24,#b8860b)' : place === 2 ? 'linear-gradient(180deg,#d1d5db,#9ca3af)' : 'linear-gradient(180deg,#d97706,#92400e)';
   return \`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;">
-    <div style="font-size:22px;">\${medal}</div>
-    \${adminAvatarHtml(r, place === 1 ? 56 : 46)}
+    <div style="font-size:9.5px;font-weight:800;letter-spacing:.6px;color:var(--text-faint);">\${medalLabel}</div>
+    \${avatarHtml(r, place === 1 ? 56 : 46)}
     <div style="font-size:12px;font-weight:700;text-align:center;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">\${esc(r.name)}</div>
     <div style="font-size:10.5px;color:var(--violet);font-weight:600;">\${r.xp} xp · \${r.successful_calls||0} wins</div>
     <div style="width:100%;height:\${height}px;border-radius:10px 10px 0 0;background:\${barColor};display:flex;align-items:flex-start;justify-content:center;padding-top:6px;font-size:16px;font-weight:800;color:rgba(0,0,0,.55);">#\${place}</div>

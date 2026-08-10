@@ -12,11 +12,11 @@ chat.get('/api/chat/messages', async (c) => {
   if (!user) return bad(c, 'Unauthorized', 401);
   const before = c.req.query('before');
   const rows = before
-    ? await sql`SELECT chat_messages.*, users.name as sender_name, users.avatar as sender_avatar, users.role as sender_role
+    ? await sql`SELECT chat_messages.*, users.name as sender_name, users.avatar as sender_avatar, users.pfp_data as sender_pfp_data, users.role as sender_role
         FROM chat_messages LEFT JOIN users ON users.id = chat_messages.sender_id
         WHERE chat_messages.id < ${before} AND (chat_messages.expires_at IS NULL OR chat_messages.expires_at > now())
         ORDER BY chat_messages.id DESC LIMIT 50`
-    : await sql`SELECT chat_messages.*, users.name as sender_name, users.avatar as sender_avatar, users.role as sender_role
+    : await sql`SELECT chat_messages.*, users.name as sender_name, users.avatar as sender_avatar, users.pfp_data as sender_pfp_data, users.role as sender_role
         FROM chat_messages LEFT JOIN users ON users.id = chat_messages.sender_id
         WHERE chat_messages.expires_at IS NULL OR chat_messages.expires_at > now()
         ORDER BY chat_messages.id DESC LIMIT 50`;
@@ -28,7 +28,7 @@ chat.get('/api/chat/search', async (c) => {
   if (!user) return bad(c, 'Unauthorized', 401);
   const q = c.req.query('q');
   if (!q) return c.json({ data: [] });
-  const rows = await sql`SELECT chat_messages.*, users.name as sender_name, users.avatar as sender_avatar
+  const rows = await sql`SELECT chat_messages.*, users.name as sender_name, users.avatar as sender_avatar, users.pfp_data as sender_pfp_data
     FROM chat_messages LEFT JOIN users ON users.id = chat_messages.sender_id
     WHERE chat_messages.content ILIKE ${'%' + q + '%'} ORDER BY chat_messages.id DESC LIMIT 30`;
   return c.json({ data: rows });
@@ -41,7 +41,7 @@ chat.post('/api/chat/messages', async (c) => {
   if (!content || !content.trim()) return bad(c, 'Message cannot be empty');
   const expiresAt = expiresInSeconds ? new Date(Date.now() + expiresInSeconds * 1000) : null;
   const [row] = await sql`INSERT INTO chat_messages (sender_id, content, reply_to_id, expires_at) VALUES (${user.id}, ${content.trim()}, ${replyToId || null}, ${expiresAt}) RETURNING *`;
-  const full = { ...row, sender_name: user.name, sender_avatar: user.avatar, sender_role: user.role };
+  const full = { ...row, sender_name: user.name, sender_avatar: user.avatar, sender_pfp_data: user.pfp_data, sender_role: user.role };
   broadcast('chat_message', full);
   await notifyRole('all', 'chat', `${user.name}: ${content.trim().slice(0, 80)}`, undefined, user.id);
   return c.json({ data: full });

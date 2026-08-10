@@ -146,7 +146,7 @@ leads.get('/api/admin/leads/:id', requireRole('admin'), async (c) => {
     WHERE leads.id = ${id}`;
   if (!lead) return bad(c, 'Not found', 404);
   const events = await sql`SELECT lead_events.*, users.name as actor_name FROM lead_events LEFT JOIN users ON users.id = lead_events.actor_id WHERE lead_id = ${id} ORDER BY created_at ASC`;
-  const callerNotes = await sql`SELECT lead_notes.*, users.name as author_name, users.avatar as author_avatar FROM lead_notes LEFT JOIN users ON users.id = lead_notes.author_id WHERE lead_id = ${id} ORDER BY created_at ASC`;
+  const callerNotes = await sql`SELECT lead_notes.*, users.name as author_name, users.avatar as author_avatar, users.pfp_data as author_pfp_data FROM lead_notes LEFT JOIN users ON users.id = lead_notes.author_id WHERE lead_id = ${id} ORDER BY created_at ASC`;
   const dupes = await sql`SELECT * FROM duplicate_flags WHERE lead_id_a = ${id} OR lead_id_b = ${id}`;
   return c.json({ data: { ...lead, events, callerNotes, duplicates: dupes } });
 });
@@ -308,7 +308,7 @@ leads.post('/api/caller/leads/:id/note', requireRole('caller'), async (c) => {
 });
 
 leads.get('/api/leads/:id/notes', requireAnyStaff, async (c) => {
-  const rows = await sql`SELECT lead_notes.*, users.name as author_name, users.avatar as author_avatar FROM lead_notes LEFT JOIN users ON users.id = lead_notes.author_id WHERE lead_id = ${c.req.param('id')} ORDER BY created_at ASC`;
+  const rows = await sql`SELECT lead_notes.*, users.name as author_name, users.avatar as author_avatar, users.pfp_data as author_pfp_data FROM lead_notes LEFT JOIN users ON users.id = lead_notes.author_id WHERE lead_id = ${c.req.param('id')} ORDER BY created_at ASC`;
   return c.json({ data: rows });
 });
 

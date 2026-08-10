@@ -188,7 +188,18 @@ export async function ensureDb() {
   const [catRow] = await sql`SELECT 1 FROM lead_categories LIMIT 1`;
   if (!catRow) {
     await sql`INSERT INTO lead_categories (name, color) VALUES
-      ('General', '#9c9184'), ('Priority', '#4f8cff'), ('UK', '#3fa89a'), ('International', '#8b6fc9'), ('Callback', '#c04b3f')
+      ('General', '#9c9184'), ('Priority', '#4f8cff'), ('UK', '#3fa89a'), ('International', '#8b6fc9'), ('Callback', '#c04b3f'),
+      ('Lloyds', '#026a37'), ('Barclays', '#00aeef'), ('HSBC', '#db0011'), ('NatWest', '#5a287d'),
+      ('Santander', '#ec0000'), ('Halifax', '#0e5aa7'), ('TSB', '#0091d4'), ('Nationwide', '#1b3a6b'),
+      ('RBS', '#003087'), ('Metro Bank', '#e2231a'), ('Monzo', '#f15a5a'), ('Starling', '#7433ff')
+      ON CONFLICT (name) DO NOTHING`;
+  } else {
+    // Add the bank categories even if General/Priority/etc already existed from an
+    // earlier deploy — don't skip them just because the table wasn't empty.
+    await sql`INSERT INTO lead_categories (name, color) VALUES
+      ('Lloyds', '#026a37'), ('Barclays', '#00aeef'), ('HSBC', '#db0011'), ('NatWest', '#5a287d'),
+      ('Santander', '#ec0000'), ('Halifax', '#0e5aa7'), ('TSB', '#0091d4'), ('Nationwide', '#1b3a6b'),
+      ('RBS', '#003087'), ('Metro Bank', '#e2231a'), ('Monzo', '#f15a5a'), ('Starling', '#7433ff')
       ON CONFLICT (name) DO NOTHING`;
   }
 

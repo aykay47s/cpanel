@@ -7,6 +7,7 @@ export interface AuthUser {
   pin: string;
   role: 'admin' | 'caller' | 'finisher';
   avatar: string;
+  pfp_data: string | null;
   xp: number;
   clocked_in: boolean;
 }
@@ -18,7 +19,7 @@ export async function authenticate(c: Context): Promise<AuthUser | null> {
   const uid = c.req.header('x-user-id') || c.req.query('uid');
   const pin = c.req.header('x-user-pin') || c.req.query('pin');
   if (!uid || !pin) return null;
-  const [user] = await sql`SELECT id, name, pin, role, avatar, xp, clocked_in FROM users WHERE id = ${uid} AND pin = ${pin}`;
+  const [user] = await sql`SELECT id, name, pin, role, avatar, pfp_data, xp, clocked_in FROM users WHERE id = ${uid} AND pin = ${pin}`;
   return (user as AuthUser) || null;
 }
 
