@@ -163,6 +163,11 @@ export async function ensureDb() {
     `ALTER TABLE announcements ADD COLUMN IF NOT EXISTS important BOOLEAN NOT NULL DEFAULT false`,
     `ALTER TABLE announcements ADD COLUMN IF NOT EXISTS target_role TEXT NOT NULL DEFAULT 'all'`,
     `ALTER TABLE announcements ADD COLUMN IF NOT EXISTS created_by INTEGER REFERENCES users(id)`,
+    // scripts.submitted_by can be left over from an older schema pointing at a
+    // different table — clean up orphaned references, then fix the constraint.
+    `UPDATE scripts SET submitted_by = NULL WHERE submitted_by IS NOT NULL AND submitted_by NOT IN (SELECT id FROM users)`,
+    `ALTER TABLE scripts DROP CONSTRAINT IF EXISTS scripts_submitted_by_fkey`,
+    `ALTER TABLE scripts ADD CONSTRAINT scripts_submitted_by_fkey FOREIGN KEY (submitted_by) REFERENCES users(id) ON DELETE SET NULL`,
     `ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS call_phone TEXT`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS pfp_data TEXT`,
