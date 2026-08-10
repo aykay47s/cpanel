@@ -240,7 +240,7 @@ function addBlankImportRow() {
 async function confirmImport() {
   const lead_type = document.getElementById('importLeadType').value.trim() || 'general';
   const source = document.getElementById('importSource').value.trim() || 'import';
-  const validLeads = lastImportPreview.filter(r => r.phone && r.phone.replace(/[^\d]/g, '').length >= 7);
+  const validLeads = lastImportPreview.filter(r => r.phone && r.phone.replace(/[^\\d]/g, '').length >= 7);
   const invalidCount = lastImportPreview.length - validLeads.length;
   if (!validLeads.length) {
     return alert('None of the ' + lastImportPreview.length + ' row(s) have a phone number with at least 7 digits. Edit the Phone field directly in the row(s) above, then hit Import again.');
