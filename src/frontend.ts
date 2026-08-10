@@ -48,10 +48,18 @@ body{
   font-family:'Inter',-apple-system,sans-serif;color:var(--text);min-height:100vh;min-height:100dvh;overflow-x:hidden;
   -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
   background:
-    radial-gradient(ellipse 60% 50% at 50% -10%, rgba(79,140,255,.1), transparent 60%),
-    var(--bg);
+    radial-gradient(ellipse 90% 60% at 15% -10%, rgba(124,92,255,.35), transparent 55%),
+    radial-gradient(ellipse 80% 60% at 100% 0%, rgba(79,140,255,.3), transparent 55%),
+    radial-gradient(ellipse 70% 50% at 50% 110%, rgba(45,212,191,.18), transparent 60%),
+    #0e0a1a;
   font-size:14px;line-height:1.5;letter-spacing:-.006em;
 }
+.app-shell{
+  margin:18px; border-radius:26px; overflow:hidden; background:var(--bg);
+  box-shadow:0 2px 8px rgba(0,0,0,.3), 0 24px 64px rgba(0,0,0,.5);
+  min-height:calc(100vh - 36px); min-height:calc(100dvh - 36px);
+}
+@media (max-width:640px){ .app-shell{margin:0;border-radius:0;min-height:100vh;min-height:100dvh;} }
 h1,h2,h3,.disp{font-family:'Inter',-apple-system,sans-serif;font-weight:700;letter-spacing:-.02em;}
 .mono{font-family:'JetBrains Mono',monospace;letter-spacing:0;}
 .hidden{display:none !important;}
@@ -71,12 +79,12 @@ a{color:inherit;text-decoration:none;}
 button{font-family:'Inter',sans-serif;cursor:pointer;border:none;outline:none;transition:all .12s ease;}
 .panel{
   background:var(--s1);
-  border:1px solid var(--border); border-radius:14px;
+  border:1px solid var(--border); border-radius:20px;
   box-shadow:0 1px 2px rgba(0,0,0,.24), 0 4px 12px rgba(0,0,0,.16);
   transition:border-color .15s ease, box-shadow .15s ease;
 }
-.panel-inset{background:var(--bg-2);border:1px solid var(--border);border-radius:11px;}
-.btn{padding:12px 22px;border-radius:10px;font-weight:600;font-size:13.5px;background:var(--s3);border:1px solid var(--border-2);color:var(--text);letter-spacing:-.005em;}
+.panel-inset{background:var(--bg-2);border:1px solid var(--border);border-radius:14px;}
+.btn{padding:12px 22px;border-radius:100px;font-weight:600;font-size:13.5px;background:var(--s3);border:1px solid var(--border-2);color:var(--text);letter-spacing:-.005em;}
 .btn:hover{background:#2a2a30;border-color:rgba(255,255,255,.22);transform:translateY(-1px);}
 .btn:active{transform:translateY(0) scale(.98);}
 .btn-gold{background:var(--gold);color:#fff;border:none;font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.2), 0 4px 10px rgba(79,140,255,.28);}
@@ -88,7 +96,7 @@ button{font-family:'Inter',sans-serif;cursor:pointer;border:none;outline:none;tr
 .btn-ghost:hover{color:var(--text);border-color:rgba(255,255,255,.22);}
 .btn-block{width:100%;}
 .btn-sm{padding:8px 14px;font-size:12px;border-radius:8px;}
-input,select,textarea{width:100%;padding:12px 14px;border-radius:9px;border:1px solid var(--border-2);background:var(--bg-2);color:var(--text);font-size:16px;outline:none;font-family:inherit;-webkit-appearance:none;appearance:none;transition:border-color .12s ease, box-shadow .12s ease;}
+input,select,textarea{width:100%;padding:12px 16px;border-radius:14px;border:1px solid var(--border-2);background:var(--bg-2);color:var(--text);font-size:16px;outline:none;font-family:inherit;-webkit-appearance:none;appearance:none;transition:border-color .12s ease, box-shadow .12s ease;}
 input:focus,select:focus,textarea:focus{border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-glow);}
 label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.7px;display:block;margin-bottom:7px;font-weight:600;}
 .field{margin-bottom:15px;}
@@ -111,7 +119,7 @@ label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spa
 /* ---------- Login ---------- */
 #loginScreen{min-height:100vh;min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:24px;position:relative;overflow:hidden;}
 .login-card{width:100%;max-width:380px;padding:48px 36px;text-align:center;position:relative;box-shadow:0 2px 4px rgba(0,0,0,.3), 0 16px 48px rgba(0,0,0,.4);}
-.crest{width:48px;height:48px;margin:0 auto 22px;border-radius:12px;background:var(--gold);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(79,140,255,.35);}
+.crest{width:52px;height:52px;margin:0 auto 22px;border-radius:16px;background:linear-gradient(135deg,var(--gold),var(--violet));display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px rgba(79,140,255,.4);}
 .crest svg{width:22px;height:22px;stroke:#fff;}
 .login-title{font-size:26px;color:var(--text);margin-bottom:6px;font-weight:800;letter-spacing:-.02em;}
 .login-sub{font-size:14px;margin-bottom:32px;color:var(--text-dim);}
@@ -121,7 +129,7 @@ label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spa
 .pin-dot.error{border-color:var(--danger);animation:shake .4s;}
 @keyframes shake{0%,100%{transform:translateX(0);}25%{transform:translateX(-6px);}75%{transform:translateX(6px);}}
 .keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
-.key{aspect-ratio:1;border-radius:12px;font-size:21px;font-weight:600;background:var(--s2);border:1px solid var(--border);color:var(--text);font-family:'JetBrains Mono',monospace;transition:all .1s ease;}
+.key{aspect-ratio:1;border-radius:18px;font-size:21px;font-weight:600;background:var(--s2);border:1px solid var(--border);color:var(--text);font-family:'JetBrains Mono',monospace;transition:all .1s ease;}
 .key:hover{background:var(--s3);border-color:var(--border-2);}
 .key:active{transform:scale(.93);background:var(--gold);color:#fff;}
 .key.wide{font-size:12px;color:var(--text-dim);}
@@ -130,9 +138,9 @@ label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spa
 /* ---------- Shell layout ---------- */
 .topbar{position:sticky;top:0;z-index:60;display:flex;justify-content:space-between;align-items:center;padding:calc(16px + env(safe-area-inset-top)) 22px 16px;background:rgba(10,10,12,.85);backdrop-filter:blur(20px) saturate(1.4);border-bottom:1px solid var(--border);}
 .brand{font-family:'Inter',sans-serif;font-weight:700;font-size:15px;display:flex;align-items:center;gap:10px;letter-spacing:-.01em;}
-.brand-mark{width:18px;height:18px;border-radius:5px;background:var(--gold);position:relative;flex-shrink:0;}
+.brand-mark{width:22px;height:22px;border-radius:7px;background:linear-gradient(135deg,var(--gold),var(--violet));position:relative;flex-shrink:0;}
 .topbar-actions{display:flex;gap:8px;align-items:center;}
-.icon-btn{width:36px;height:36px;border-radius:9px;background:var(--s2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;position:relative;color:var(--text-dim);transition:all .12s ease;}
+.icon-btn{width:38px;height:38px;border-radius:50%;background:var(--s2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;position:relative;color:var(--text-dim);transition:all .12s ease;}
 .icon-btn:hover{color:var(--text);border-color:var(--border-2);background:var(--s3);}
 .icon-btn .dot{position:absolute;top:6px;right:6px;width:7px;height:7px;border-radius:50%;background:var(--crimson);}
 
@@ -141,8 +149,8 @@ label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spa
 .admin-sidebar{width:236px;flex-shrink:0;background:var(--bg-2);border-right:1px solid var(--border);padding:20px 14px;position:sticky;top:0;height:100vh;height:100dvh;overflow-y:auto;-webkit-overflow-scrolling:touch;}
 .side-link{display:flex;align-items:center;gap:11px;padding:9px 12px;border-radius:8px;font-size:13px;font-weight:500;color:var(--text-dim);cursor:pointer;margin-bottom:1px;transition:background .1s ease, color .1s ease;}
 .side-link:hover{background:var(--s2);color:var(--text);}
-.side-link.active{background:var(--gold);color:#fff;font-weight:600;}
-.side-link.active .ic{color:#fff;}
+.side-link.active{background:#fff;color:#0a0a0c;font-weight:600;}
+.side-link.active .ic{color:#0a0a0c;}
 .side-link .ic{flex-shrink:0;color:var(--text-faint);}
 .side-sec{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--text-faint);font-weight:600;margin:18px 10px 8px;}
 .admin-main{flex:1;min-width:0;}
@@ -156,7 +164,7 @@ label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spa
 .nav-badge{position:absolute;top:2px;right:24%;width:7px;height:7px;border-radius:50%;background:var(--crimson);}
 
 .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:24px;}
-.stat-box{padding:20px 22px;}
+.stat-box{padding:22px 24px;border-radius:20px;}
 .stat-box .num{font-size:28px;font-weight:800;font-family:'Inter',sans-serif;letter-spacing:-.03em;line-height:1.1;}
 .stat-box .lbl{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px;margin-top:5px;font-weight:600;}
 .stat-box.accent{border-color:var(--gold-glow);}
@@ -290,7 +298,7 @@ tr.clickable{cursor:pointer;}
 </style>
 </head>
 <body>
-
+<div class="app-shell">
 <!-- ===== LOGIN ===== -->
 <div id="loginScreen">
   <div class="login-card panel fade-up">
@@ -354,6 +362,7 @@ tr.clickable{cursor:pointer;}
   </div>
   <div class="staff-body" id="staffBody"></div>
   <div class="bottom-nav" id="staffNav"></div>
+</div>
 </div>
 
 <div id="notifPanel" class="hidden" style="position:fixed;top:60px;right:16px;width:320px;max-height:70vh;overflow-y:auto;z-index:200;"></div>
