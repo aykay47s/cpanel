@@ -16,15 +16,24 @@ export interface RedactionResult {
   cleanText: string;
   redactedCount: number;
   redactedTypes: string[];
+  // A masked, non-sensitive summary of what payment-like data was found — safe to
+  // store and show behind a blur toggle. Never contains the full card number or CVV.
+  extraInfo: string[];
 }
 
-// Strips fields that look like payment card numbers, CVVs, card expiry dates,
-// passwords, or SSNs before any parsing or storage happens — field-level, not
-// line-level, so a name sharing a line with card data survives while the card
-// data itself never touches storage or logs.
+function maskCard(digits: string): string {
+  return '•••• ' + digits.slice(-4);
+}
+
+// Masks payment card numbers (keeps only last 4 digits, the rest is never stored)
+// and fully strips CVVs/passwords/SSNs — those are never retained in any form, full
+// stop, since a CVV has no legitimate reason to be stored after the moment of card
+// authorization under any payment network's rules. Field-level, not line-level, so
+// a name sharing a line with card data survives while the sensitive data doesn't.
 export function redactSensitive(text: string): RedactionResult {
   let redactedCount = 0;
   const types = new Set<string>();
+  const extraInfo: string[] = [];
   const lines = text.split('\n');
   const kept: string[] = [];
 
@@ -34,7 +43,7 @@ export function redactSensitive(text: string): RedactionResult {
       continue;
     }
 
-    // If the line is delimited, redact at the field level so adjacent legitimate
+    // If the line is delimited, handle at the field level so adjacent legitimate
     // data (a name, an address) isn't collateral damage.
     if (SPLIT_RE.test(line)) {
       const delim = line.includes('|') ? '|' : line.includes('\t') ? '\t' : ',';
@@ -45,9 +54,13 @@ export function redactSensitive(text: string): RedactionResult {
 
       const redactedFields = fields.map((f, i) => {
         const trimmed = trimmedFields[i];
-        if (BARE_CARD_DIGITS_RE.test(trimmed)) { redactedCount++; types.add('card_number'); return ''; }
-        // Expiry/CVV shapes are only redacted when a card number is present in the
-        // same row — alone, "3/22" or "222" are too ambiguous to safely nuke.
+        if (BARE_CARD_DIGITS_RE.test(trimmed)) {
+          redactedCount++; types.add('card_number');
+          extraInfo.push('Card mentioned, masked: ' + maskCard(trimmed));
+          return '';
+        }
+        // CVV/expiry shapes are only acted on when a card number is present in the
+        // same row — alone, "3/22" or "222" are too ambiguous to safely treat as such.
         if (hasCardInRow && EXPIRY_SHAPE_RE.test(trimmed)) { redactedCount++; types.add('card_expiry'); return ''; }
         if (hasCardInRow && CVV_SHAPE_RE.test(trimmed) && cardIndices.some(ci => Math.abs(ci - i) === 1)) {
           redactedCount++; types.add('cvv'); return '';
@@ -58,17 +71,19 @@ export function redactSensitive(text: string): RedactionResult {
       continue;
     }
 
-    // Freeform (undelimited) line: only redact if the WHOLE line is essentially
-    // just the sensitive token, so we don't nuke a sentence that happens to
-    // contain a long number.
+    // Freeform (undelimited) line: only act if the WHOLE line is essentially just
+    // the sensitive token, so we don't nuke a sentence that happens to contain a
+    // long number.
     const trimmedLine = line.trim();
-    if (BARE_CARD_DIGITS_RE.test(trimmedLine.replace(/[\s-]/g, ''))) {
+    const digitsOnly = trimmedLine.replace(/[\s-]/g, '');
+    if (BARE_CARD_DIGITS_RE.test(digitsOnly)) {
       redactedCount++; types.add('card_number');
+      extraInfo.push('Card mentioned, masked: ' + maskCard(digitsOnly));
       continue;
     }
     kept.push(line);
   }
-  return { cleanText: kept.join('\n'), redactedCount, redactedTypes: [...types] };
+  return { cleanText: kept.join('\n'), redactedCount, redactedTypes: [...types], extraInfo };
 }
 
 // ---------- Field classification ----------

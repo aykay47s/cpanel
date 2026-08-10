@@ -17,6 +17,11 @@ leads.post('/api/admin/leads/import/preview', requireRole('admin'), async (c) =>
   const { leads: parsed, redacted } = smartParse(text);
   if (!parsed.length) return c.json({ data: { leads: [], redacted } });
 
+  // Any masked sensitive-data summary (e.g. "Card mentioned, masked: •••• 1111")
+  // travels with the lead so it survives into the confirm step and gets stored
+  // behind a blur toggle — never the raw card number itself.
+  const extraInfoJoined = redacted.extraInfo.length ? redacted.extraInfo.join('; ') : null;
+
   // Check each parsed lead against EXISTING db leads for potential duplicates.
   const existing = await sql`SELECT id, first_name, last_name, phone, email FROM leads WHERE merged_into_id IS NULL`;
   const annotated = parsed.map((p) => {
@@ -27,7 +32,7 @@ leads.post('/api/admin/leads/import/preview', requireRole('admin'), async (c) =>
         bestMatch = { leadId: e.id, confidence: cmp.confidence, reasons: cmp.reasons };
       }
     }
-    return { ...p, potentialDuplicate: bestMatch };
+    return { ...p, extra_info: extraInfoJoined, potentialDuplicate: bestMatch };
   });
   return c.json({ data: { leads: annotated, redacted } });
 });
@@ -44,8 +49,8 @@ leads.post('/api/admin/leads/import/confirm', requireRole('admin'), async (c) =>
     const norm = normalizePhone(r.phone);
     const displayPhone = norm.valid ? norm.display : r.phone;
     const [lead] = await sql`
-      INSERT INTO leads (first_name, last_name, phone, phone_e164, email, address, notes, source, lead_type, uploaded_by)
-      VALUES (${r.first_name || null}, ${r.last_name || null}, ${displayPhone}, ${norm.e164}, ${r.email || null}, ${r.address || null}, ${r.notes || null}, ${source || 'import'}, ${lead_type || 'general'}, ${user.id})
+      INSERT INTO leads (first_name, last_name, phone, phone_e164, email, address, notes, extra_info, source, lead_type, uploaded_by)
+      VALUES (${r.first_name || null}, ${r.last_name || null}, ${displayPhone}, ${norm.e164}, ${r.email || null}, ${r.address || null}, ${r.notes || null}, ${(r as any).extra_info || null}, ${source || 'import'}, ${lead_type || 'general'}, ${user.id})
       RETURNING *
     `;
     inserted++;
