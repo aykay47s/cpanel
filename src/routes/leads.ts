@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { sql } from '../db';
-import { requireRole, authenticate } from '../auth';
+import { requireRole, authenticate, requireAnyStaff } from '../auth';
 import { logEvent } from '../audit';
 import { broadcast, notify, notifyRole } from '../realtime';
 import { smartParse, compareForDuplicate, normalizePhone, type ParsedLead } from '../parser';
@@ -109,7 +109,8 @@ leads.get('/api/admin/leads', requireRole('admin'), async (c) => {
   if (search) {
     const s = `%${search}%`;
     rows = await sql`
-      SELECT leads.*, uc.name as caller_name, uf.name as finisher_name, uu.name as uploaded_by_name
+      SELECT leads.*, uc.name as caller_name, uf.name as finisher_name, uu.name as uploaded_by_name,
+        (SELECT COUNT(*) FROM lead_notes WHERE lead_notes.lead_id = leads.id)::int as note_count
       FROM leads
       LEFT JOIN users uc ON uc.id = leads.assigned_caller_id
       LEFT JOIN users uf ON uf.id = leads.assigned_finisher_id
@@ -118,12 +119,14 @@ leads.get('/api/admin/leads', requireRole('admin'), async (c) => {
       ORDER BY leads.created_at DESC LIMIT 300`;
   } else if (status) {
     rows = await sql`
-      SELECT leads.*, uc.name as caller_name, uf.name as finisher_name, uu.name as uploaded_by_name
+      SELECT leads.*, uc.name as caller_name, uf.name as finisher_name, uu.name as uploaded_by_name,
+        (SELECT COUNT(*) FROM lead_notes WHERE lead_notes.lead_id = leads.id)::int as note_count
       FROM leads LEFT JOIN users uc ON uc.id = leads.assigned_caller_id LEFT JOIN users uf ON uf.id = leads.assigned_finisher_id LEFT JOIN users uu ON uu.id = leads.uploaded_by
       WHERE leads.merged_into_id IS NULL AND leads.status = ${status} ORDER BY leads.created_at DESC LIMIT 300`;
   } else {
     rows = await sql`
-      SELECT leads.*, uc.name as caller_name, uf.name as finisher_name, uu.name as uploaded_by_name
+      SELECT leads.*, uc.name as caller_name, uf.name as finisher_name, uu.name as uploaded_by_name,
+        (SELECT COUNT(*) FROM lead_notes WHERE lead_notes.lead_id = leads.id)::int as note_count
       FROM leads LEFT JOIN users uc ON uc.id = leads.assigned_caller_id LEFT JOIN users uf ON uf.id = leads.assigned_finisher_id LEFT JOIN users uu ON uu.id = leads.uploaded_by
       WHERE leads.merged_into_id IS NULL ORDER BY leads.created_at DESC LIMIT 300`;
   }
@@ -138,8 +141,9 @@ leads.get('/api/admin/leads/:id', requireRole('admin'), async (c) => {
     WHERE leads.id = ${id}`;
   if (!lead) return bad(c, 'Not found', 404);
   const events = await sql`SELECT lead_events.*, users.name as actor_name FROM lead_events LEFT JOIN users ON users.id = lead_events.actor_id WHERE lead_id = ${id} ORDER BY created_at ASC`;
+  const callerNotes = await sql`SELECT lead_notes.*, users.name as author_name, users.avatar as author_avatar FROM lead_notes LEFT JOIN users ON users.id = lead_notes.author_id WHERE lead_id = ${id} ORDER BY created_at ASC`;
   const dupes = await sql`SELECT * FROM duplicate_flags WHERE lead_id_a = ${id} OR lead_id_b = ${id}`;
-  return c.json({ data: { ...lead, events, duplicates: dupes } });
+  return c.json({ data: { ...lead, events, callerNotes, duplicates: dupes } });
 });
 
 leads.delete('/api/admin/leads/:id', requireRole('admin'), async (c) => {
@@ -290,13 +294,17 @@ leads.post('/api/caller/leads/:id/note', requireRole('caller'), async (c) => {
   const user = c.get('user');
   const { note } = await c.req.json().catch(() => ({}));
   if (!note || !note.trim()) return bad(c, 'Note cannot be empty');
-  const [lead] = await sql`SELECT status, assigned_caller_id, notes FROM leads WHERE id = ${c.req.param('id')}`;
+  const [lead] = await sql`SELECT status, assigned_caller_id FROM leads WHERE id = ${c.req.param('id')}`;
   if (!lead || lead.assigned_caller_id !== user.id) return bad(c, 'Not your lead', 403);
-  const combined = lead.notes ? lead.notes + '\n' + note.trim() : note.trim();
-  const [updated] = await sql`UPDATE leads SET notes = ${combined}, updated_at = now() WHERE id = ${c.req.param('id')} RETURNING *`;
-  await logEvent(updated.id, 'note_added', user, null, null, { note: note.trim() });
-  broadcast('lead_updated', updated);
-  return c.json({ data: updated });
+  const [noteRow] = await sql`INSERT INTO lead_notes (lead_id, author_id, content) VALUES (${c.req.param('id')}, ${user.id}, ${note.trim()}) RETURNING *`;
+  await logEvent(c.req.param('id'), 'note_added', user, null, null, { note: note.trim() });
+  broadcast('lead_note', { leadId: Number(c.req.param('id')), note: { ...noteRow, author_name: user.name } });
+  return c.json({ data: noteRow });
+});
+
+leads.get('/api/leads/:id/notes', requireAnyStaff, async (c) => {
+  const rows = await sql`SELECT lead_notes.*, users.name as author_name, users.avatar as author_avatar FROM lead_notes LEFT JOIN users ON users.id = lead_notes.author_id WHERE lead_id = ${c.req.param('id')} ORDER BY created_at ASC`;
+  return c.json({ data: rows });
 });
 
 const XP_MAP: Record<string, number> = {

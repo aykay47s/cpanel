@@ -102,7 +102,7 @@ function leadRowHtml(l) {
   const sendCell = l.status === 'not_called'
     ? \`<select onclick="event.stopPropagation()" onchange="event.stopPropagation(); sendLeadToCaller(\${l.id}, this.value)"><option value="">Send to…</option>\${callerListCache.map(c => '<option value="' + c.id + '">' + esc(c.name) + '</option>').join('')}</select>\`
     : '<span style="color:var(--text-faint);">—</span>';
-  return \`<tr class="clickable" data-lead-row="\${l.id}"><td onclick="openLeadDetail(\${l.id})">\${esc(fullName(l))} \${l.dedup_status === 'flagged' ? '<span class="dup-warn">possible dup</span>' : ''}</td><td class="mono" onclick="openLeadDetail(\${l.id})">\${l.phone}</td><td onclick="openLeadDetail(\${l.id})"><span class="badge \${l.status}">\${l.status.replace(/_/g,' ')}</span></td><td onclick="openLeadDetail(\${l.id})">\${l.caller_name || '—'}</td><td onclick="openLeadDetail(\${l.id})">\${l.finisher_name || '—'}</td><td onclick="openLeadDetail(\${l.id})">\${timeAgo(l.created_at)}</td><td>\${sendCell}</td><td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); deleteLead(\${l.id})">Delete</button></td></tr>\`;
+  return \`<tr class="clickable" data-lead-row="\${l.id}"><td onclick="openLeadDetail(\${l.id})">\${esc(fullName(l))} \${l.dedup_status === 'flagged' ? '<span class="dup-warn">possible dup</span>' : ''}\${l.note_count > 0 ? ' <span class="badge" style="background:rgba(79,140,255,.15);color:var(--gold-bright);" title="' + l.note_count + ' caller note(s)">💬 ' + l.note_count + '</span>' : ''}</td><td class="mono" onclick="openLeadDetail(\${l.id})">\${l.phone}</td><td onclick="openLeadDetail(\${l.id})"><span class="badge \${l.status}">\${l.status.replace(/_/g,' ')}</span></td><td onclick="openLeadDetail(\${l.id})">\${l.caller_name || '—'}</td><td onclick="openLeadDetail(\${l.id})">\${l.finisher_name || '—'}</td><td onclick="openLeadDetail(\${l.id})">\${timeAgo(l.created_at)}</td><td>\${sendCell}</td><td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); deleteLead(\${l.id})">Delete</button></td></tr>\`;
 }
 async function sendLeadToCaller(leadId, callerId) {
   if (!callerId) return;
@@ -145,6 +145,17 @@ async function openLeadDetail(id) {
       <div class="info-row"><span class="k">Finisher</span><span class="v">\${l.finisher_name || '—'}</span></div>
       \${l.notes ? '<div class="info-row"><span class="k">Notes</span><span class="v">' + esc(l.notes) + '</span></div>' : ''}
       \${l.status === 'requires_review' ? \`<div style="margin-top:16px;display:flex;gap:8px;"><button class="btn btn-teal btn-sm" onclick="overrideStatus(\${l.id},'ready_for_finishing')">Send to Finishing</button><button class="btn btn-ghost btn-sm" onclick="overrideStatus(\${l.id},'not_called')">Reset to Not Called</button><button class="btn btn-danger btn-sm" onclick="overrideStatus(\${l.id},'failed')">Mark Failed</button></div>\` : ''}
+    </div>
+    <div class="section-title">Caller Notes \${l.callerNotes.length ? '(' + l.callerNotes.length + ')' : ''}</div>
+    <div class="panel p fade-up" style="border-color:var(--gold-glow);">
+      \${l.callerNotes.length ? l.callerNotes.map(n => \`
+        <div style="display:flex;gap:10px;padding:12px 0;border-bottom:1px solid var(--border);">
+          <div style="width:30px;height:30px;border-radius:50%;background:var(--s3);display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;">\${n.author_avatar || '🧑'}</div>
+          <div style="flex:1;">
+            <div style="font-size:13px;line-height:1.5;">\${esc(n.content)}</div>
+            <div style="font-size:10.5px;color:var(--text-faint);margin-top:3px;">\${esc(n.author_name || 'Unknown')} · \${new Date(n.created_at).toLocaleString()}</div>
+          </div>
+        </div>\`).join('') : '<div style="color:var(--text-dim);font-size:13px;">No notes from callers on this lead yet — these show up here the moment a caller adds one, even mid-call.</div>'}
     </div>
     <div class="section-title">Timeline</div>
     <div class="panel p fade-up">
@@ -377,6 +388,8 @@ async function saveGoal() {
 async function renderAdminScripts(el) {
   const res = await api('/api/admin/scripts');
   const rows = (await res.json()).data;
+  const pending = rows.filter(s => s.status === 'pending');
+  const approved = rows.filter(s => s.status === 'approved');
   el.innerHTML = \`
     <div class="panel p fade-up">
       <div class="section-title" style="margin-top:0;">Add Script</div>
@@ -384,10 +397,20 @@ async function renderAdminScripts(el) {
       <div class="field"><label>Content</label><textarea id="scContent" rows="4"></textarea></div>
       <button class="btn btn-gold btn-block" onclick="addScript()">Publish</button>
     </div>
-    <div class="panel p fade-up"><div class="section-title" style="margin-top:0;">Scripts (\${rows.length})</div>
-      \${rows.map(s => \`<div style="padding:12px 0;border-bottom:1px solid var(--border);"><b style="color:var(--gold-bright);font-size:13px;">\${esc(s.title)}</b> <span style="font-size:11px;color:var(--text-dim);">· \${s.lead_type}</span><div style="font-size:12.5px;color:var(--text-dim);margin-top:4px;white-space:pre-wrap;">\${esc(s.content)}</div><button class="btn btn-danger btn-sm" style="margin-top:8px;" onclick="deleteScript(\${s.id})">Delete</button></div>\`).join('') || '<div style="color:var(--text-dim);">No scripts yet.</div>'}
+    \${pending.length ? \`<div class="panel p fade-up" style="border-color:var(--gold-glow);">
+      <div class="section-title" style="margin-top:0;">Pending Review (\${pending.length})</div>
+      \${pending.map(s => \`<div style="padding:12px 0;border-bottom:1px solid var(--border);">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;"><b style="font-size:13px;">\${esc(s.title)}</b><span class="badge pending">pending</span></div>
+        <div style="font-size:11px;color:var(--text-dim);margin-top:2px;">Suggested by \${esc(s.submitted_by_name || 'a caller')} · \${s.lead_type}</div>
+        <div style="font-size:12.5px;color:var(--text-dim);margin-top:6px;white-space:pre-wrap;">\${esc(s.content)}</div>
+        <div style="display:flex;gap:8px;margin-top:8px;"><button class="btn btn-teal btn-sm" onclick="approveScript(\${s.id})">Approve</button><button class="btn btn-danger btn-sm" onclick="deleteScript(\${s.id})">Reject</button></div>
+      </div>\`).join('')}
+    </div>\` : ''}
+    <div class="panel p fade-up"><div class="section-title" style="margin-top:0;">Approved Scripts (\${approved.length})</div>
+      \${approved.map(s => \`<div style="padding:12px 0;border-bottom:1px solid var(--border);"><b style="color:var(--gold-bright);font-size:13px;">\${esc(s.title)}</b> <span style="font-size:11px;color:var(--text-dim);">· \${s.lead_type}</span><div style="font-size:12.5px;color:var(--text-dim);margin-top:4px;white-space:pre-wrap;">\${esc(s.content)}</div><button class="btn btn-danger btn-sm" style="margin-top:8px;" onclick="deleteScript(\${s.id})">Delete</button></div>\`).join('') || '<div style="color:var(--text-dim);">No approved scripts yet.</div>'}
     </div>\`;
 }
+async function approveScript(id) { await api('/api/admin/scripts/' + id + '/approve', { method: 'POST' }); renderAdminTab('scripts'); }
 async function addScript() {
   const title = document.getElementById('scTitle').value.trim();
   const content = document.getElementById('scContent').value.trim();

@@ -58,7 +58,26 @@ async function renderStaffHome() {
     </div>
     <div class="section-title">Announcements</div>
     \${anns.length ? anns.map(a => \`<div class="announcement panel \${a.important ? 'important' : ''} fade-up"><div><div class="txt">\${esc(a.content)}</div><div class="meta">\${a.author_name || 'Admin'} · \${timeAgo(a.created_at)}</div></div></div>\`).join('') : '<div style="color:var(--text-faint);font-size:13px;padding:10px 2px;">Nothing from admin yet.</div>'}
+    <div class="section-title">Suggest a Script</div>
+    <div class="panel p fade-up">
+      <p style="font-size:11.5px;color:var(--text-dim);margin-bottom:10px;line-height:1.4;">Got a line that's working well for you? Send it in — admin reviews it and can approve it for the whole team to see during calls.</p>
+      <div class="field"><input id="scriptSuggestTitle" placeholder="Give it a short title" /></div>
+      <div class="field"><textarea id="scriptSuggestContent" rows="3" placeholder="What do you actually say?"></textarea></div>
+      <button class="btn btn-gold btn-block" onclick="suggestScript()">Send for Review</button>
+      <div id="scriptSuggestStatus" style="font-size:12px;margin-top:8px;"></div>
+    </div>
   \`;
+}
+async function suggestScript() {
+  const title = document.getElementById('scriptSuggestTitle').value.trim();
+  const content = document.getElementById('scriptSuggestContent').value.trim();
+  const status = document.getElementById('scriptSuggestStatus');
+  if (!title || !content) { status.textContent = 'Add a title and the script text first.'; status.style.color = 'var(--danger)'; return; }
+  await api('/api/scripts/submit', { method: 'POST', body: JSON.stringify({ title, content, callerId: me.id }) });
+  document.getElementById('scriptSuggestTitle').value = '';
+  document.getElementById('scriptSuggestContent').value = '';
+  status.textContent = 'Sent to admin for review ✓';
+  status.style.color = 'var(--success)';
 }
 
 async function renderStaffQueue() {
@@ -69,8 +88,9 @@ async function renderStaffQueue() {
     if (mine) return renderActiveCall(body, mine, 'caller');
     if (!me.clocked_in) { body.innerHTML = offlineHtml(); return; }
     const qRes = await api('/api/caller/queue');
-    const rows = (await qRes.json()).data;
-    body.innerHTML = rows.length ? rows.map(o => offerCardHtml(o)).join('') : radarHtml();
+    let rows = (await qRes.json()).data;
+    rows = rows.filter(o => !skippedLeadIds.has(o.id));
+    body.innerHTML = rows.length ? rows.map(o => offerCardHtml(o)).join('') : (skippedLeadIds.size ? skippedOnlyHtml() : radarHtml());
   } else if (me.role === 'finisher') {
     const qRes = await api('/api/finisher/queue');
     const rows = (await qRes.json()).data;
@@ -80,10 +100,14 @@ async function renderStaffQueue() {
   }
 }
 function offlineHtml() { return \`<div class="empty-state panel fade-up"><div style="font-size:34px;margin-bottom:14px;opacity:.5;">\u{1F4A4}</div><div style="font-weight:700;margin-bottom:4px;">You're offline</div><div style="font-size:13px;">Clock in from the top bar to start receiving leads</div></div>\`; }
+function skippedOnlyHtml() { return \`<div class="empty-state panel fade-up"><div style="font-size:34px;margin-bottom:14px;opacity:.5;">\u{1F440}</div><div style="font-weight:700;margin-bottom:4px;">Nothing left to show</div><div style="font-size:13px;margin-bottom:14px;">Every waiting lead is skipped for this session.</div><button class="btn btn-gold btn-sm" onclick="unskipAll()">Show skipped leads again</button></div>\`; }
+let skippedLeadIds = new Set();
+function skipLead(id) { skippedLeadIds.add(id); renderStaffQueue(); }
+function unskipAll() { skippedLeadIds.clear(); renderStaffQueue(); }
 function radarHtml() { return \`<div class="radar-zone panel fade-up"><div class="radar"><div class="radar-ring"></div><div class="radar-ring"></div><div class="radar-ring"></div><div class="radar-sweep"></div><div class="radar-core"></div></div><div class="waiting-title">Listening for leads</div><div class="waiting-sub">You'll be notified the instant one comes in</div></div>\`; }
 function offerCardHtml(o) {
   return \`<div class="offer-card fade-up" data-lead-id="\${o.id}"><div class="pulse-dot"></div><div class="offer-label">New Lead</div><div class="offer-name">\${fullName(o)}</div><div class="offer-meta mono">\${o.phone}\${o.source ? ' · ' + o.source : ''}</div>
-    <div class="offer-actions"><button class="btn btn-gold" onclick="claimLead(\${o.id})">Take Call</button><button class="btn btn-ghost" onclick="renderStaffQueue()">Skip</button></div></div>\`;
+    <div class="offer-actions"><button class="btn btn-gold" onclick="claimLead(\${o.id})">Take Call</button><button class="btn btn-ghost" onclick="skipLead(\${o.id})">Skip</button></div></div>\`;
 }
 function finisherCardHtml(o) {
   return \`<div class="offer-card fade-up" style="border-color:rgba(63,168,154,.4);"><div class="offer-label" style="color:var(--teal);">Ready to Finish</div><div class="offer-name">\${fullName(o)}</div><div class="offer-meta mono">\${o.phone}</div>\${o.notes ? '<div style="font-size:12.5px;color:var(--text-dim);margin-bottom:12px;">' + esc(o.notes) + '</div>' : ''}
@@ -118,11 +142,13 @@ async function renderActiveCall(body, lead, role) {
         \${lead.status === 'calling' ? '<button class="oncall-btn" onclick="connectCall(' + lead.id + ')">Mark On Call</button>' : '<button class="endcall-btn" style="grid-column:auto;" onclick="endCall(' + lead.id + ')">End Call</button>'}
       </div>\` : \`<div class="call-action-row"><a class="dial-btn" href="tel:\${lead.phone}" style="grid-column:1/-1;">\${ICONS.phone} Dial \${lead.phone}</a></div>\`}
       \${!isFinisher ? \`<div class="field" style="margin-top:4px;">
-        <label>Push a note to admin now</label>
+        <label>Note for admin</label>
+        <p style="font-size:11px;color:var(--text-faint);margin:-4px 0 8px;line-height:1.4;">Anything worth flagging while it's fresh — what they said, a callback time, a concern. It shows up for admin instantly, separate from the lead's own details.</p>
         <div style="display:flex;gap:8px;">
-          <input id="liveNoteInput" placeholder="e.g. asked for a callback tomorrow" onkeydown="if(event.key==='Enter') pushLiveNote(\${lead.id})" />
+          <input id="liveNoteInput" placeholder="e.g. asked for a callback tomorrow 3pm" onkeydown="if(event.key==='Enter') pushLiveNote(\${lead.id})" />
           <button class="btn btn-ghost btn-sm" onclick="pushLiveNote(\${lead.id})">Add</button>
         </div>
+        <div id="noteConfirm" style="font-size:11px;color:var(--success);margin-top:6px;height:14px;"></div>
       </div>\` : ''}
       \${scripts.length ? \`<div class="scripts-toggle" onclick="this.nextElementSibling.classList.toggle('open')"><span>\${ICONS.doc || ''} Scripts (\${scripts.length})</span><span>▾</span></div><div class="scripts-panel">\${scripts.map(s => '<div class="script-item"><div class="title">' + esc(s.title) + '</div><div class="content">' + esc(s.content) + '</div></div>').join('')}</div>\` : ''}
       \${!isFinisher ? \`<div class="outcome-grid" style="grid-template-columns:1fr 1fr;">
@@ -152,7 +178,8 @@ async function pushLiveNote(leadId) {
   if (!note) return;
   input.value = '';
   await api('/api/caller/leads/' + leadId + '/note', { method: 'POST', body: JSON.stringify({ note }) });
-  renderStaffQueue();
+  const confirm = document.getElementById('noteConfirm');
+  if (confirm) { confirm.textContent = 'Sent ✓'; setTimeout(() => { if (confirm) confirm.textContent = ''; }, 2000); }
 }
 function startCallTimer() {
   clearInterval(callTimerInterval);

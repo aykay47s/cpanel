@@ -643,6 +643,20 @@ function checkIosInstallPrompt() {
   }
 }
 
+// Mobile fix: tapping the Dial button backgrounds the app (native phone UI takes
+// over), which suspends JS timers and SSE. Force a fresh state pull the instant the
+// page becomes visible again, so a stale "still on this call" card never lingers.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible' || !me) return;
+  if (me.role === 'admin') {
+    if (typeof currentAdminTab !== 'undefined') renderAdminTab(currentAdminTab);
+  } else if (typeof staffTab !== 'undefined') {
+    if (staffTab === 'queue') renderStaffQueue();
+    else if (staffTab === 'home') renderStaffHome();
+  }
+  if (typeof connectEvents === 'function' && (!es || es.readyState === 2)) connectEvents();
+});
+
 if (me) enterApp();
 checkIosInstallPrompt();
 </script>

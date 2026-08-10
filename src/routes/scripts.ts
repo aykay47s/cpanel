@@ -15,6 +15,18 @@ scripts.get('/api/scripts', requireAnyStaff, async (c) => {
   return c.json({ data: rows });
 });
 
+// Any caller/finisher can suggest a script — it enters as 'pending' until an admin
+// approves it. This is intentionally separate from the admin-only management routes
+// below: submitting a suggestion is not the same privilege as publishing one.
+scripts.post('/api/scripts/submit', requireAnyStaff, async (c) => {
+  const user = c.get('user');
+  const { title, content, lead_type, callerId } = await c.req.json().catch(() => ({}));
+  if (!title || !content) return bad(c, 'Title and content required');
+  const submitterId = user?.id || callerId || null;
+  const [row] = await sql`INSERT INTO scripts (title, content, lead_type, status, submitted_by) VALUES (${title}, ${content}, ${lead_type || 'general'}, 'pending', ${submitterId}) RETURNING *`;
+  return c.json({ data: row });
+});
+
 scripts.get('/api/admin/scripts', requireRole('admin'), async (c) => {
   const rows = await sql`SELECT scripts.*, users.name as submitted_by_name FROM scripts LEFT JOIN users ON users.id = scripts.submitted_by ORDER BY scripts.created_at DESC`;
   return c.json({ data: rows });
@@ -28,4 +40,9 @@ scripts.post('/api/admin/scripts', requireRole('admin'), async (c) => {
 scripts.delete('/api/admin/scripts/:id', requireRole('admin'), async (c) => {
   await sql`DELETE FROM scripts WHERE id = ${c.req.param('id')}`;
   return c.json({ ok: true });
+});
+scripts.post('/api/admin/scripts/:id/approve', requireRole('admin'), async (c) => {
+  const [row] = await sql`UPDATE scripts SET status = 'approved' WHERE id = ${c.req.param('id')} RETURNING *`;
+  if (!row) return bad(c, 'Not found', 404);
+  return c.json({ data: row });
 });

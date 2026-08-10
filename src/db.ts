@@ -59,6 +59,17 @@ export async function ensureDb() {
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`;
 
+  // Structured caller notes — kept entirely separate from leads.notes (which holds
+  // import-time data like address fragments) so admins see a clean, attributed
+  // timeline of what callers actually said, not one blob of mixed text.
+  await sql`CREATE TABLE IF NOT EXISTS lead_notes (
+    id SERIAL PRIMARY KEY,
+    lead_id INTEGER REFERENCES leads(id) ON DELETE CASCADE,
+    author_id INTEGER REFERENCES users(id),
+    content TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`;
+
   await sql`CREATE TABLE IF NOT EXISTS duplicate_flags (
     id SERIAL PRIMARY KEY,
     lead_id_a INTEGER REFERENCES leads(id) ON DELETE CASCADE,
