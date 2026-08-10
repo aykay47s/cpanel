@@ -1,5 +1,5 @@
 self.addEventListener('push', (event) => {
-  let data = { title: 'Frap Tise', body: 'New activity', url: '/' };
+  let data = { title: 'Frap Ties', body: 'New activity', url: '/' };
   try { data = event.data.json(); } catch {}
   event.waitUntil(
     self.registration.showNotification(data.title, {

@@ -187,7 +187,7 @@ leads.get('/api/admin/dashboard', requireRole('admin'), async (c) => {
     ORDER BY lead_events.created_at DESC LIMIT 25`;
   const onCall = await sql`
     SELECT leads.id as lead_id, leads.first_name, leads.last_name, leads.phone, leads.status, leads.call_started_at,
-      users.id as caller_id, users.name as caller_name, users.avatar as caller_avatar
+      users.id as caller_id, users.name as caller_name, users.avatar as caller_avatar, users.pfp_data as caller_pfp_data
     FROM leads JOIN users ON users.id = leads.assigned_caller_id
     WHERE leads.status IN ('calling', 'active_call')
     ORDER BY leads.call_started_at ASC`;

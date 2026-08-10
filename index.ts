@@ -47,8 +47,8 @@ app.get('/sw.js', async (c) => {
 
 app.get('/manifest.json', (c) => {
   return c.json({
-    name: 'Frap Tise',
-    short_name: 'Frap Tise',
+    name: 'Frap Ties',
+    short_name: 'Frap Ties',
     start_url: '/',
     display: 'standalone',
     background_color: '#08080b',

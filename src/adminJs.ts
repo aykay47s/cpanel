@@ -59,10 +59,10 @@ function onCallHtml(rows) {
   if (!rows.length) return '<div style="color:var(--text-dim);font-size:13px;">Nobody is on a call right now.</div>';
   return rows.map(r => \`
     <div style="display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--border);">
-      <div style="width:34px;height:34px;border-radius:9px;background:var(--s3);display:flex;align-items:center;justify-content:center;font-size:16px;">\${r.caller_avatar || '🧑'}</div>
+      <div style="width:34px;height:34px;border-radius:9px;background:var(--s3);display:flex;align-items:center;justify-content:center;font-size:16px;overflow:hidden;">\${r.caller_pfp_data ? '<img src="' + r.caller_pfp_data + '" style="width:100%;height:100%;object-fit:cover;" />' : (r.caller_avatar || '🧑')}</div>
       <div style="flex:1;">
         <div style="font-size:13px;font-weight:700;">\${esc(r.caller_name)} <span style="color:var(--text-dim);font-weight:500;">→ \${fullName(r)}</span></div>
-        <div style="font-size:11px;color:var(--text-dim);" class="mono">\${r.phone}</div>
+        <div style="font-size:11px;color:var(--text-dim);" class="mono">\${r.phone} · started \${new Date(r.call_started_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</div>
       </div>
       <span class="badge \${r.status}">\${r.status === 'active_call' ? 'Live' : 'Dialing'}</span>
       <span class="mono on-call-timer" data-started="\${r.call_started_at}" style="font-size:13px;color:var(--gold-bright);min-width:48px;text-align:right;">00:00</span>

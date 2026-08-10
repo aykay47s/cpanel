@@ -21,11 +21,11 @@ export const page = `<!DOCTYPE html>
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<title>Frap Tise</title>
+<title>Frap Ties</title>
 <link rel="manifest" href="/manifest.json">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Frap Tise">
+<meta name="apple-mobile-web-app-title" content="Frap Ties">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="icon" href="/icon.png">
 <meta name="theme-color" content="#08080b">
@@ -287,6 +287,10 @@ tr.clickable{cursor:pointer;}
 .empty-state{padding:60px 20px;text-align:center;color:var(--text-dim);}
 .empty-state .ic{width:32px;height:32px;opacity:.4;margin-bottom:14px;}
 .loading-shimmer{height:60px;border-radius:12px;background:linear-gradient(90deg, var(--s1) 25%, var(--s2) 50%, var(--s1) 75%);background-size:200% 100%;animation:shimmer 1.4s infinite;margin-bottom:10px;}
+.notif-panel{top:64px;right:16px;width:340px;max-height:70vh;}
+@media (max-width:640px){
+  .notif-panel{top:auto !important;right:0 !important;left:0;bottom:0;width:100%;max-height:75vh;border-radius:20px 20px 0 0;padding-bottom:env(safe-area-inset-bottom);}
+}
 
 @media (max-width:860px){
   .admin-shell{flex-direction:column;}
@@ -303,7 +307,7 @@ tr.clickable{cursor:pointer;}
 <div id="loginScreen">
   <div class="login-card panel fade-up">
     <div class="crest"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5"><path d="M12 2l7 4v6c0 5-3.5 8-7 10-3.5-2-7-5-7-10V6l7-4z"/></svg></div>
-    <div class="login-title">Frap Tise</div>
+    <div class="login-title">Frap Ties</div>
     <div class="login-sub" style="font-size:13px;color:var(--text-faint);letter-spacing:1px;text-transform:uppercase;margin-bottom:22px;">Est. Nowhere · Untraceable Since Day One</div>
     <div class="login-sub">Enter your PIN</div>
     <div class="pin-dots" id="pinDots"><div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div></div>
@@ -342,7 +346,7 @@ tr.clickable{cursor:pointer;}
     </div>
     <div class="admin-main">
       <div class="topbar">
-        <div class="brand"><div class="brand-mark"></div>Frap Tise <span style="color:var(--text-faint);font-size:12px;font-family:Inter;font-weight:600;margin-left:4px;">Control Room</span></div>
+        <div class="brand"><div class="brand-mark"></div>Frap Ties <span style="color:var(--text-faint);font-size:12px;font-family:Inter;font-weight:600;margin-left:4px;">Control Room</span></div>
         <div class="topbar-actions">
           <div class="icon-btn" onclick="toggleNotifPanel()" id="notifBtn">${ICONS_SVG.bell}</div>
         </div>
@@ -355,7 +359,7 @@ tr.clickable{cursor:pointer;}
 <!-- ===== STAFF SHELL (caller / finisher) ===== -->
 <div id="staffApp" class="hidden">
   <div class="topbar">
-    <div class="brand"><div class="brand-mark"></div>Frap Tise</div>
+    <div class="brand"><div class="brand-mark"></div>Frap Ties</div>
     <div class="topbar-actions">
       <div class="icon-btn" onclick="toggleNotifPanel()" id="notifBtnStaff">${ICONS_SVG.bell}</div>
       <button class="btn btn-sm btn-ghost" id="clockBtn" onclick="toggleClock()">Clock In</button>
@@ -366,7 +370,8 @@ tr.clickable{cursor:pointer;}
 </div>
 </div>
 
-<div id="notifPanel" class="hidden" style="position:fixed;top:60px;right:16px;width:320px;max-height:70vh;overflow-y:auto;z-index:200;"></div>
+<div id="notifBackdrop" class="hidden" onclick="closeNotifPanel()" style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:199;"></div>
+<div id="notifPanel" class="hidden notif-panel" style="position:fixed;z-index:200;overflow-y:auto;-webkit-overflow-scrolling:touch;"></div>
 <div id="iosInstallBanner" class="hidden" style="position:fixed;left:12px;right:12px;bottom:calc(84px + env(safe-area-inset-bottom));z-index:150;">
   <div class="panel" style="padding:14px 16px;display:flex;align-items:center;gap:12px;border-color:var(--gold-glow);">
     <span style="font-size:20px;">📲</span>
@@ -519,14 +524,41 @@ async function refreshNotifBadge() {
 }
 async function toggleNotifPanel() {
   const panel = document.getElementById('notifPanel');
-  if (!panel.classList.contains('hidden')) { panel.classList.add('hidden'); return; }
-  const res = await api('/api/notifications'); const rows = (await res.json()).data;
-  panel.innerHTML = '<div class="panel p fade-up"><div class="section-title" style="margin-top:0;">Notifications</div>' +
-    (rows.length ? rows.map(n => '<div style="padding:10px 0;border-bottom:1px solid var(--border);font-size:12.5px;' + (n.read ? 'opacity:.5;' : '') + '"><div>' + n.content + '</div><div style="font-size:10px;color:var(--text-faint);margin-top:3px;">' + timeAgo(n.created_at) + '</div></div>').join('') : '<div style="color:var(--text-dim);font-size:12.5px;">Nothing yet.</div>') +
-    '<button class="btn btn-sm btn-block" style="margin-top:10px;" onclick="markAllRead()">Mark all read</button></div>';
+  const backdrop = document.getElementById('notifBackdrop');
+  if (!panel.classList.contains('hidden')) { closeNotifPanel(); return; }
+  await renderNotifList();
   panel.classList.remove('hidden');
+  backdrop.classList.remove('hidden');
 }
-async function markAllRead() { await api('/api/notifications/read-all', { method: 'POST' }); refreshNotifBadge(); toggleNotifPanel(); toggleNotifPanel(); }
+function closeNotifPanel() {
+  document.getElementById('notifPanel').classList.add('hidden');
+  document.getElementById('notifBackdrop').classList.add('hidden');
+}
+async function renderNotifList() {
+  const panel = document.getElementById('notifPanel');
+  const res = await api('/api/notifications');
+  const rows = (await res.json()).data;
+  panel.innerHTML = \`<div class="panel p fade-up">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <div class="section-title" style="margin:0;">Notifications</div>
+      <button class="icon-btn" style="width:28px;height:28px;" onclick="closeNotifPanel()">✕</button>
+    </div>
+    \${rows.length ? rows.map(n => \`<div class="clickable" style="padding:11px 0;border-bottom:1px solid var(--border);font-size:12.5px;\${n.read ? 'opacity:.5;' : ''}" onclick="markOneRead(\${n.id}, this)">
+      <div>\${esc(n.content)}</div><div style="font-size:10px;color:var(--text-faint);margin-top:3px;">\${timeAgo(n.created_at)}\${!n.read ? ' · <span style="color:var(--gold-bright);">tap to mark read</span>' : ''}</div>
+    </div>\`).join('') : '<div style="color:var(--text-dim);font-size:12.5px;padding:10px 0;">Nothing yet.</div>'}
+    \${rows.length ? '<button class="btn btn-sm btn-block" style="margin-top:12px;" onclick="markAllRead()">Mark all read</button>' : ''}
+  </div>\`;
+}
+async function markOneRead(id, el) {
+  await api('/api/notifications/' + id + '/read', { method: 'POST' });
+  el.style.opacity = '.5';
+  refreshNotifBadge();
+}
+async function markAllRead() {
+  await api('/api/notifications/read-all', { method: 'POST' });
+  refreshNotifBadge();
+  await renderNotifList();
+}
 
 // ---------- Clock ----------
 let clockDurationInterval;
