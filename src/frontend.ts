@@ -14,6 +14,7 @@ export const ICONS_SVG: Record<string, string> = {
   doc: '<svg class="ic" viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7V3z"/><path d="M14 3v5h5M9 12h6M9 16h6"/></svg>',
   exit: '<svg class="ic" viewBox="0 0 24 24"><path d="M9 3H5a1 1 0 00-1 1v16a1 1 0 001 1h4M16 17l5-5-5-5M21 12H9"/></svg>',
   bell: '<svg class="ic" viewBox="0 0 24 24"><path d="M6 10a6 6 0 1112 0c0 5 2 6 2 6H4s2-1 2-6z"/><path d="M10 20a2 2 0 004 0"/></svg>',
+  gear: '<svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>',
 };
 
 export const page = `<!DOCTYPE html>
@@ -119,7 +120,7 @@ label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spa
 /* ---------- Login ---------- */
 #loginScreen{min-height:100vh;min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:24px;position:relative;overflow:hidden;}
 .login-card{width:100%;max-width:380px;padding:48px 36px;text-align:center;position:relative;box-shadow:0 2px 4px rgba(0,0,0,.3), 0 16px 48px rgba(0,0,0,.4);}
-.crest{width:52px;height:52px;margin:0 auto 22px;border-radius:16px;background:linear-gradient(135deg,var(--gold),var(--violet));display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px rgba(79,140,255,.4);}
+.crest{width:52px;height:52px;margin:0 auto 22px;border-radius:16px;background:linear-gradient(135deg,var(--gold),var(--violet));display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px rgba(79,140,255,.4);overflow:hidden;}
 .crest svg{width:22px;height:22px;stroke:#fff;}
 .login-title{font-size:26px;color:var(--text);margin-bottom:6px;font-weight:800;letter-spacing:-.02em;}
 .login-sub{font-size:14px;margin-bottom:32px;color:var(--text-dim);}
@@ -138,7 +139,7 @@ label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spa
 /* ---------- Shell layout ---------- */
 .topbar{position:sticky;top:0;z-index:60;display:flex;justify-content:space-between;align-items:center;padding:calc(16px + env(safe-area-inset-top)) 22px 16px;background:rgba(10,10,12,.85);backdrop-filter:blur(20px) saturate(1.4);border-bottom:1px solid var(--border);}
 .brand{font-family:'Inter',sans-serif;font-weight:700;font-size:15px;display:flex;align-items:center;gap:10px;letter-spacing:-.01em;}
-.brand-mark{width:22px;height:22px;border-radius:7px;background:linear-gradient(135deg,var(--gold),var(--violet));position:relative;flex-shrink:0;}
+.brand-mark{width:22px;height:22px;border-radius:7px;background:linear-gradient(135deg,var(--gold),var(--violet));position:relative;flex-shrink:0;overflow:hidden;}
 .topbar-actions{display:flex;gap:8px;align-items:center;}
 .icon-btn{width:38px;height:38px;border-radius:50%;background:var(--s2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;position:relative;color:var(--text-dim);transition:all .12s ease;}
 .icon-btn:hover{color:var(--text);border-color:var(--border-2);background:var(--s3);}
@@ -342,6 +343,7 @@ tr.clickable{cursor:pointer;}
       <div class="side-link" data-tab="scripts" onclick="switchAdminTab('scripts')">${ICONS_SVG.doc} Scripts</div>
       <div class="side-link" data-tab="template" onclick="switchAdminTab('template')">${ICONS_SVG.doc} Call Template</div>
       <div class="side-link" data-tab="categories" onclick="switchAdminTab('categories')">${ICONS_SVG.flag} Lead Categories</div>
+      <div class="side-link" data-tab="branding" onclick="switchAdminTab('branding')">${ICONS_SVG.gear} Branding</div>
       <div class="side-link" onclick="logout()" style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px;">${ICONS_SVG.exit} Exit</div>
     </div>
     <div class="admin-main">
@@ -622,6 +624,25 @@ function avatarHtml(person, size) {
   const color = avatarColor((person && person.id) || name);
   const fontSize = Math.round(size * 0.4);
   return '<div style="width:' + size + 'px;height:' + size + 'px;border-radius:50%;background:' + color + ';display:flex;align-items:center;justify-content:center;font-size:' + fontSize + 'px;font-weight:700;color:#fff;flex-shrink:0;letter-spacing:-.02em;">' + initials(name) + '</div>';
+}
+
+// Shared lead-category badge (used on both the admin leads table and caller-facing
+// lead cards): real bank brand color as an accent, plain text name — never the
+// bank's actual logo artwork.
+let sharedCategoryCache = null;
+async function loadCategoryCache() {
+  if (sharedCategoryCache) return sharedCategoryCache;
+  try {
+    const res = await api('/api/lead-categories');
+    sharedCategoryCache = (await res.json()).data;
+  } catch { sharedCategoryCache = []; }
+  return sharedCategoryCache;
+}
+function categoryBadgeHtml(leadType) {
+  if (!leadType || !sharedCategoryCache) return '';
+  const cat = sharedCategoryCache.find(c => c.name.toLowerCase() === String(leadType).toLowerCase());
+  const color = cat ? cat.color : '#8b8b93';
+  return '<span class="badge" style="background:' + color + '22;color:' + color + ';border:1px solid ' + color + '44;">' + esc(leadType) + '</span>';
 }
 
 // ---------- Shared chat panel (used by both admin and staff shells) ----------

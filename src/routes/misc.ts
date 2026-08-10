@@ -6,6 +6,19 @@ import { VAPID_PUBLIC_KEY, saveSubscription, removeSubscription } from '../push'
 
 export const misc = new Hono();
 
+misc.get('/api/branding', async (c) => {
+  const rows = await sql`SELECT key, value FROM settings WHERE key IN ('panel_name', 'panel_logo')`;
+  const map = Object.fromEntries(rows.map((r: any) => [r.key, r.value]));
+  return c.json({ data: { name: map.panel_name || 'FRPTS', logo: map.panel_logo || null } });
+});
+misc.post('/api/admin/branding', requireRole('admin'), async (c) => {
+  const { name, logo } = await c.req.json().catch(() => ({}));
+  if (logo && logo.length > 550000) return c.json({ error: 'Logo image too large' }, 400);
+  if (name !== undefined) await sql`INSERT INTO settings (key, value) VALUES ('panel_name', ${name}) ON CONFLICT (key) DO UPDATE SET value = ${name}`;
+  if (logo !== undefined) await sql`INSERT INTO settings (key, value) VALUES ('panel_logo', ${logo}) ON CONFLICT (key) DO UPDATE SET value = ${logo}`;
+  return c.json({ ok: true });
+});
+
 misc.get('/api/push/vapid-key', (c) => c.json({ data: { key: VAPID_PUBLIC_KEY } }));
 
 misc.post('/api/push/subscribe', async (c) => {

@@ -45,18 +45,23 @@ app.get('/sw.js', async (c) => {
   return c.body(await file.text());
 });
 
-app.get('/manifest.json', (c) => {
+app.get('/manifest.json', async (c) => {
+  const rows = await sql`SELECT key, value FROM settings WHERE key IN ('panel_name', 'panel_logo')`;
+  const map = Object.fromEntries(rows.map((r: any) => [r.key, r.value]));
+  const name = map.panel_name || 'FRPTS';
   return c.json({
-    name: 'Frap Ties',
-    short_name: 'Frap Ties',
+    name,
+    short_name: name,
     start_url: '/',
     display: 'standalone',
     background_color: '#08080b',
     theme_color: '#08080b',
-    icons: [
-      { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
-      { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
-    ],
+    icons: map.panel_logo
+      ? [{ src: map.panel_logo, sizes: '512x512', type: 'image/png' }]
+      : [
+          { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+          { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+        ],
   });
 });
 
@@ -65,9 +70,19 @@ app.get('/icon-192.png', async (c) => { c.header('Content-Type', 'image/png'); r
 app.get('/icon-512.png', async (c) => { c.header('Content-Type', 'image/png'); return c.body(await Bun.file('./public/icon-512.png').arrayBuffer()); });
 app.get('/apple-touch-icon.png', async (c) => { c.header('Content-Type', 'image/png'); return c.body(await Bun.file('./public/apple-touch-icon.png').arrayBuffer()); });
 
-app.get('/', (c) => {
+app.get('/', async (c) => {
   c.header('Cache-Control', 'no-store, no-cache, must-revalidate');
-  return c.html(page);
+  const rows = await sql`SELECT key, value FROM settings WHERE key IN ('panel_name', 'panel_logo')`;
+  const map = Object.fromEntries(rows.map((r: any) => [r.key, r.value]));
+  const name = map.panel_name || 'FRPTS';
+  const logoTag = map.panel_logo ? `<img src="${map.panel_logo}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;" />` : '';
+  let html = page
+    .split('Frap Ties').join(name)
+    .split('<div class="brand-mark"></div>').join(`<div class="brand-mark">${logoTag}</div>`);
+  if (map.panel_logo) {
+    html = html.replace('<svg viewBox="0 0 24 24" fill="none" stroke-width="1.5"><path d="M12 2l7 4v6c0 5-3.5 8-7 10-3.5-2-7-5-7-10V6l7-4z"/></svg>', logoTag);
+  }
+  return c.html(html);
 });
 
 export default {

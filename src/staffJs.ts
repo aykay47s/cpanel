@@ -82,6 +82,7 @@ async function suggestScript() {
 
 async function renderStaffQueue() {
   const body = document.getElementById('staffBody');
+  await loadCategoryCache();
   if (me.role === 'caller') {
     const mineRes = await api('/api/caller/mine');
     const mine = (await mineRes.json()).data;
@@ -106,11 +107,11 @@ function skipLead(id) { skippedLeadIds.add(id); renderStaffQueue(); }
 function unskipAll() { skippedLeadIds.clear(); renderStaffQueue(); }
 function radarHtml() { return \`<div class="radar-zone panel fade-up"><div class="radar"><div class="radar-ring"></div><div class="radar-ring"></div><div class="radar-ring"></div><div class="radar-sweep"></div><div class="radar-core"></div></div><div class="waiting-title">Listening for leads</div><div class="waiting-sub">You'll be notified the instant one comes in</div></div>\`; }
 function offerCardHtml(o) {
-  return \`<div class="offer-card fade-up" data-lead-id="\${o.id}"><div class="pulse-dot"></div><div class="offer-label">New Lead</div><div class="offer-name">\${fullName(o)}</div><div class="offer-meta mono">\${o.phone}\${o.source ? ' · ' + o.source : ''}</div>
+  return \`<div class="offer-card fade-up" data-lead-id="\${o.id}"><div class="pulse-dot"></div><div class="offer-label">New Lead</div><div class="offer-name">\${fullName(o)} \${categoryBadgeHtml(o.lead_type)}</div><div class="offer-meta mono">\${o.phone}\${o.source ? ' · ' + o.source : ''}</div>
     <div class="offer-actions"><button class="btn btn-gold" onclick="claimLead(\${o.id})">Take Call</button><button class="btn btn-ghost" onclick="skipLead(\${o.id})">Skip</button></div></div>\`;
 }
 function finisherCardHtml(o) {
-  return \`<div class="offer-card fade-up" style="border-color:rgba(63,168,154,.4);"><div class="offer-label" style="color:var(--teal);">Ready to Finish</div><div class="offer-name">\${fullName(o)}</div><div class="offer-meta mono">\${o.phone}</div>\${o.notes ? '<div style="font-size:12.5px;color:var(--text-dim);margin-bottom:12px;">' + esc(o.notes) + '</div>' : ''}
+  return \`<div class="offer-card fade-up" style="border-color:rgba(63,168,154,.4);"><div class="offer-label" style="color:var(--teal);">Ready to Finish</div><div class="offer-name">\${fullName(o)} \${categoryBadgeHtml(o.lead_type)}</div><div class="offer-meta mono">\${o.phone}</div>\${o.notes ? '<div style="font-size:12.5px;color:var(--text-dim);margin-bottom:12px;">' + esc(o.notes) + '</div>' : ''}
     <button class="btn btn-teal btn-block" onclick="startFinishingCall(\${o.id})">Begin Working This Lead</button></div>\`;
 }
 let workingFinisherLeadId = null;

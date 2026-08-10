@@ -185,6 +185,10 @@ export async function ensureDb() {
   if (!templateRow) {
     await sql`INSERT INTO settings (key, value) VALUES ('call_template', ${DEFAULT_CALL_TEMPLATE}) ON CONFLICT (key) DO NOTHING`;
   }
+  const [brandRow] = await sql`SELECT 1 FROM settings WHERE key = 'panel_name'`;
+  if (!brandRow) {
+    await sql`INSERT INTO settings (key, value) VALUES ('panel_name', 'FRPTS') ON CONFLICT (key) DO NOTHING`;
+  }
   const [catRow] = await sql`SELECT 1 FROM lead_categories LIMIT 1`;
   if (!catRow) {
     await sql`INSERT INTO lead_categories (name, color) VALUES

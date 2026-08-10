@@ -23,6 +23,7 @@ async function renderAdminTab(tab) {
     if (tab === 'template') return await renderAdminTemplate(el);
     if (tab === 'categories') return await renderAdminCategories(el);
     if (tab === 'leaderboard') return await renderAdminLeaderboard(el);
+    if (tab === 'branding') return await renderAdminBranding(el);
   } catch (err) {
     console.error('Tab render failed:', tab, err);
     el.innerHTML = '<div class="panel p fade-up" style="text-align:center;"><div style="font-size:14px;margin-bottom:10px;">Something went wrong loading this.</div><div style="font-size:12px;color:var(--text-dim);margin-bottom:14px;">' + esc(String(err && err.message || err)) + '</div><button class="btn btn-gold" onclick="renderAdminTab(\\'' + tab + '\\')">Retry</button></div>';
@@ -87,23 +88,31 @@ function eventLabel(e) {
 }
 
 async function renderAdminLeads(el) {
-  const [res, callersRes] = await Promise.all([api('/api/admin/leads'), api('/api/admin/users')]);
+  const [res, callersRes, catsRes] = await Promise.all([api('/api/admin/leads'), api('/api/admin/users'), api('/api/lead-categories')]);
   const rows = (await res.json()).data;
   callerListCache = (await callersRes.json()).data.filter(u => u.role === 'caller');
+  categoryCache = (await catsRes.json()).data;
   el.innerHTML = \`
     <div class="row-flex fade-up" style="margin-bottom:16px;">
       <div class="field"><input id="leadSearch" placeholder="Search name, phone, email…" oninput="debouncedLeadSearch()" /></div>
       <select id="leadStatusFilter" style="max-width:220px;" onchange="filterLeadsByStatus()"><option value="">All statuses</option>\${LEAD_STATUSES.map(s => '<option value="' + s + '">' + s.replace(/_/g,' ') + '</option>').join('')}</select>
     </div>
-    <div class="panel p fade-up"><table><thead><tr><th>Lead</th><th>Phone</th><th>Status</th><th>Caller</th><th>Finisher</th><th>Uploaded</th><th>Send To</th><th></th></tr></thead>
+    <div class="panel p fade-up"><table><thead><tr><th>Lead</th><th>Category</th><th>Phone</th><th>Status</th><th>Caller</th><th>Finisher</th><th>Uploaded</th><th>Send To</th><th></th></tr></thead>
     <tbody id="leadsTbody">\${rows.map(leadRowHtml).join('')}</tbody></table></div>\`;
 }
 let callerListCache = [];
+let categoryCache = [];
+function categoryBadge(leadType) {
+  if (!leadType) return '<span style="color:var(--text-faint);">—</span>';
+  const cat = categoryCache.find(c => c.name.toLowerCase() === String(leadType).toLowerCase());
+  const color = cat ? cat.color : 'var(--text-dim)';
+  return '<span class="badge" style="background:' + color + '22;color:' + color + ';border:1px solid ' + color + '44;">' + esc(leadType) + '</span>';
+}
 function leadRowHtml(l) {
   const sendCell = l.status === 'not_called'
     ? \`<select onclick="event.stopPropagation()" onchange="event.stopPropagation(); sendLeadToCaller(\${l.id}, this.value)"><option value="">Send to…</option>\${callerListCache.map(c => '<option value="' + c.id + '">' + esc(c.name) + '</option>').join('')}</select>\`
     : '<span style="color:var(--text-faint);">—</span>';
-  return \`<tr class="clickable" data-lead-row="\${l.id}"><td onclick="openLeadDetail(\${l.id})">\${esc(fullName(l))} \${l.dedup_status === 'flagged' ? '<span class="dup-warn">possible dup</span>' : ''}\${l.note_count > 0 ? ' <span class="badge" style="background:rgba(79,140,255,.15);color:var(--gold-bright);" title="' + l.note_count + ' caller note(s)">' + l.note_count + ' note' + (l.note_count === 1 ? '' : 's') + '</span>' : ''}\${l.extra_info ? ' <span class="badge" style="background:rgba(239,68,68,.15);color:var(--danger);" title="Sensitive info was flagged in this import">FLAGGED</span>' : ''}</td><td class="mono" onclick="openLeadDetail(\${l.id})">\${l.phone}</td><td onclick="openLeadDetail(\${l.id})"><span class="badge \${l.status}">\${l.status.replace(/_/g,' ')}</span></td><td onclick="openLeadDetail(\${l.id})">\${l.caller_name || '—'}</td><td onclick="openLeadDetail(\${l.id})">\${l.finisher_name || '—'}</td><td onclick="openLeadDetail(\${l.id})">\${timeAgo(l.created_at)}</td><td>\${sendCell}</td><td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); deleteLead(\${l.id})">Delete</button></td></tr>\`;
+  return \`<tr class="clickable" data-lead-row="\${l.id}"><td onclick="openLeadDetail(\${l.id})">\${esc(fullName(l))} \${l.dedup_status === 'flagged' ? '<span class="dup-warn">possible dup</span>' : ''}\${l.note_count > 0 ? ' <span class="badge" style="background:rgba(79,140,255,.15);color:var(--gold-bright);" title="' + l.note_count + ' caller note(s)">' + l.note_count + ' note' + (l.note_count === 1 ? '' : 's') + '</span>' : ''}\${l.extra_info ? ' <span class="badge" style="background:rgba(239,68,68,.15);color:var(--danger);" title="Sensitive info was flagged in this import">Sensitive</span>' : ''}</td><td onclick="openLeadDetail(\${l.id})">\${categoryBadge(l.lead_type)}</td><td class="mono" onclick="openLeadDetail(\${l.id})">\${l.phone}</td><td onclick="openLeadDetail(\${l.id})"><span class="badge \${l.status}">\${l.status.replace(/_/g,' ')}</span></td><td onclick="openLeadDetail(\${l.id})">\${l.caller_name || '—'}</td><td onclick="openLeadDetail(\${l.id})">\${l.finisher_name || '—'}</td><td onclick="openLeadDetail(\${l.id})">\${timeAgo(l.created_at)}</td><td>\${sendCell}</td><td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); deleteLead(\${l.id})">Delete</button></td></tr>\`;
 }
 async function sendLeadToCaller(leadId, callerId) {
   if (!callerId) return;
@@ -508,5 +517,61 @@ function adminPodiumSlot(r, place, height) {
     <div style="font-size:10.5px;color:var(--violet);font-weight:600;">\${r.xp} xp · \${r.successful_calls||0} wins</div>
     <div style="width:100%;height:\${height}px;border-radius:10px 10px 0 0;background:\${barColor};display:flex;align-items:flex-start;justify-content:center;padding-top:6px;font-size:16px;font-weight:800;color:rgba(0,0,0,.55);">#\${place}</div>
   </div>\`;
+}
+
+async function renderAdminBranding(el) {
+  const res = await api('/api/branding');
+  const b = (await res.json()).data;
+  el.innerHTML = \`
+    <div class="panel p fade-up">
+      <div class="section-title" style="margin-top:0;">Panel Branding</div>
+      <p style="font-size:12px;color:var(--text-dim);margin-bottom:16px;">Sets the name and logo shown across the whole app - title bar, login screen, topbar, and home screen icon on mobile.</p>
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;">
+        <div id="brandLogoPreview" style="width:56px;height:56px;border-radius:16px;overflow:hidden;background:var(--s3);display:flex;align-items:center;justify-content:center;">\${b.logo ? '<img src="' + b.logo + '" style="width:100%;height:100%;object-fit:cover;" />' : '<span style="font-size:11px;color:var(--text-faint);">No logo</span>'}</div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <label class="btn btn-ghost btn-sm" style="text-align:center;cursor:pointer;">Upload Logo<input type="file" accept="image/*" id="brandLogoFile" style="display:none;" onchange="handleBrandLogoUpload(event)" /></label>
+          \${b.logo ? '<button class="btn btn-danger btn-sm" onclick="clearBrandLogo()">Remove Logo</button>' : ''}
+        </div>
+      </div>
+      <div class="field"><label>Panel Name</label><input id="brandName" value="\${esc(b.name)}" placeholder="FRPTS" /></div>
+      <button class="btn btn-gold btn-block" onclick="saveBranding()">Save Branding</button>
+      <div id="brandStatus" style="font-size:12px;margin-top:10px;"></div>
+    </div>\`;
+}
+let pendingBrandLogo = null;
+function handleBrandLogoUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const img = new Image();
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    img.onload = () => {
+      const size = 256;
+      const canvas = document.createElement('canvas');
+      canvas.width = size; canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      const scale = Math.max(size / img.width, size / img.height);
+      const w = img.width * scale, h = img.height * scale;
+      ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
+      pendingBrandLogo = canvas.toDataURL('image/png', 0.92);
+      document.getElementById('brandLogoPreview').innerHTML = '<img src="' + pendingBrandLogo + '" style="width:100%;height:100%;object-fit:cover;" />';
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+async function clearBrandLogo() {
+  await api('/api/admin/branding', { method: 'POST', body: JSON.stringify({ logo: null }) });
+  renderAdminTab('branding');
+}
+async function saveBranding() {
+  const name = document.getElementById('brandName').value.trim();
+  const body = { name };
+  if (pendingBrandLogo) body.logo = pendingBrandLogo;
+  await api('/api/admin/branding', { method: 'POST', body: JSON.stringify(body) });
+  pendingBrandLogo = null;
+  const status = document.getElementById('brandStatus');
+  status.textContent = 'Saved - reload to see it everywhere ✓';
+  status.style.color = 'var(--success)';
 }
 `;
