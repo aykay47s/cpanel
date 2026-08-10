@@ -192,14 +192,18 @@ function parseDelimited(lines: string[], delim: string): ParsedLead[] {
   return leads;
 }
 
-function classifyToken(token: string): { type: 'phone' | 'email' | 'address' | 'name' | 'notes'; value: string } {
+function classifyToken(token: string, isCell: boolean = true): { type: 'phone' | 'email' | 'address' | 'name' | 'notes'; value: string } {
   const trimmed = token.trim();
   if (!trimmed) return { type: 'notes', value: '' };
   if (EMAIL_RE.test(trimmed) && trimmed.replace(EMAIL_RE, '').trim().length < 3) {
     return { type: 'email', value: trimmed.match(EMAIL_RE)![0] };
   }
   const { phone, remainder } = extractPhone(trimmed);
-  if (phone && remainder.length < trimmed.length * 0.5) return { type: 'phone', value: phone };
+  // For an individual delimited field (a "cell"), a phone-shaped run anywhere in it is
+  // overwhelmingly likely to BE the phone field — don't require it to dominate the
+  // token's length, that heuristic only makes sense for classifying a whole freeform
+  // line of prose, where a stray number shouldn't hijack the whole line as a contact line.
+  if (phone && (isCell || remainder.length < trimmed.length * 0.5)) return { type: 'phone', value: phone };
   if (STREET_WORDS.test(trimmed) && /\d/.test(trimmed)) return { type: 'address', value: trimmed };
   // A UK postcode on its own token (e.g. "WS1 4AF") reads as an address fragment too.
   if (/^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$/i.test(trimmed)) return { type: 'address', value: trimmed };
@@ -262,7 +266,7 @@ function parseFreeform(lines: string[]): ParsedLead[] {
         applyToken(t);
       }
     } else {
-      applyToken(classifyToken(line));
+      applyToken(classifyToken(line, false));
     }
   }
   flush();
