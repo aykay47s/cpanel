@@ -94,6 +94,7 @@ export async function ensureDb() {
   await sql`CREATE TABLE IF NOT EXISTS tenants (
     id SERIAL PRIMARY KEY,
     name TEXT NOT NULL,
+    slug TEXT UNIQUE,
     url TEXT NOT NULL,
     plan TEXT DEFAULT 'trial',
     price_paid NUMERIC DEFAULT 0,
@@ -208,6 +209,9 @@ export async function ensureDb() {
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS inbound_eligible BOOLEAN DEFAULT true`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS inbound_priority INTEGER DEFAULT 100`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS is_super_admin BOOLEAN DEFAULT false`,
+    `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS slug TEXT`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id)`,
+    `ALTER TABLE leads ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id)`,
   ];
   for (const stmt of alters) {
     await sql.unsafe(`DO $$ BEGIN ${stmt}; EXCEPTION WHEN OTHERS THEN NULL; END $$;`);
@@ -267,15 +271,30 @@ export async function ensureDb() {
     if (firstAdmin) await sql`UPDATE users SET is_super_admin = true WHERE id = ${firstAdmin.id}`;
   }
 
-  // Every instance registers itself as a tenant of its own control plane -
-  // resold customer instances stay separate deployments (own Railway project, own
-  // database - real isolation), but each can still see its own row here if it's
-  // ever promoted to a super-admin's view. This instance is marked is_self so it
-  // reads as "your own usage" rather than a customer.
-  const [selfTenantRow] = await sql`SELECT 1 FROM tenants WHERE is_self = true LIMIT 1`;
+  // Every instance registers itself as a tenant of its own control plane. This
+  // one (the operator's own instance) is marked is_self and gets an empty slug -
+  // it's served at the root URL with no prefix, exactly like before multi-tenancy
+  // existed. Named customer tenants get a real slug and are served under
+  // /:slug/... within this same shared deployment.
+  const [selfTenantRow] = await sql`SELECT id FROM tenants WHERE is_self = true LIMIT 1`;
+  let selfTenantId: number;
   if (!selfTenantRow) {
-    await sql`INSERT INTO tenants (name, url, plan, price_paid, status, is_self, notes) VALUES ('Frap Ties (self)', '', 'owner', 0, 'active', true, 'This instance - not a resold customer')`;
+    const [inserted] = await sql`INSERT INTO tenants (name, slug, url, plan, price_paid, status, is_self, notes) VALUES ('Frap Ties (self)', '', '', 'owner', 0, 'active', true, 'This instance - not a resold customer') RETURNING id`;
+    selfTenantId = inserted.id;
+  } else {
+    selfTenantId = selfTenantRow.id;
   }
+
+  // Backfill: every user/lead created before tenant_id existed belongs to this
+  // operator's own usage, not a customer's - never silently orphaned or mixed up.
+  await sql`UPDATE users SET tenant_id = ${selfTenantId} WHERE tenant_id IS NULL`;
+  await sql`UPDATE leads SET tenant_id = ${selfTenantId} WHERE tenant_id IS NULL`;
+  await sql`UPDATE tenants SET slug = '' WHERE is_self = true AND slug IS NULL`;
+
+  // PINs only need to be unique WITHIN a tenant now, not globally - two different
+  // customers' call centers can both hand out PIN 1234 without colliding.
+  await sql.unsafe(`DO $$ BEGIN ALTER TABLE users DROP CONSTRAINT IF EXISTS users_pin_key; EXCEPTION WHEN OTHERS THEN NULL; END $$;`);
+  await sql.unsafe(`DO $$ BEGIN ALTER TABLE users ADD CONSTRAINT users_tenant_pin_unique UNIQUE (tenant_id, pin); EXCEPTION WHEN OTHERS THEN NULL; END $$;`);
 
   // Hard-delete expired disappearing messages every 30s. This actually removes the
   // rows from Postgres — not a soft-delete/hidden flag.

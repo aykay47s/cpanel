@@ -33,13 +33,14 @@ function stopQueuePolling() {
 
 async function renderStaffHome() {
   const body = document.getElementById('staffBody');
-  const [meRes, goalRes, annRes, lbRes] = await Promise.all([
-    api('/api/me'), api('/api/goal'), api('/api/announcements'), api('/api/leaderboard'),
+  const [meRes, goalRes, annRes, lbRes, callLogRes] = await Promise.all([
+    api('/api/me'), api('/api/goal'), api('/api/announcements'), api('/api/leaderboard'), api('/api/caller/call-log'),
   ]);
   const fresh = (await meRes.json()).data; me = { ...me, ...fresh }; localStorage.setItem('dispatch_me', JSON.stringify(me));
   const goal = (await goalRes.json()).data;
   const anns = (await annRes.json()).data;
   const lb = (await lbRes.json()).data;
+  const callLog = (await callLogRes.json()).data;
   const myRank = (lb.findIndex(r => r.id === me.id) + 1) || '—';
   const myStat = lb.find(r => r.id === me.id) || { successful_calls: 0 };
   const level = Math.floor(me.xp / 150) + 1;
@@ -48,24 +49,24 @@ async function renderStaffHome() {
 
   body.innerHTML = \`
     <div class="panel p fade-up" style="position:relative;overflow:hidden;">
-      <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;">
-        <div style="width:52px;height:52px;">\${avatarHtml(me, 52)}</div>
-        <div style="flex:1;">
-          <div style="font-size:19px;">\${esc(me.name)}</div>
-          <div style="display:flex;gap:6px;margin-top:5px;">
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px;">
+        <div style="width:56px;height:56px;flex-shrink:0;">\${avatarHtml(me, 56)}</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:20px;font-weight:700;font-family:'Space Grotesk',sans-serif;letter-spacing:-.01em;">\${esc(me.name)}</div>
+          <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
             \${statusBadge(me.role)}
-            <span class="badge" style="background:rgba(139,111,201,.14);color:var(--violet);">Lvl \${level}</span>
-            <span class="badge" style="background:rgba(255,255,255,.06);color:var(--text-dim);">Rank #\${myRank}</span>
+            <span class="badge" style="background:#8b6fc9;color:#fff;">Lvl \${level}</span>
+            <span class="badge" style="background:#3a3a44;color:#d4d4dc;">Rank #\${myRank}</span>
           </div>
         </div>
       </div>
-      <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;display:flex;justify-content:space-between;"><span>\${xpInLevel} / 150 XP</span><span>\${me.xp} total</span></div>
-      <div style="height:7px;border-radius:5px;background:var(--s3);overflow:hidden;"><div style="height:100%;width:\${Math.round(xpInLevel/150*100)}%;background:linear-gradient(90deg,var(--violet),#a78bfa);border-radius:5px;"></div></div>
+      <div style="font-size:11px;color:var(--text-dim);margin-bottom:7px;display:flex;justify-content:space-between;"><span>\${xpInLevel} / 150 XP</span><span>\${me.xp} total</span></div>
+      <div style="height:8px;border-radius:5px;background:var(--s3);overflow:hidden;"><div style="height:100%;width:\${Math.round(xpInLevel/150*100)}%;background:linear-gradient(90deg,var(--violet),#a78bfa);border-radius:5px;"></div></div>
     </div>
     <div class="stat-grid" style="grid-template-columns:repeat(3,1fr);">
       <div class="stat-box panel"><div class="num" data-count="\${myStat.successful_calls || 0}">0</div><div class="lbl">Successful</div></div>
       <div class="stat-box panel"><div class="num" data-count="\${me.xp}">0</div><div class="lbl">XP</div></div>
-      <div class="stat-box panel"><div class="num">\${me.clocked_in ? 'On' : 'Off'}</div><div class="lbl">Shift</div></div>
+      <div class="stat-box panel"><div class="num" style="font-size:20px;">\${me.clocked_in ? 'On' : 'Off'}</div><div class="lbl">Shift</div></div>
     </div>
     <div class="panel p fade-up">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;"><span style="font-size:11px;color:var(--text-dim);font-weight:700;text-transform:uppercase;letter-spacing:.5px;">\${esc(goal.label)}</span><span class="mono" style="font-size:14px;font-weight:700;color:var(--gold-bright);">\${goal.current}/\${goal.target}</span></div>
@@ -73,6 +74,19 @@ async function renderStaffHome() {
     </div>
     <div class="section-title">Announcements</div>
     \${anns.length ? anns.map(a => \`<div class="announcement panel \${a.important ? 'important' : ''} fade-up"><div><div class="txt">\${esc(a.content)}</div><div class="meta">\${a.author_name || 'Admin'} · \${timeAgo(a.created_at)}</div></div></div>\`).join('') : '<div style="color:var(--text-faint);font-size:13px;padding:10px 2px;">Nothing from admin yet.</div>'}
+    <div class="section-title">Call Log</div>
+    <div class="panel p fade-up">
+      \${callLog.length ? callLog.map(e => \`<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">
+        \${avatarHtml({ name: e.caller_name, pfp_data: e.caller_pfp_data }, 28)}
+        <div style="flex:1;min-width:0;font-size:12.5px;line-height:1.5;">
+          <span style="font-weight:700;">\${esc(fullName({ first_name: e.first_name, last_name: e.last_name }))}</span>
+          <span style="color:var(--text-dim);"> — called by </span>
+          <span style="font-weight:600;">\${esc(e.caller_name || 'Unknown')}</span>
+          <span style="color:var(--text-dim);"> at \${new Date(e.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span>
+        </div>
+        \${statusBadge(e.outcome)}
+      </div>\`).join('') : '<div style="color:var(--text-dim);font-size:12.5px;">No calls logged yet.</div>'}
+    </div>
     <div class="section-title">Suggest a Script</div>
     <div class="panel p fade-up">
       <p style="font-size:11.5px;color:var(--text-dim);margin-bottom:10px;line-height:1.4;">Got a line that's working well for you? Send it in — admin reviews it and can approve it for the whole team to see during calls.</p>

@@ -257,6 +257,23 @@ leads.get('/api/caller/queue', requireRole('caller'), async (c) => {
   return c.json({ data: rows });
 });
 
+// Team-wide call activity - every caller can see who called who, when, and what
+// happened. Every outcome is already logged via logEvent(), this just reads it back
+// in the shape callers actually want: name, who called, when, what happened.
+leads.get('/api/caller/call-log', requireAnyStaff, async (c) => {
+  const rows = await sql`
+    SELECT lead_events.id, lead_events.created_at, lead_events.to_status as outcome,
+      lead_events.actor_id, users.name as caller_name, users.avatar as caller_avatar, users.pfp_data as caller_pfp_data,
+      leads.id as lead_id, leads.first_name, leads.last_name, leads.phone
+    FROM lead_events
+    LEFT JOIN users ON users.id = lead_events.actor_id
+    LEFT JOIN leads ON leads.id = lead_events.lead_id
+    WHERE lead_events.event_type = 'outcome_recorded'
+    ORDER BY lead_events.created_at DESC
+    LIMIT 50`;
+  return c.json({ data: rows });
+});
+
 leads.get('/api/caller/mine', requireRole('caller'), async (c) => {
   const user = c.get('user');
   const [row] = await sql`SELECT * FROM leads WHERE assigned_caller_id = ${user.id} AND status IN ('calling','active_call','call_ended') ORDER BY updated_at DESC LIMIT 1`;

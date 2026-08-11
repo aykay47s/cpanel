@@ -172,10 +172,11 @@ label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spa
 .admin-content{max-width:1180px;margin:0 auto;padding:32px 32px 72px;}
 
 /* Caller/Finisher: bottom nav */
-.staff-body{max-width:600px;margin:0 auto;padding:20px 16px 96px;}
-.bottom-nav{position:fixed;bottom:0;left:0;right:0;z-index:70;display:flex;background:rgba(11,9,8,.92);backdrop-filter:blur(20px);border-top:1px solid var(--border);padding:8px 6px calc(8px + env(safe-area-inset-bottom));}
-.nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 4px;border-radius:10px;background:transparent;color:var(--text-faint);font-size:9.5px;font-weight:600;position:relative;}
-.nav-btn.active{color:var(--gold-bright);}
+.staff-body{max-width:600px;margin:0 auto;padding:20px 16px 108px;}
+.bottom-nav{position:fixed;bottom:14px;left:14px;right:14px;z-index:70;display:flex;gap:2px;background:rgba(255,255,255,.055);backdrop-filter:blur(28px) saturate(1.5);-webkit-backdrop-filter:blur(28px) saturate(1.5);border:1px solid rgba(255,255,255,.1);border-radius:22px;padding:6px;box-shadow:0 2px 4px rgba(0,0,0,.3), 0 16px 36px rgba(0,0,0,.4);padding-bottom:calc(6px + env(safe-area-inset-bottom));}
+.nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:9px 4px;border-radius:16px;background:transparent;color:var(--text-faint);font-size:9.5px;font-weight:600;position:relative;transition:background .15s ease, color .15s ease;}
+.nav-btn.active{color:#fff;background:var(--gold);box-shadow:0 4px 12px rgba(79,140,255,.35);}
+.nav-btn:active{transform:scale(.94);}
 .nav-badge{position:absolute;top:2px;right:24%;width:7px;height:7px;border-radius:50%;background:var(--crimson);}
 
 .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:24px;}
@@ -223,16 +224,16 @@ tr.clickable:active{background:rgba(255,255,255,.05);}
 .waiting-sub{color:var(--text-dim);font-size:12.5px;}
 
 /* offer / call cards */
-.offer-card{position:relative;padding:22px;border-radius:12px;margin-bottom:14px;overflow:hidden;background:var(--s1);border:1px solid var(--border-2);border-left:3px solid var(--gold);}
-.pulse-dot{position:absolute;top:18px;right:18px;width:8px;height:8px;border-radius:50%;background:var(--gold);}
+.offer-card{position:relative;padding:24px;border-radius:20px;margin-bottom:14px;overflow:hidden;background:rgba(255,255,255,.045);backdrop-filter:blur(24px) saturate(1.4);-webkit-backdrop-filter:blur(24px) saturate(1.4);border:1px solid rgba(255,255,255,.09);box-shadow:inset 0 1px 0 rgba(255,255,255,.07), 0 2px 4px rgba(0,0,0,.3), 0 12px 28px rgba(0,0,0,.3);}
+.pulse-dot{position:absolute;top:20px;right:20px;width:9px;height:9px;border-radius:50%;background:var(--success);box-shadow:0 0 0 0 rgba(34,197,94,.55);animation:liveDotPulse 1.8s ease-out infinite;}
+.offer-label{font-size:10.5px;color:var(--text-faint);text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:10px;}
+.offer-name{font-size:20px;font-weight:700;font-family:'Space Grotesk',sans-serif;letter-spacing:-.01em;margin-bottom:4px;}
+.offer-meta{color:var(--text-dim);font-size:12.5px;margin-bottom:18px;}
+.offer-actions{display:flex;gap:9px;}
 .live-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--success);margin-left:6px;position:relative;top:-2px;box-shadow:0 0 0 0 rgba(34,197,94,.6);animation:liveDotPulse 1.8s ease-out infinite;}
 @keyframes liveDotPulse{0%{box-shadow:0 0 0 0 rgba(34,197,94,.55);}70%{box-shadow:0 0 0 8px rgba(34,197,94,0);}100%{box-shadow:0 0 0 0 rgba(34,197,94,0);}}
 .pulse-dot::after{content:'';position:absolute;inset:0;border-radius:50%;background:inherit;animation:pulseRing 1.6s cubic-bezier(0,0,.2,1) infinite;}
 @keyframes pulseRing{0%{transform:scale(1);opacity:.7;}100%{transform:scale(3);opacity:0;}}
-.offer-label{font-size:10px;color:var(--gold-bright);text-transform:uppercase;letter-spacing:1.3px;font-weight:700;margin-bottom:8px;}
-.offer-name{font-size:19px;margin-bottom:3px;}
-.offer-meta{color:var(--text-dim);font-size:12.5px;margin-bottom:16px;}
-.offer-actions{display:flex;gap:9px;}
 .offer-actions .btn{flex:1;padding:13px;font-size:13.5px;}
 
 .call-card{padding:22px;}
