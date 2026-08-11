@@ -7,6 +7,7 @@ import { notifications } from './src/routes/notifications';
 import { announcements } from './src/routes/announcements';
 import { scripts } from './src/routes/scripts';
 import { misc } from './src/routes/misc';
+import { CONTROL_PAGE } from './src/control';
 import { telephony } from './src/routes/telephony';
 import { page } from './src/frontend';
 
@@ -45,6 +46,11 @@ app.get('/sw.js', async (c) => {
   c.header('Content-Type', 'application/javascript');
   c.header('Service-Worker-Allowed', '/');
   return c.body(await file.text());
+});
+
+app.get('/control', (c) => {
+  c.header('Cache-Control', 'no-store, no-cache, must-revalidate');
+  return c.html(CONTROL_PAGE);
 });
 
 app.get('/manifest.json', async (c) => {

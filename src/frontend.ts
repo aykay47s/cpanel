@@ -365,7 +365,6 @@ tr.clickable:active{background:rgba(255,255,255,.05);}
       <div class="side-link" data-tab="categories" onclick="switchAdminTab('categories')">${ICONS_SVG.flag} Lead Categories</div>
       <div class="side-link" data-tab="branding" onclick="switchAdminTab('branding')">${ICONS_SVG.gear} Branding</div>
       <div class="side-link" data-tab="telephony" onclick="switchAdminTab('telephony')">${ICONS_SVG.bell} Call Routing</div>
-      <div class="side-link hidden" id="masterControlLink" data-tab="master" onclick="switchAdminTab('master')">${ICONS_SVG.gear} Master Control</div>
       <div class="side-link" onclick="logout()" style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px;">${ICONS_SVG.exit} Exit</div>
     </div>
     <div class="admin-main">
@@ -490,7 +489,6 @@ async function enterApp() {
   registerServiceWorker();
   if (me.role === 'admin') {
     document.getElementById('adminApp').classList.remove('hidden');
-    if (me.is_super_admin) document.getElementById('masterControlLink').classList.remove('hidden');
     switchAdminTab('dashboard');
   } else {
     document.getElementById('staffApp').classList.remove('hidden');

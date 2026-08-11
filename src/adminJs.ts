@@ -25,7 +25,6 @@ async function renderAdminTab(tab) {
     if (tab === 'leaderboard') return await renderAdminLeaderboard(el);
     if (tab === 'branding') return await renderAdminBranding(el);
     if (tab === 'telephony') return await renderAdminTelephony(el);
-    if (tab === 'master') return await renderMasterControl(el);
   } catch (err) {
     console.error('Tab render failed:', tab, err);
     el.innerHTML = '<div class="panel p fade-up" style="text-align:center;"><div style="font-size:14px;margin-bottom:10px;">Something went wrong loading this.</div><div style="font-size:12px;color:var(--text-dim);margin-bottom:14px;">' + esc(String(err && err.message || err)) + '</div><button class="btn btn-gold" onclick="renderAdminTab(\\'' + tab + '\\')">Retry</button></div>';
