@@ -14,7 +14,76 @@ misc.post('/api/admin/telephony-config', requireRole('admin'), async (c) => {
   const body = await c.req.json().catch(() => null);
   if (!body) return c.json({ error: 'Invalid config' }, 400);
   if (body.hold_music_url && body.hold_music_url.length > 2000000) return c.json({ error: 'Audio file too large' }, 400);
+  // The auth token is never sent back to the browser once saved, so if this save
+  // came from a form that only had the masked/blank field, don't let it wipe out
+  // the real token already stored server-side.
+  delete body.twilio_auth_token;
   await sql`INSERT INTO settings (key, value) VALUES ('telephony_config', ${JSON.stringify(body)}) ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(body)}`;
+  return c.json({ ok: true });
+});
+
+// Self-service Twilio connection: admin pastes their own account's credentials,
+// we call Twilio's API to point their number's webhook at this server, and store
+// only what's needed to keep working — the auth token lives in its own settings
+// row and is never included in any GET response.
+misc.post('/api/admin/telephony-config/connect-twilio', requireRole('admin'), async (c) => {
+  const { account_sid, auth_token, phone_number } = await c.req.json().catch(() => ({}));
+  if (!account_sid || !auth_token || !phone_number) {
+    return c.json({ error: 'Account SID, Auth Token, and phone number are all required' }, 400);
+  }
+  const authHeader = 'Basic ' + Buffer.from(`${account_sid}:${auth_token}`).toString('base64');
+  const origin = new URL(c.req.url).origin;
+
+  try {
+    // Find the phone number's resource SID within their account so we can update it.
+    const lookupRes = await fetch(
+      `https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(account_sid)}/IncomingPhoneNumbers.json?PhoneNumber=${encodeURIComponent(phone_number)}`,
+      { headers: { Authorization: authHeader } }
+    );
+    if (!lookupRes.ok) {
+      if (lookupRes.status === 401) return c.json({ error: 'Twilio rejected those credentials — check the Account SID and Auth Token' }, 400);
+      return c.json({ error: 'Could not reach Twilio (status ' + lookupRes.status + ')' }, 400);
+    }
+    const lookupData: any = await lookupRes.json();
+    const match = lookupData.incoming_phone_numbers?.[0];
+    if (!match) return c.json({ error: 'That phone number was not found on this Twilio account' }, 400);
+
+    // Point the number's voice webhook at our inbound-call handler.
+    const updateRes = await fetch(
+      `https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(account_sid)}/IncomingPhoneNumbers/${match.sid}.json`,
+      {
+        method: 'POST',
+        headers: { Authorization: authHeader, 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          VoiceUrl: `${origin}/api/telephony/inbound`,
+          VoiceMethod: 'POST',
+          StatusCallback: `${origin}/api/telephony/status`,
+          StatusCallbackMethod: 'POST',
+        }),
+      }
+    );
+    if (!updateRes.ok) return c.json({ error: 'Twilio accepted the credentials but rejected the webhook update (status ' + updateRes.status + ')' }, 400);
+
+    const [row] = await sql`SELECT value FROM settings WHERE key = 'telephony_config'`;
+    const cfg = row ? JSON.parse(row.value) : {};
+    cfg.twilio_account_sid = account_sid;
+    cfg.twilio_phone_number = phone_number;
+    cfg.twilio_connected = true;
+    await sql`INSERT INTO settings (key, value) VALUES ('telephony_config', ${JSON.stringify(cfg)}) ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(cfg)}`;
+    await sql`INSERT INTO settings (key, value) VALUES ('twilio_auth_token', ${auth_token}) ON CONFLICT (key) DO UPDATE SET value = ${auth_token}`;
+    return c.json({ ok: true });
+  } catch (err: any) {
+    return c.json({ error: 'Network error reaching Twilio: ' + (err?.message || 'unknown') }, 502);
+  }
+});
+misc.post('/api/admin/telephony-config/disconnect-twilio', requireRole('admin'), async (c) => {
+  const [row] = await sql`SELECT value FROM settings WHERE key = 'telephony_config'`;
+  const cfg = row ? JSON.parse(row.value) : {};
+  cfg.twilio_connected = false;
+  cfg.twilio_account_sid = null;
+  cfg.twilio_phone_number = null;
+  await sql`INSERT INTO settings (key, value) VALUES ('telephony_config', ${JSON.stringify(cfg)}) ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(cfg)}`;
+  await sql`DELETE FROM settings WHERE key = 'twilio_auth_token'`;
   return c.json({ ok: true });
 });
 

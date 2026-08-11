@@ -31,7 +31,7 @@ export const page = `<!DOCTYPE html>
 <link rel="icon" href="/icon.png">
 <meta name="theme-color" content="#08080b">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Manrope:wght@600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
   --bg:#08080a; --bg-2:#0f0f13; --s1:#18181f; --s2:#212129; --s3:#2b2b35;
@@ -66,7 +66,7 @@ body{
   min-height:calc(100vh - 36px); min-height:calc(100dvh - 36px);
 }
 @media (max-width:640px){ .app-shell{margin:0;border-radius:0;min-height:100vh;min-height:100dvh;} }
-h1,h2,h3,.disp{font-family:'Manrope',-apple-system,sans-serif;font-weight:700;letter-spacing:-.02em;}
+h1,h2,h3,.disp{font-family:'Space Grotesk',-apple-system,sans-serif;font-weight:700;letter-spacing:-.02em;}
 .mono{font-family:'JetBrains Mono',monospace;letter-spacing:0;}
 .hidden{display:none !important;}
 a{color:inherit;text-decoration:none;}
@@ -109,8 +109,8 @@ input,select,textarea{width:100%;padding:12px 16px;border-radius:14px;border:1px
 input:focus,select:focus,textarea:focus{border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-glow);}
 label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.7px;display:block;margin-bottom:7px;font-weight:600;}
 .field{margin-bottom:15px;}
-.badge{padding:4px 10px 4px 8px;border-radius:7px;font-size:10.5px;font-weight:600;letter-spacing:-.005em;display:inline-flex;align-items:center;gap:5px;border:1px solid transparent;line-height:1.6;}
-.badge::before{content:'';width:5px;height:5px;border-radius:50%;background:currentColor;flex-shrink:0;opacity:.85;}
+.badge{padding:0;font-size:11.5px;font-weight:600;letter-spacing:-.005em;display:inline-flex;align-items:center;gap:6px;line-height:1.6;background:transparent!important;border:none!important;}
+.badge::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0;}
 .badge.not_called{background:rgba(139,139,147,.1);color:var(--text-dim);border-color:rgba(139,139,147,.25);}
 .badge.calling,.badge.active_call{background:rgba(79,140,255,.1);color:var(--gold-bright);border-color:rgba(79,140,255,.3);}
 .badge.call_ended{background:rgba(167,139,250,.1);color:var(--violet);border-color:rgba(167,139,250,.3);}
@@ -131,7 +131,7 @@ label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spa
 .login-card{width:100%;max-width:380px;padding:48px 36px;text-align:center;position:relative;box-shadow:0 2px 4px rgba(0,0,0,.3), 0 16px 48px rgba(0,0,0,.4);}
 .crest{width:52px;height:52px;margin:0 auto 22px;border-radius:16px;background:var(--gold);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(79,140,255,.3);overflow:hidden;}
 .crest svg{width:22px;height:22px;stroke:#fff;}
-.login-title{font-size:27px;color:var(--text);margin-bottom:6px;font-weight:800;letter-spacing:-.025em;font-family:'Manrope',sans-serif;}
+.login-title{font-size:27px;color:var(--text);margin-bottom:6px;font-weight:800;letter-spacing:-.025em;font-family:'Space Grotesk',sans-serif;}
 .login-sub{font-size:14px;margin-bottom:32px;color:var(--text-dim);}
 .pin-dots{display:flex;justify-content:center;gap:16px;margin-bottom:32px;}
 .pin-dot{width:12px;height:12px;border-radius:50%;border:1.5px solid var(--border-2);transition:all .15s;}
@@ -147,7 +147,7 @@ label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spa
 
 /* ---------- Shell layout ---------- */
 .topbar{position:sticky;top:0;z-index:60;display:flex;justify-content:space-between;align-items:center;padding:calc(16px + env(safe-area-inset-top)) 22px 16px;background:rgba(255,255,255,.03);backdrop-filter:blur(24px) saturate(1.4);-webkit-backdrop-filter:blur(24px) saturate(1.4);border-bottom:1px solid rgba(255,255,255,.08);}
-.brand{font-family:'Manrope',sans-serif;font-weight:800;font-size:15.5px;display:flex;align-items:center;gap:10px;letter-spacing:-.02em;}
+.brand{font-family:'Space Grotesk',sans-serif;font-weight:800;font-size:15.5px;display:flex;align-items:center;gap:10px;letter-spacing:-.02em;}
 .brand-mark{width:22px;height:22px;border-radius:7px;background:var(--gold);position:relative;flex-shrink:0;overflow:hidden;}
 .topbar-actions{display:flex;gap:8px;align-items:center;}
 .icon-btn{width:38px;height:38px;border-radius:50%;background:var(--s2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;position:relative;color:var(--text-dim);transition:all .12s ease;}
@@ -175,7 +175,7 @@ label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spa
 
 .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:24px;}
 .stat-box{padding:22px 24px;border-radius:20px;}
-.stat-box .num{font-size:29px;font-weight:800;font-family:'Manrope',sans-serif;letter-spacing:-.03em;line-height:1.1;}
+.stat-box .num{font-size:29px;font-weight:800;font-family:'Space Grotesk',sans-serif;letter-spacing:-.03em;line-height:1.1;}
 .stat-box .lbl{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px;margin-top:5px;font-weight:600;}
 .stat-box.accent{border-color:var(--gold-glow);}
 .section-title{font-size:12px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.8px;margin:28px 0 14px;font-weight:600;}

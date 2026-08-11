@@ -193,11 +193,14 @@ export async function ensureDb() {
   if (!telRow) {
     const defaultTelephony = JSON.stringify({
       menu_options: [
-        { digit: '1', label: 'Sales' },
-        { digit: '2', label: 'Support' },
+        { digit: '1', label: 'New Enquiry' },
+        { digit: '2', label: 'Existing Claim' },
       ],
       hold_music_url: null,
       ring_behavior: 'keep_ringing',
+      twilio_account_sid: null,
+      twilio_phone_number: null,
+      twilio_connected: false,
     });
     await sql`INSERT INTO settings (key, value) VALUES ('telephony_config', ${defaultTelephony}) ON CONFLICT (key) DO NOTHING`;
   }
