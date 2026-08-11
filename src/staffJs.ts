@@ -119,16 +119,37 @@ let workingFinisherLeadId = null;
 function startFinishingCall(id) { workingFinisherLeadId = id; renderStaffQueue(); }
 
 async function claimLead(id) {
+  const card = document.querySelector('[data-lead-id="' + id + '"]');
+  if (card) card.style.opacity = '.5'; // instant feedback before the network even responds
   const res = await api('/api/caller/leads/' + id + '/claim', { method: 'POST' });
-  if (res.status === 409) { const card = document.querySelector('[data-lead-id="' + id + '"]'); if (card) card.style.opacity = '.4'; }
-  renderStaffQueue();
+  const data = await res.json();
+  if (res.status === 409) { if (card) card.style.opacity = '.4'; renderStaffQueue(); return; }
+  if (data.claimed && data.data) {
+    // Already have the claimed lead's data from the claim response itself — jump
+    // straight to the active call screen instead of a redundant re-fetch.
+    renderActiveCall(document.getElementById('staffBody'), data.data, me.role);
+  } else {
+    renderStaffQueue();
+  }
 }
 
 async function renderActiveCall(body, lead, role) {
   let scripts = [];
   let template = '';
-  try { const sRes = await api('/api/scripts?type=' + encodeURIComponent(lead.lead_type || 'general')); scripts = (await sRes.json()).data; } catch {}
-  try { const tRes = await api('/api/call-template'); template = (await tRes.json()).data.template; } catch {}
+  // Show the call screen immediately with what we already have (name/phone/status),
+  // then fill in scripts/template as soon as they land — no need to block the whole
+  // screen on two more round trips the caller doesn't need to see instantly.
+  renderActiveCallShell(body, lead, role, scripts, template);
+  const [scriptsResult, templateResult] = await Promise.allSettled([
+    api('/api/scripts?type=' + encodeURIComponent(lead.lead_type || 'general')).then(r => r.json()),
+    api('/api/call-template').then(r => r.json()),
+  ]);
+  if (scriptsResult.status === 'fulfilled') scripts = scriptsResult.value.data || [];
+  if (templateResult.status === 'fulfilled') template = templateResult.value.data?.template || '';
+  if (scripts.length || template) renderActiveCallShell(body, lead, role, scripts, template);
+}
+
+function renderActiveCallShell(body, lead, role, scripts, template) {
   const isFinisher = role === 'finisher';
   body.innerHTML = \`
     \${template && !isFinisher ? \`<div class="panel p fade-up" style="border-color:var(--gold-glow);"><div class="section-title" style="margin-top:0;">Call Guide</div><div style="font-size:13px;line-height:1.7;white-space:pre-wrap;color:var(--text);">\${esc(template)}</div></div>\` : ''}

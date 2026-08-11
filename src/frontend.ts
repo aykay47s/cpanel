@@ -395,13 +395,6 @@ tr.clickable:active{background:rgba(255,255,255,.05);}
 
 <div id="notifBackdrop" class="hidden" onclick="closeNotifPanel()" style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:199;"></div>
 <div id="notifPanel" class="hidden notif-panel" style="position:fixed;z-index:200;overflow-y:auto;-webkit-overflow-scrolling:touch;"></div>
-<div id="iosInstallBanner" class="hidden" style="position:fixed;left:12px;right:12px;bottom:calc(84px + env(safe-area-inset-bottom));z-index:150;">
-  <div class="panel" style="padding:14px 16px;display:flex;align-items:center;gap:12px;border-color:var(--gold-glow);">
-    <span class="ic" style="color:var(--gold-bright);flex-shrink:0;"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.7" stroke="currentColor"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/></svg></span>
-    <div style="flex:1;font-size:12px;line-height:1.5;">Add to your Home Screen to get real push notifications for new leads: tap <b>Share</b> ↗ then <b>Add to Home Screen</b>.</div>
-    <button class="btn btn-ghost btn-sm" onclick="document.getElementById('iosInstallBanner').classList.add('hidden');localStorage.setItem('ios_banner_dismissed','1');">✕</button>
-  </div>
-</div>
 
 <script>
 const ICONS = {
@@ -501,7 +494,7 @@ async function enterApp() {
     renderStaffNav();
     switchStaffTab('home');
   }
-  checkIosInstallPrompt();
+  checkFirstLoginTutorial();
 }
 function renderStaffNav() {
   const nav = document.getElementById('staffNav');
@@ -533,7 +526,21 @@ function pingNav(tab) {
 }
 function clearNavBadge(tab) { const btn = document.querySelector('.nav-btn[data-tab="' + tab + '"]'); const b = btn && btn.querySelector('.nav-badge'); if (b) b.remove(); }
 let currentAdminTab = 'dashboard';
-function maybeRefreshAdmin(tabs) { const arr = Array.isArray(tabs) ? tabs : [tabs]; if (arr.includes(currentAdminTab)) renderAdminTab(currentAdminTab); }
+function maybeRefreshAdmin(tabs) { const arr = Array.isArray(tabs) ? tabs : [tabs]; if (arr.includes(currentAdminTab)) smoothRerender(() => renderAdminTab(currentAdminTab)); }
+// Background updates (triggered by other people's actions via SSE) shouldn't look
+// like the page reloading. Briefly dims the content, swaps it while invisible, then
+// fades back in — same content update, no jarring flash or re-triggered pop-in
+// animations on every background change.
+function smoothRerender(renderFn) {
+  const el = document.getElementById(me.role === 'admin' ? 'adminContent' : 'staffBody');
+  if (!el) { renderFn(); return; }
+  el.style.transition = 'opacity .15s ease';
+  el.style.opacity = '0.4';
+  setTimeout(() => {
+    renderFn();
+    requestAnimationFrame(() => { el.style.opacity = '1'; });
+  }, 120);
+}
 
 async function refreshNotifBadge() {
   const res = await api('/api/notifications/unread-count'); const { count } = (await res.json()).data;
@@ -776,13 +783,44 @@ ${ADMIN_JS}
 ${STAFF_JS}
 </script>
 <script>
-function checkIosInstallPrompt() {
-  const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
+// Shown once per device, the first time a caller/finisher logs in — walks them
+// through adding the app to their home screen so push notifications actually work.
+// Platform-specific since the steps genuinely differ (iOS Safari has no install
+// prompt API at all, unlike Android/desktop Chrome).
+function checkFirstLoginTutorial() {
+  if (!me || me.role === 'admin') return;
+  const seenKey = 'tutorial_seen_' + me.id;
+  if (localStorage.getItem(seenKey)) return;
   const isStandalone = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
-  const dismissed = localStorage.getItem('ios_banner_dismissed');
-  if (isIos && !isStandalone && !dismissed && me) {
-    document.getElementById('iosInstallBanner').classList.remove('hidden');
+  if (isStandalone) { localStorage.setItem(seenKey, '1'); return; }
+
+  const ua = navigator.userAgent;
+  const isIos = /iphone|ipad|ipod/i.test(ua);
+  const isAndroid = /android/i.test(ua);
+  let steps;
+  if (isIos) {
+    steps = ['Tap the Share icon at the bottom of Safari (the square with an arrow)', 'Scroll down and tap "Add to Home Screen"', 'Tap "Add" in the top right'];
+  } else if (isAndroid) {
+    steps = ['Tap the ⋮ menu in the top right of Chrome', 'Tap "Add to Home screen" or "Install app"', 'Confirm — it now works like a real app'];
+  } else {
+    steps = ['Look for an install icon in your browser\\'s address bar', 'Click it and confirm the install', 'The app opens in its own window from now on'];
   }
+  const modal = document.createElement('div');
+  modal.id = 'firstLoginTutorial';
+  modal.style.cssText = 'position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:20px;';
+  modal.innerHTML = \`<div class="panel p" style="max-width:380px;text-align:center;">
+    <div style="font-size:15px;font-weight:700;margin-bottom:6px;">One quick thing before you start</div>
+    <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:16px;line-height:1.6;">Add this to your home screen so it works like a real app and you get proper notifications for new leads.</p>
+    <div style="text-align:left;margin-bottom:18px;">\${steps.map((s, i) => '<div style="display:flex;gap:10px;margin-bottom:10px;"><div style="width:22px;height:22px;border-radius:50%;background:var(--gold);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;">' + (i + 1) + '</div><div style="font-size:13px;line-height:1.4;padding-top:2px;">' + s + '</div></div>').join('')}</div>
+    <button class="btn btn-gold btn-block" onclick="dismissFirstLoginTutorial()">Got It</button>
+    <button class="btn btn-ghost btn-sm btn-block" style="margin-top:8px;" onclick="dismissFirstLoginTutorial()">Skip for now</button>
+  </div>\`;
+  document.body.appendChild(modal);
+}
+function dismissFirstLoginTutorial() {
+  if (me) localStorage.setItem('tutorial_seen_' + me.id, '1');
+  const modal = document.getElementById('firstLoginTutorial');
+  if (modal) modal.remove();
 }
 
 // Mobile fix: tapping the Dial button backgrounds the app (native phone UI takes
@@ -800,7 +838,6 @@ document.addEventListener('visibilitychange', () => {
 });
 
 if (me) enterApp();
-checkIosInstallPrompt();
 </script>
 </body>
 </html>`;

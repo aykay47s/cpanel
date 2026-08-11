@@ -18,13 +18,19 @@ async function getPanelName() {
   return row?.value || 'us';
 }
 // Ordered list of who's actually eligible to receive an inbound call right now —
-// respects the admin's "everyone" vs "selected callers only" setting, and calls
-// higher-priority (lower number) callers first.
+// respects the admin's "everyone" vs "selected callers only" setting, calls
+// higher-priority (lower number) callers first, and never bridges an inbound call
+// to someone already mid-outbound-call — max one call per caller at a time.
 async function getEligibleCallers(cfg: any) {
   const mode = cfg.inbound_mode || 'everyone';
-  return mode === 'selected'
-    ? await sql`SELECT id, call_phone FROM users WHERE role = 'caller' AND clocked_in = true AND call_phone IS NOT NULL AND call_phone != '' AND inbound_eligible = true ORDER BY inbound_priority ASC, id ASC`
-    : await sql`SELECT id, call_phone FROM users WHERE role = 'caller' AND clocked_in = true AND call_phone IS NOT NULL AND call_phone != '' ORDER BY inbound_priority ASC, id ASC`;
+  const base = mode === 'selected'
+    ? sql`SELECT id, call_phone FROM users WHERE role = 'caller' AND clocked_in = true AND call_phone IS NOT NULL AND call_phone != '' AND inbound_eligible = true
+        AND id NOT IN (SELECT assigned_caller_id FROM leads WHERE status IN ('calling','active_call') AND assigned_caller_id IS NOT NULL)
+        ORDER BY inbound_priority ASC, id ASC`
+    : sql`SELECT id, call_phone FROM users WHERE role = 'caller' AND clocked_in = true AND call_phone IS NOT NULL AND call_phone != ''
+        AND id NOT IN (SELECT assigned_caller_id FROM leads WHERE status IN ('calling','active_call') AND assigned_caller_id IS NOT NULL)
+        ORDER BY inbound_priority ASC, id ASC`;
+  return await base;
 }
 // How many other calls are currently mid-routing (ringing) ahead of this one —
 // used to tell the caller their real position, not a fake number.
