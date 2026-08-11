@@ -34,7 +34,7 @@ export const page = `<!DOCTYPE html>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#0a0a0c; --bg-2:#111114; --s1:#151519; --s2:#1b1b20; --s3:#232328;
+  --bg:#08080a; --bg-2:#0f0f13; --s1:#18181f; --s2:#212129; --s3:#2b2b35;
   --border:rgba(255,255,255,0.08); --border-2:rgba(255,255,255,0.14);
   --gold:#4f8cff; --gold-bright:#7aabff; --gold-glow:rgba(79,140,255,.2);
   --teal:#2dd4bf; --teal-glow:rgba(45,212,191,.2);
@@ -80,21 +80,22 @@ a{color:inherit;text-decoration:none;}
 button{font-family:'Inter',sans-serif;cursor:pointer;border:none;outline:none;transition:all .12s ease;}
 .panel{
   background:var(--s1);
-  border:1px solid var(--border); border-radius:20px;
-  box-shadow:0 1px 2px rgba(0,0,0,.24), 0 4px 12px rgba(0,0,0,.16);
-  transition:border-color .15s ease, box-shadow .15s ease;
+  border:1px solid var(--border-2); border-radius:20px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.04), 0 2px 4px rgba(0,0,0,.3), 0 12px 28px rgba(0,0,0,.34), 0 24px 56px rgba(0,0,0,.22);
+  transition:border-color .15s ease, box-shadow .15s ease, transform .15s ease;
 }
 .panel-inset{background:var(--bg-2);border:1px solid var(--border);border-radius:14px;}
-.btn{padding:12px 22px;border-radius:100px;font-weight:600;font-size:13.5px;background:var(--s3);border:1px solid var(--border-2);color:var(--text);letter-spacing:-.005em;}
-.btn:hover{background:#2a2a30;border-color:rgba(255,255,255,.22);transform:translateY(-1px);}
-.btn:active{transform:translateY(0) scale(.98);}
-.btn-gold{background:var(--gold);color:#fff;border:none;font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.2), 0 4px 10px rgba(79,140,255,.28);}
-.btn-gold:hover{background:var(--gold-bright);box-shadow:0 2px 4px rgba(0,0,0,.2), 0 6px 16px rgba(79,140,255,.36);}
-.btn-teal{background:var(--teal);color:#04211c;border:none;}
+.btn{padding:12px 22px;border-radius:100px;font-weight:600;font-size:13.5px;background:var(--s3);border:1px solid var(--border-2);color:var(--text);letter-spacing:-.005em;box-shadow:inset 0 1px 0 rgba(255,255,255,.06), 0 1px 2px rgba(0,0,0,.3), 0 4px 10px rgba(0,0,0,.24);}
+.btn:hover{background:#323240;border-color:rgba(255,255,255,.26);transform:translateY(-1px);box-shadow:inset 0 1px 0 rgba(255,255,255,.08), 0 2px 4px rgba(0,0,0,.32), 0 8px 18px rgba(0,0,0,.3);}
+.btn:active{transform:translateY(1px) scale(.98);box-shadow:inset 0 1px 3px rgba(0,0,0,.3);}
+.btn-gold{background:linear-gradient(180deg,var(--gold-bright),var(--gold));color:#fff;border:none;font-weight:700;box-shadow:inset 0 1px 0 rgba(255,255,255,.25), 0 2px 4px rgba(0,0,0,.25), 0 8px 20px rgba(79,140,255,.35);}
+.btn-gold:hover{box-shadow:inset 0 1px 0 rgba(255,255,255,.3), 0 3px 6px rgba(0,0,0,.28), 0 10px 26px rgba(79,140,255,.42);}
+.btn-gold:active{box-shadow:inset 0 2px 4px rgba(0,0,0,.25);}
+.btn-teal{background:linear-gradient(180deg,#3ee0cf,var(--teal));color:#04211c;border:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.25), 0 4px 12px rgba(45,212,191,.25);}
 .btn-danger{background:transparent;border:1px solid rgba(239,68,68,.35);color:var(--danger);}
 .btn-danger:hover{background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.5);}
-.btn-ghost{background:transparent;border:1px solid var(--border-2);color:var(--text-dim);}
-.btn-ghost:hover{color:var(--text);border-color:rgba(255,255,255,.22);}
+.btn-ghost{background:transparent;border:1px solid var(--border-2);color:var(--text-dim);box-shadow:none;}
+.btn-ghost:hover{color:var(--text);border-color:rgba(255,255,255,.26);}
 .btn-block{width:100%;}
 .btn-sm{padding:8px 14px;font-size:12px;border-radius:8px;}
 input,select,textarea{width:100%;padding:12px 16px;border-radius:14px;border:1px solid var(--border-2);background:var(--bg-2);color:var(--text);font-size:16px;outline:none;font-family:inherit;-webkit-appearance:none;appearance:none;transition:border-color .12s ease, box-shadow .12s ease;}
@@ -120,7 +121,7 @@ label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spa
 /* ---------- Login ---------- */
 #loginScreen{min-height:100vh;min-height:100dvh;display:flex;align-items:center;justify-content:center;padding:24px;position:relative;overflow:hidden;}
 .login-card{width:100%;max-width:380px;padding:48px 36px;text-align:center;position:relative;box-shadow:0 2px 4px rgba(0,0,0,.3), 0 16px 48px rgba(0,0,0,.4);}
-.crest{width:52px;height:52px;margin:0 auto 22px;border-radius:16px;background:linear-gradient(135deg,var(--gold),var(--violet));display:flex;align-items:center;justify-content:center;box-shadow:0 6px 20px rgba(79,140,255,.4);overflow:hidden;}
+.crest{width:52px;height:52px;margin:0 auto 22px;border-radius:16px;background:var(--gold);display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(79,140,255,.3);overflow:hidden;}
 .crest svg{width:22px;height:22px;stroke:#fff;}
 .login-title{font-size:26px;color:var(--text);margin-bottom:6px;font-weight:800;letter-spacing:-.02em;}
 .login-sub{font-size:14px;margin-bottom:32px;color:var(--text-dim);}
@@ -139,7 +140,7 @@ label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spa
 /* ---------- Shell layout ---------- */
 .topbar{position:sticky;top:0;z-index:60;display:flex;justify-content:space-between;align-items:center;padding:calc(16px + env(safe-area-inset-top)) 22px 16px;background:rgba(10,10,12,.85);backdrop-filter:blur(20px) saturate(1.4);border-bottom:1px solid var(--border);}
 .brand{font-family:'Inter',sans-serif;font-weight:700;font-size:15px;display:flex;align-items:center;gap:10px;letter-spacing:-.01em;}
-.brand-mark{width:22px;height:22px;border-radius:7px;background:linear-gradient(135deg,var(--gold),var(--violet));position:relative;flex-shrink:0;overflow:hidden;}
+.brand-mark{width:22px;height:22px;border-radius:7px;background:var(--gold);position:relative;flex-shrink:0;overflow:hidden;}
 .topbar-actions{display:flex;gap:8px;align-items:center;}
 .icon-btn{width:38px;height:38px;border-radius:50%;background:var(--s2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;position:relative;color:var(--text-dim);transition:all .12s ease;}
 .icon-btn:hover{color:var(--text);border-color:var(--border-2);background:var(--s3);}
@@ -176,7 +177,11 @@ table{width:100%;border-collapse:collapse;font-size:13px;}
 th{text-align:left;padding:11px 14px;color:var(--text-faint);font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border);}
 td{padding:13px 14px;border-bottom:1px solid var(--border);}
 tr:hover td{background:rgba(255,255,255,.012);}
-tr.clickable{cursor:pointer;}
+tr.clickable{cursor:pointer;transition:background .12s ease;}
+tr.clickable:hover{background:rgba(255,255,255,.03);}
+tr.clickable:active{background:rgba(255,255,255,.05);}
+.offer-card,.panel-inset.clickable{transition:transform .12s ease, box-shadow .12s ease;}
+.offer-card:active{transform:scale(.985);}
 .pin-display{font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:700;color:var(--gold-bright);letter-spacing:1.5px;}
 .blur-phone{cursor:pointer;filter:blur(5px);transition:filter .2s;user-select:none;}
 .blur-phone.revealed{filter:blur(0);}
@@ -207,6 +212,8 @@ tr.clickable{cursor:pointer;}
 /* offer / call cards */
 .offer-card{position:relative;padding:22px;border-radius:12px;margin-bottom:14px;overflow:hidden;background:var(--s1);border:1px solid var(--border-2);border-left:3px solid var(--gold);}
 .pulse-dot{position:absolute;top:18px;right:18px;width:8px;height:8px;border-radius:50%;background:var(--gold);}
+.live-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--success);margin-left:6px;position:relative;top:-2px;box-shadow:0 0 0 0 rgba(34,197,94,.6);animation:liveDotPulse 1.8s ease-out infinite;}
+@keyframes liveDotPulse{0%{box-shadow:0 0 0 0 rgba(34,197,94,.55);}70%{box-shadow:0 0 0 8px rgba(34,197,94,0);}100%{box-shadow:0 0 0 0 rgba(34,197,94,0);}}
 .pulse-dot::after{content:'';position:absolute;inset:0;border-radius:50%;background:inherit;animation:pulseRing 1.6s cubic-bezier(0,0,.2,1) infinite;}
 @keyframes pulseRing{0%{transform:scale(1);opacity:.7;}100%{transform:scale(3);opacity:0;}}
 .offer-label{font-size:10px;color:var(--gold-bright);text-transform:uppercase;letter-spacing:1.3px;font-weight:700;margin-bottom:8px;}
@@ -592,6 +599,26 @@ async function toggleClock() {
   localStorage.setItem('dispatch_me', JSON.stringify(me));
   updateClockBtn();
   if (staffTab === 'queue') renderStaffQueue();
+}
+
+// Real motion on stat numbers instead of just appearing — counts up from 0 over
+// ~600ms with an eased curve, applied automatically to any element with data-count.
+function animateCountUps(container) {
+  const els = (container || document).querySelectorAll('[data-count]');
+  els.forEach(el => {
+    const target = parseInt(el.dataset.count, 10);
+    if (isNaN(target)) return;
+    const duration = 650;
+    const start = performance.now();
+    const tick = (now) => {
+      const progress = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      el.textContent = Math.round(target * eased);
+      if (progress < 1) requestAnimationFrame(tick);
+      else el.textContent = target;
+    };
+    requestAnimationFrame(tick);
+  });
 }
 
 function timeAgo(ts) {

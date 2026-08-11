@@ -35,18 +35,18 @@ async function renderAdminDashboard(el) {
   const d = (await res.json()).data;
   el.innerHTML = \`
     <div class="stat-grid stagger">
-      <div class="stat-box panel accent"><div class="num">\${d.total}</div><div class="lbl">Total Leads</div></div>
-      <div class="stat-box panel"><div class="num">\${d.uncalled}</div><div class="lbl">Not Called</div></div>
-      <div class="stat-box panel" style="border-color:\${d.active_calls > 0 ? 'var(--gold-glow)' : ''};"><div class="num">\${d.active_calls}</div><div class="lbl">On Call Now</div></div>
-      <div class="stat-box panel"><div class="num">\${d.successful}</div><div class="lbl">Successful</div></div>
-      <div class="stat-box panel"><div class="num">\${d.awaiting_finishing}</div><div class="lbl">Awaiting Finishing</div></div>
-      <div class="stat-box panel"><div class="num">\${d.assigned_finishing}</div><div class="lbl">With Finishers</div></div>
-      <div class="stat-box panel"><div class="num">\${d.completed}</div><div class="lbl">Completed</div></div>
-      <div class="stat-box panel" style="\${d.requires_review > 0 ? 'border-color:var(--gold-glow);' : ''}"><div class="num">\${d.requires_review}</div><div class="lbl">Needs Review</div></div>
+      <div class="stat-box panel accent"><div class="num" data-count="\${d.total}">0</div><div class="lbl">Total Leads</div></div>
+      <div class="stat-box panel"><div class="num" data-count="\${d.uncalled}">0</div><div class="lbl">Not Called</div></div>
+      <div class="stat-box panel" style="border-color:\${d.active_calls > 0 ? 'var(--gold-glow)' : ''};"><div class="num" data-count="\${d.active_calls}" style="display:inline-block;">0</div>\${d.active_calls > 0 ? '<span class="live-dot"></span>' : ''}<div class="lbl">On Call Now</div></div>
+      <div class="stat-box panel"><div class="num" data-count="\${d.successful}">0</div><div class="lbl">Successful</div></div>
+      <div class="stat-box panel"><div class="num" data-count="\${d.awaiting_finishing}">0</div><div class="lbl">Awaiting Finishing</div></div>
+      <div class="stat-box panel"><div class="num" data-count="\${d.assigned_finishing}">0</div><div class="lbl">With Finishers</div></div>
+      <div class="stat-box panel"><div class="num" data-count="\${d.completed}">0</div><div class="lbl">Completed</div></div>
+      <div class="stat-box panel" style="\${d.requires_review > 0 ? 'border-color:var(--gold-glow);' : ''}"><div class="num" data-count="\${d.requires_review}">0</div><div class="lbl">Needs Review</div></div>
     </div>
     <div class="stat-grid" style="grid-template-columns:repeat(2,1fr);">
-      <div class="stat-box panel"><div class="num">\${d.callers_online}</div><div class="lbl">Callers Online</div></div>
-      <div class="stat-box panel"><div class="num">\${d.finishers_online}</div><div class="lbl">Finishers Online</div></div>
+      <div class="stat-box panel"><div class="num" data-count="\${d.callers_online}">0</div><div class="lbl">Callers Online</div></div>
+      <div class="stat-box panel"><div class="num" data-count="\${d.finishers_online}">0</div><div class="lbl">Finishers Online</div></div>
     </div>
     <div class="section-title">On Call — Live</div>
     <div class="panel p" id="onCallPanel">\${onCallHtml(d.onCall)}</div>
@@ -54,6 +54,7 @@ async function renderAdminDashboard(el) {
     <div class="panel p">
       <div class="timeline">\${d.recentEvents.map(e => \`<div class="timeline-item"><div class="ev">\${eventLabel(e)}</div><div class="meta">\${e.actor_name || 'System'} · \${fullName(e)} · \${timeAgo(e.created_at)}</div></div>\`).join('') || '<div style="color:var(--text-dim);">No activity yet.</div>'}</div>
     </div>\`;
+  animateCountUps(el);
   startOnCallTimers();
 }
 function onCallHtml(rows) {

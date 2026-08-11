@@ -48,8 +48,8 @@ async function renderStaffHome() {
       <div style="height:7px;border-radius:5px;background:var(--s3);overflow:hidden;"><div style="height:100%;width:\${Math.round(xpInLevel/150*100)}%;background:linear-gradient(90deg,var(--violet),#a78bfa);border-radius:5px;"></div></div>
     </div>
     <div class="stat-grid" style="grid-template-columns:repeat(3,1fr);">
-      <div class="stat-box panel"><div class="num">\${myStat.successful_calls || 0}</div><div class="lbl">Successful</div></div>
-      <div class="stat-box panel"><div class="num">\${me.xp}</div><div class="lbl">XP</div></div>
+      <div class="stat-box panel"><div class="num" data-count="\${myStat.successful_calls || 0}">0</div><div class="lbl">Successful</div></div>
+      <div class="stat-box panel"><div class="num" data-count="\${me.xp}">0</div><div class="lbl">XP</div></div>
       <div class="stat-box panel"><div class="num">\${me.clocked_in ? 'On' : 'Off'}</div><div class="lbl">Shift</div></div>
     </div>
     <div class="panel p fade-up">
@@ -67,6 +67,7 @@ async function renderStaffHome() {
       <div id="scriptSuggestStatus" style="font-size:12px;margin-top:8px;"></div>
     </div>
   \`;
+  animateCountUps(body);
 }
 async function suggestScript() {
   const title = document.getElementById('scriptSuggestTitle').value.trim();
