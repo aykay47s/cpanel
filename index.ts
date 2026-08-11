@@ -75,7 +75,7 @@ app.get('/', async (c) => {
   const rows = await sql`SELECT key, value FROM settings WHERE key IN ('panel_name', 'panel_logo')`;
   const map = Object.fromEntries(rows.map((r: any) => [r.key, r.value]));
   const name = map.panel_name || 'FRPTS';
-  const logoTag = map.panel_logo ? `<img src="${map.panel_logo}" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;" />` : '';
+  const logoTag = map.panel_logo ? `<img src="${map.panel_logo}" style="width:100%;height:100%;object-fit:contain;border-radius:inherit;" />` : '';
   let html = page
     .split('Frap Ties').join(name)
     .split('<div class="brand-mark"></div>').join(`<div class="brand-mark">${logoTag}</div>`);

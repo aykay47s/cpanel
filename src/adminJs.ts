@@ -547,15 +547,40 @@ function handleBrandLogoUpload(event) {
   const reader = new FileReader();
   reader.onload = (e) => {
     img.onload = () => {
+      // Step 1: draw at natural size and strip the background to transparency.
+      const work = document.createElement('canvas');
+      work.width = img.width; work.height = img.height;
+      const wctx = work.getContext('2d');
+      wctx.drawImage(img, 0, 0);
+      const imgData = wctx.getImageData(0, 0, work.width, work.height);
+      const d = imgData.data;
+      // Sample the four corners and average them as the background reference color —
+      // handles the common case of a solid (often white) background behind a logo.
+      const corners = [
+        [0, 0], [work.width - 1, 0], [0, work.height - 1], [work.width - 1, work.height - 1]
+      ].map(([x, y]) => {
+        const i = (y * work.width + x) * 4;
+        return [d[i], d[i + 1], d[i + 2]];
+      });
+      const bg = [0, 1, 2].map(c => Math.round(corners.reduce((s, p) => s + p[c], 0) / corners.length));
+      const threshold = 38, softEdge = 26;
+      for (let i = 0; i < d.length; i += 4) {
+        const dist = Math.sqrt((d[i] - bg[0]) ** 2 + (d[i + 1] - bg[1]) ** 2 + (d[i + 2] - bg[2]) ** 2);
+        if (dist < threshold) d[i + 3] = 0;
+        else if (dist < threshold + softEdge) d[i + 3] = Math.round(d[i + 3] * (dist - threshold) / softEdge);
+      }
+      wctx.putImageData(imgData, 0, 0);
+
+      // Step 2: fit (not crop) the now-transparent logo into the square, centered.
       const size = 256;
       const canvas = document.createElement('canvas');
       canvas.width = size; canvas.height = size;
       const ctx = canvas.getContext('2d');
-      const scale = Math.max(size / img.width, size / img.height);
-      const w = img.width * scale, h = img.height * scale;
-      ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
-      pendingBrandLogo = canvas.toDataURL('image/png', 0.92);
-      document.getElementById('brandLogoPreview').innerHTML = '<img src="' + pendingBrandLogo + '" style="width:100%;height:100%;object-fit:cover;" />';
+      const scale = Math.min(size / work.width, size / work.height);
+      const w = work.width * scale, h = work.height * scale;
+      ctx.drawImage(work, (size - w) / 2, (size - h) / 2, w, h);
+      pendingBrandLogo = canvas.toDataURL('image/png');
+      document.getElementById('brandLogoPreview').innerHTML = '<img src="' + pendingBrandLogo + '" style="width:100%;height:100%;object-fit:contain;" />';
     };
     img.src = e.target.result;
   };
