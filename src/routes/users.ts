@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { sql } from '../db';
-import { requireRole, authenticate } from '../auth';
+import { requireRole, authenticate, requireAnyStaff } from '../auth';
 
 export const users = new Hono();
 function bad(c: any, msg: string, code = 400) { return c.json({ error: msg }, code); }
@@ -8,9 +8,21 @@ function genPin() { return String(Math.floor(1000 + Math.random() * 9000)); }
 
 // ================= AUTH =================
 users.post('/api/auth/login', async (c) => {
-  const { pin } = await c.req.json().catch(() => ({}));
+  const { pin, slug } = await c.req.json().catch(() => ({}));
   if (!pin) return bad(c, 'PIN required');
-  const [user] = await sql`SELECT id, name, pin, role, avatar, pfp_data, xp, clocked_in, is_super_admin FROM users WHERE pin = ${pin}`;
+  // PINs are only unique per-tenant now, not globally - resolve which tenant this
+  // login belongs to first. No slug (or an unrecognized one) means the operator's
+  // own instance, exactly like before multi-tenancy existed.
+  let tenantId: number | null = null;
+  if (slug) {
+    const [tenant] = await sql`SELECT id FROM tenants WHERE slug = ${slug} AND status = 'active'`;
+    if (!tenant) return bad(c, 'This call center panel could not be found', 404);
+    tenantId = tenant.id;
+  } else {
+    const [selfTenant] = await sql`SELECT id FROM tenants WHERE is_self = true`;
+    tenantId = selfTenant?.id ?? null;
+  }
+  const [user] = await sql`SELECT id, name, pin, role, avatar, pfp_data, xp, clocked_in, is_super_admin FROM users WHERE pin = ${pin} AND tenant_id = ${tenantId}`;
   if (!user) return bad(c, 'Invalid PIN', 401);
   return c.json({ data: user });
 });
@@ -104,6 +116,7 @@ users.delete('/api/admin/lead-categories/:id', requireRole('admin'), async (c) =
 
 // ================= ADMIN: ROSTER =================
 users.get('/api/admin/users', requireRole('admin'), async (c) => {
+  const user = c.get('user');
   const rows = await sql`
     SELECT users.id, users.name, users.pin, users.role, users.avatar, users.pfp_data, users.xp, users.clocked_in, users.status,
       users.call_phone, users.inbound_eligible, users.inbound_priority, users.created_at, users.last_seen_at,
@@ -113,41 +126,51 @@ users.get('/api/admin/users', requireRole('admin'), async (c) => {
       SELECT first_name, last_name, status FROM leads
       WHERE assigned_caller_id = users.id AND status IN ('calling','active_call') LIMIT 1
     ) active_lead ON true
+    WHERE users.tenant_id = ${user.tenant_id}
     ORDER BY users.created_at DESC`;
   return c.json({ data: rows });
 });
 
 users.patch('/api/admin/users/:id/inbound-settings', requireRole('admin'), async (c) => {
+  const user = c.get('user');
   const { inbound_eligible, inbound_priority } = await c.req.json().catch(() => ({}));
   const id = c.req.param('id');
-  if (inbound_eligible !== undefined) await sql`UPDATE users SET inbound_eligible = ${inbound_eligible} WHERE id = ${id}`;
-  if (inbound_priority !== undefined) await sql`UPDATE users SET inbound_priority = ${inbound_priority} WHERE id = ${id}`;
-  const [row] = await sql`SELECT id, name, inbound_eligible, inbound_priority FROM users WHERE id = ${id}`;
+  if (inbound_eligible !== undefined) await sql`UPDATE users SET inbound_eligible = ${inbound_eligible} WHERE id = ${id} AND tenant_id = ${user.tenant_id}`;
+  if (inbound_priority !== undefined) await sql`UPDATE users SET inbound_priority = ${inbound_priority} WHERE id = ${id} AND tenant_id = ${user.tenant_id}`;
+  const [row] = await sql`SELECT id, name, inbound_eligible, inbound_priority FROM users WHERE id = ${id} AND tenant_id = ${user.tenant_id}`;
   return c.json({ data: row });
 });
 
 users.post('/api/admin/users', requireRole('admin'), async (c) => {
+  const user = c.get('user');
   const { name, role } = await c.req.json().catch(() => ({}));
   if (!name) return bad(c, 'Name is required');
   if (!['caller', 'finisher', 'admin'].includes(role)) return bad(c, 'Invalid role');
   let pin: string, row: any;
   for (let i = 0; i < 8; i++) {
     pin = genPin();
-    try { [row] = await sql`INSERT INTO users (name, pin, role) VALUES (${name}, ${pin}, ${role}) RETURNING id, name, pin, role`; break; } catch {}
+    const [collision] = await sql`SELECT 1 FROM users WHERE tenant_id = ${user.tenant_id} AND pin = ${pin}`;
+    if (collision) continue;
+    [row] = await sql`INSERT INTO users (name, pin, role, tenant_id) VALUES (${name}, ${pin}, ${role}, ${user.tenant_id}) RETURNING id, name, pin, role`;
+    break;
   }
   if (!row) return bad(c, 'Could not generate a unique PIN, try again', 500);
   return c.json({ data: row });
 });
 
 users.post('/api/admin/users/:id/role', requireRole('admin'), async (c) => {
+  const user = c.get('user');
   const { role } = await c.req.json().catch(() => ({}));
   if (!['caller', 'finisher', 'admin'].includes(role)) return bad(c, 'Invalid role');
-  await sql`UPDATE users SET role = ${role} WHERE id = ${c.req.param('id')}`;
+  await sql`UPDATE users SET role = ${role} WHERE id = ${c.req.param('id')} AND tenant_id = ${user.tenant_id}`;
   return c.json({ ok: true });
 });
 
 users.delete('/api/admin/users/:id', requireRole('admin'), async (c) => {
+  const admin = c.get('user');
   const id = c.req.param('id');
+  const [target] = await sql`SELECT id FROM users WHERE id = ${id} AND tenant_id = ${admin.tenant_id}`;
+  if (!target) return bad(c, 'Not found', 404);
   await sql`UPDATE leads SET assigned_caller_id = NULL WHERE assigned_caller_id = ${id}`;
   await sql`UPDATE leads SET assigned_finisher_id = NULL WHERE assigned_finisher_id = ${id}`;
   await sql`UPDATE leads SET uploaded_by = NULL WHERE uploaded_by = ${id}`;
@@ -164,13 +187,14 @@ users.delete('/api/admin/users/:id', requireRole('admin'), async (c) => {
   return c.json({ ok: true });
 });
 
-users.get('/api/leaderboard', async (c) => {
+users.get('/api/leaderboard', requireAnyStaff, async (c) => {
+  const user = c.get('user');
   const rows = await sql`
     SELECT users.id, users.name, users.avatar, users.pfp_data, users.role, users.xp,
       COUNT(*) FILTER (WHERE lead_events.event_type = 'outcome_recorded' AND lead_events.to_status = 'successful_call' AND lead_events.actor_id = users.id) as successful_calls
     FROM users
     LEFT JOIN lead_events ON lead_events.actor_id = users.id
-    WHERE users.role IN ('caller','finisher')
+    WHERE users.role IN ('caller','finisher') AND users.tenant_id = ${user.tenant_id}
     GROUP BY users.id, users.name, users.avatar, users.pfp_data, users.role, users.xp
     ORDER BY users.xp DESC
   `;

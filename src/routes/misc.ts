@@ -199,6 +199,13 @@ misc.post('/api/admin/branding', requireRole('admin'), async (c) => {
   return c.json({ ok: true });
 });
 
+misc.post('/api/master/store-checkout-url', requireSuperAdmin(), async (c) => {
+  const { url } = await c.req.json().catch(() => ({}));
+  if (!url) return c.json({ error: 'URL required' }, 400);
+  await sql`INSERT INTO settings (key, value) VALUES ('store_checkout_url', ${url}) ON CONFLICT (key) DO UPDATE SET value = ${url}`;
+  return c.json({ ok: true });
+});
+
 misc.get('/api/push/vapid-key', (c) => c.json({ data: { key: VAPID_PUBLIC_KEY } }));
 
 misc.post('/api/push/subscribe', async (c) => {

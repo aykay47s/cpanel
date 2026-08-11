@@ -9,6 +9,9 @@ import { scripts } from './src/routes/scripts';
 import { misc } from './src/routes/misc';
 import { CONTROL_PAGE } from './src/control';
 import { telephony } from './src/routes/telephony';
+import { tenancy } from './src/routes/tenancy';
+import { STORE_PAGE } from './src/store';
+import { REDEEM_PAGE } from './src/redeem';
 import { page } from './src/frontend';
 
 const app = new Hono();
@@ -40,6 +43,7 @@ app.route('/', announcements);
 app.route('/', scripts);
 app.route('/', misc);
 app.route('/', telephony);
+app.route('/', tenancy);
 
 app.get('/sw.js', async (c) => {
   const file = Bun.file('./public/sw.js');
@@ -51,6 +55,18 @@ app.get('/sw.js', async (c) => {
 app.get('/control', (c) => {
   c.header('Cache-Control', 'no-store, no-cache, must-revalidate');
   return c.html(CONTROL_PAGE);
+});
+
+app.get('/store', async (c) => {
+  c.header('Cache-Control', 'no-store, no-cache, must-revalidate');
+  const [row] = await sql`SELECT value FROM settings WHERE key = 'store_checkout_url'`;
+  const checkoutUrl = row?.value || 'mailto:sales@example.com';
+  return c.html(STORE_PAGE(checkoutUrl));
+});
+
+app.get('/redeem', (c) => {
+  c.header('Cache-Control', 'no-store, no-cache, must-revalidate');
+  return c.html(REDEEM_PAGE);
 });
 
 app.get('/manifest.json', async (c) => {
@@ -86,10 +102,27 @@ app.get('/', async (c) => {
   const logoTag = map.panel_logo ? `<img src="${map.panel_logo}" style="width:100%;height:100%;object-fit:contain;border-radius:inherit;" />` : '';
   let html = page
     .split('Frap Ties').join(name)
-    .split('<div class="brand-mark"></div>').join(`<div class="brand-mark">${logoTag}</div>`);
+    .split('<div class="brand-mark"></div>').join(`<div class="brand-mark">${logoTag}</div>`)
+    .replace('<script>', '<script>const TENANT_SLUG = null;');
   if (map.panel_logo) {
     html = html.replace('<svg viewBox="0 0 24 24" fill="none" stroke-width="1.5"><path d="M12 2l7 4v6c0 5-3.5 8-7 10-3.5-2-7-5-7-10V6l7-4z"/></svg>', logoTag);
   }
+  return c.html(html);
+});
+
+// Every resold call center gets its own path here - same shared deployment and
+// database as the operator's own instance, but with real data isolation (every
+// query is scoped by the authenticated user's own tenant_id). Branding here is
+// deliberately just their own call center name, not the operator's logo/settings -
+// those are global settings that belong to the self tenant, not shared out.
+app.get('/:slug', async (c) => {
+  const slug = c.req.param('slug');
+  const [tenant] = await sql`SELECT * FROM tenants WHERE slug = ${slug} AND status = 'active' AND is_self = false`;
+  if (!tenant) return c.notFound();
+  c.header('Cache-Control', 'no-store, no-cache, must-revalidate');
+  const html = page
+    .split('Frap Ties').join(tenant.name)
+    .replace('<script>', `<script>const TENANT_SLUG = ${JSON.stringify(slug)};`);
   return c.html(html);
 });
 

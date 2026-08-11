@@ -468,7 +468,7 @@ document.getElementById('keypad').addEventListener('click', (e) => {
 function renderPinDots() { document.querySelectorAll('.pin-dot').forEach((d, i) => { d.classList.remove('error'); d.classList.toggle('filled', i < pinBuffer.length); }); }
 async function attemptLogin() {
   const errEl = document.getElementById('loginError');
-  const res = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pin: pinBuffer }) });
+  const res = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pin: pinBuffer, slug: typeof TENANT_SLUG !== 'undefined' ? TENANT_SLUG : null }) });
   const data = await res.json();
   if (!res.ok) {
     errEl.textContent = data.error || 'Invalid PIN';

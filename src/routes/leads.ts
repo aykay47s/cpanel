@@ -12,6 +12,7 @@ function bad(c: any, msg: string, code = 400) { return c.json({ error: msg }, co
 
 // ================= IMPORT =================
 leads.post('/api/admin/leads/import/preview', requireRole('admin'), async (c) => {
+  const user = c.get('user');
   const { text } = await c.req.json().catch(() => ({ text: '' }));
   if (!text) return bad(c, 'Text required');
   const { leads: parsed, redacted } = smartParse(text);
@@ -23,7 +24,7 @@ leads.post('/api/admin/leads/import/preview', requireRole('admin'), async (c) =>
   const extraInfoJoined = redacted.extraInfo.length ? redacted.extraInfo.join('; ') : null;
 
   // Check each parsed lead against EXISTING db leads for potential duplicates.
-  const existing = await sql`SELECT id, first_name, last_name, phone, email FROM leads WHERE merged_into_id IS NULL`;
+  const existing = await sql`SELECT id, first_name, last_name, phone, email FROM leads WHERE merged_into_id IS NULL AND tenant_id = ${user.tenant_id}`;
   const annotated = parsed.map((p) => {
     let bestMatch: { leadId: number; confidence: number; reasons: string[] } | null = null;
     for (const e of existing) {
@@ -42,15 +43,15 @@ leads.post('/api/admin/leads/import/confirm', requireRole('admin'), async (c) =>
   const { leads: rows, source, lead_type } = await c.req.json().catch(() => ({ leads: [] }));
   if (!Array.isArray(rows) || !rows.length) return bad(c, 'No leads to import');
 
-  const existing = await sql`SELECT id, first_name, last_name, phone, phone_e164, email FROM leads WHERE merged_into_id IS NULL`;
+  const existing = await sql`SELECT id, first_name, last_name, phone, phone_e164, email FROM leads WHERE merged_into_id IS NULL AND tenant_id = ${user.tenant_id}`;
   let inserted = 0, flagged = 0;
   for (const r of rows as ParsedLead[]) {
     if (!r.phone) continue;
     const norm = normalizePhone(r.phone);
     const displayPhone = norm.valid ? norm.display : r.phone;
     const [lead] = await sql`
-      INSERT INTO leads (first_name, last_name, phone, phone_e164, email, address, notes, extra_info, source, lead_type, uploaded_by)
-      VALUES (${r.first_name || null}, ${r.last_name || null}, ${displayPhone}, ${norm.e164}, ${r.email || null}, ${r.address || null}, ${r.notes || null}, ${(r as any).extra_info || null}, ${source || 'import'}, ${lead_type || 'general'}, ${user.id})
+      INSERT INTO leads (first_name, last_name, phone, phone_e164, email, address, notes, extra_info, source, lead_type, uploaded_by, tenant_id)
+      VALUES (${r.first_name || null}, ${r.last_name || null}, ${displayPhone}, ${norm.e164}, ${r.email || null}, ${r.address || null}, ${r.notes || null}, ${(r as any).extra_info || null}, ${source || 'import'}, ${lead_type || 'general'}, ${user.id}, ${user.tenant_id})
       RETURNING *
     `;
     inserted++;
@@ -109,6 +110,7 @@ leads.post('/api/admin/duplicates/:id/resolve', requireRole('admin'), async (c) 
 
 // ================= ADMIN: LIST / DETAIL =================
 leads.get('/api/admin/leads', requireRole('admin'), async (c) => {
+  const user = c.get('user');
   const { status, assigned_caller_id, assigned_finisher_id, search } = c.req.query();
   let rows;
   if (search) {
@@ -120,20 +122,20 @@ leads.get('/api/admin/leads', requireRole('admin'), async (c) => {
       LEFT JOIN users uc ON uc.id = leads.assigned_caller_id
       LEFT JOIN users uf ON uf.id = leads.assigned_finisher_id
       LEFT JOIN users uu ON uu.id = leads.uploaded_by
-      WHERE leads.merged_into_id IS NULL AND (leads.phone ILIKE ${s} OR leads.first_name ILIKE ${s} OR leads.last_name ILIKE ${s} OR leads.email ILIKE ${s})
+      WHERE leads.merged_into_id IS NULL AND leads.tenant_id = ${user.tenant_id} AND (leads.phone ILIKE ${s} OR leads.first_name ILIKE ${s} OR leads.last_name ILIKE ${s} OR leads.email ILIKE ${s})
       ORDER BY leads.created_at DESC LIMIT 300`;
   } else if (status) {
     rows = await sql`
       SELECT leads.*, uc.name as caller_name, uf.name as finisher_name, uu.name as uploaded_by_name,
         (SELECT COUNT(*) FROM lead_notes WHERE lead_notes.lead_id = leads.id)::int as note_count
       FROM leads LEFT JOIN users uc ON uc.id = leads.assigned_caller_id LEFT JOIN users uf ON uf.id = leads.assigned_finisher_id LEFT JOIN users uu ON uu.id = leads.uploaded_by
-      WHERE leads.merged_into_id IS NULL AND leads.status = ${status} ORDER BY leads.created_at DESC LIMIT 300`;
+      WHERE leads.merged_into_id IS NULL AND leads.tenant_id = ${user.tenant_id} AND leads.status = ${status} ORDER BY leads.created_at DESC LIMIT 300`;
   } else {
     rows = await sql`
       SELECT leads.*, uc.name as caller_name, uf.name as finisher_name, uu.name as uploaded_by_name,
         (SELECT COUNT(*) FROM lead_notes WHERE lead_notes.lead_id = leads.id)::int as note_count
       FROM leads LEFT JOIN users uc ON uc.id = leads.assigned_caller_id LEFT JOIN users uf ON uf.id = leads.assigned_finisher_id LEFT JOIN users uu ON uu.id = leads.uploaded_by
-      WHERE leads.merged_into_id IS NULL ORDER BY leads.created_at DESC LIMIT 300`;
+      WHERE leads.merged_into_id IS NULL AND leads.tenant_id = ${user.tenant_id} ORDER BY leads.created_at DESC LIMIT 300`;
   }
   return c.json({ data: rows });
 });
@@ -165,6 +167,7 @@ leads.delete('/api/admin/leads/:id', requireRole('admin'), async (c) => {
 });
 
 leads.get('/api/admin/dashboard', requireRole('admin'), async (c) => {
+  const user = c.get('user');
   const [counts] = await sql`
     SELECT
       COUNT(*)::int as total,
@@ -175,21 +178,22 @@ leads.get('/api/admin/dashboard', requireRole('admin'), async (c) => {
       COUNT(*) FILTER (WHERE status = 'ready_for_finishing')::int as awaiting_finishing,
       COUNT(*) FILTER (WHERE status = 'assigned_to_finisher')::int as assigned_finishing,
       COUNT(*) FILTER (WHERE status = 'requires_review')::int as requires_review
-    FROM leads WHERE merged_into_id IS NULL`;
+    FROM leads WHERE merged_into_id IS NULL AND tenant_id = ${user.tenant_id}`;
   const [staff] = await sql`
     SELECT
       COUNT(*) FILTER (WHERE role = 'caller' AND clocked_in)::int as callers_online,
       COUNT(*) FILTER (WHERE role = 'finisher' AND clocked_in)::int as finishers_online
-    FROM users`;
+    FROM users WHERE tenant_id = ${user.tenant_id}`;
   const recentEvents = await sql`
     SELECT lead_events.*, users.name as actor_name, leads.first_name, leads.last_name, leads.phone
     FROM lead_events LEFT JOIN users ON users.id = lead_events.actor_id LEFT JOIN leads ON leads.id = lead_events.lead_id
+    WHERE leads.tenant_id = ${user.tenant_id}
     ORDER BY lead_events.created_at DESC LIMIT 25`;
   const onCall = await sql`
     SELECT leads.id as lead_id, leads.first_name, leads.last_name, leads.phone, leads.status, leads.call_started_at,
       users.id as caller_id, users.name as caller_name, users.avatar as caller_avatar, users.pfp_data as caller_pfp_data
     FROM leads JOIN users ON users.id = leads.assigned_caller_id
-    WHERE leads.status IN ('calling', 'active_call')
+    WHERE leads.status IN ('calling', 'active_call') AND leads.tenant_id = ${user.tenant_id}
     ORDER BY leads.call_started_at ASC`;
   return c.json({ data: { ...counts, ...staff, recentEvents, onCall } });
 });
@@ -253,7 +257,7 @@ leads.post('/api/admin/leads/:id/override-status', requireRole('admin'), async (
 // ================= CALLER LIFECYCLE =================
 leads.get('/api/caller/queue', requireRole('caller'), async (c) => {
   const user = c.get('user');
-  const rows = await sql`SELECT * FROM leads WHERE status = 'not_called' AND (assigned_caller_id IS NULL OR assigned_caller_id = ${user.id}) AND merged_into_id IS NULL ORDER BY (assigned_caller_id = ${user.id}) DESC, created_at ASC LIMIT 20`;
+  const rows = await sql`SELECT * FROM leads WHERE status = 'not_called' AND tenant_id = ${user.tenant_id} AND (assigned_caller_id IS NULL OR assigned_caller_id = ${user.id}) AND merged_into_id IS NULL ORDER BY (assigned_caller_id = ${user.id}) DESC, created_at ASC LIMIT 20`;
   return c.json({ data: rows });
 });
 
@@ -261,6 +265,7 @@ leads.get('/api/caller/queue', requireRole('caller'), async (c) => {
 // happened. Every outcome is already logged via logEvent(), this just reads it back
 // in the shape callers actually want: name, who called, when, what happened.
 leads.get('/api/caller/call-log', requireAnyStaff, async (c) => {
+  const user = c.get('user');
   const rows = await sql`
     SELECT lead_events.id, lead_events.created_at, lead_events.to_status as outcome,
       lead_events.actor_id, users.name as caller_name, users.avatar as caller_avatar, users.pfp_data as caller_pfp_data,
@@ -268,7 +273,7 @@ leads.get('/api/caller/call-log', requireAnyStaff, async (c) => {
     FROM lead_events
     LEFT JOIN users ON users.id = lead_events.actor_id
     LEFT JOIN leads ON leads.id = lead_events.lead_id
-    WHERE lead_events.event_type = 'outcome_recorded'
+    WHERE lead_events.event_type = 'outcome_recorded' AND leads.tenant_id = ${user.tenant_id}
     ORDER BY lead_events.created_at DESC
     LIMIT 50`;
   return c.json({ data: rows });
@@ -276,16 +281,17 @@ leads.get('/api/caller/call-log', requireAnyStaff, async (c) => {
 
 leads.get('/api/caller/mine', requireRole('caller'), async (c) => {
   const user = c.get('user');
-  const [row] = await sql`SELECT * FROM leads WHERE assigned_caller_id = ${user.id} AND status IN ('calling','active_call','call_ended') ORDER BY updated_at DESC LIMIT 1`;
+  const [row] = await sql`SELECT * FROM leads WHERE assigned_caller_id = ${user.id} AND tenant_id = ${user.tenant_id} AND status IN ('calling','active_call','call_ended') ORDER BY updated_at DESC LIMIT 1`;
   return c.json({ data: row || null });
 });
 
 leads.post('/api/caller/leads/:id/claim', requireRole('caller'), async (c) => {
   const user = c.get('user');
   const id = c.req.param('id');
-  // Claimable if genuinely open, OR if an admin specifically sent it to this caller.
+  // Claimable if genuinely open, OR if an admin specifically sent it to this caller -
+  // and never across a tenant boundary, regardless of what id is guessed/passed in.
   const [updated] = await sql`UPDATE leads SET status = 'calling', assigned_caller_id = ${user.id}, call_started_at = now(), updated_at = now()
-    WHERE id = ${id} AND status = 'not_called' AND (assigned_caller_id IS NULL OR assigned_caller_id = ${user.id}) RETURNING *`;
+    WHERE id = ${id} AND tenant_id = ${user.tenant_id} AND status = 'not_called' AND (assigned_caller_id IS NULL OR assigned_caller_id = ${user.id}) RETURNING *`;
   if (!updated) return c.json({ claimed: false, reason: 'Already taken' }, 409);
   await logEvent(updated.id, 'claimed', user, 'not_called', 'calling', {});
   broadcast('lead_claimed', { id: Number(id) });

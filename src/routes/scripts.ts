@@ -8,10 +8,11 @@ function bad(c: any, msg: string, code = 400) { return c.json({ error: msg }, co
 // Read-only: callers/finishers can VIEW approved scripts during a call. They cannot
 // create, edit, or manage them — that surface only exists under /api/admin/*.
 scripts.get('/api/scripts', requireAnyStaff, async (c) => {
+  const user = c.get('user');
   const type = c.req.query('type');
   const rows = type
-    ? await sql`SELECT id, title, content, lead_type FROM scripts WHERE status = 'approved' AND (lead_type = ${type} OR lead_type = 'general') ORDER BY created_at DESC`
-    : await sql`SELECT id, title, content, lead_type FROM scripts WHERE status = 'approved' ORDER BY created_at DESC`;
+    ? await sql`SELECT id, title, content, lead_type FROM scripts WHERE status = 'approved' AND tenant_id = ${user.tenant_id} AND (lead_type = ${type} OR lead_type = 'general') ORDER BY created_at DESC`
+    : await sql`SELECT id, title, content, lead_type FROM scripts WHERE status = 'approved' AND tenant_id = ${user.tenant_id} ORDER BY created_at DESC`;
   return c.json({ data: rows });
 });
 
@@ -20,29 +21,32 @@ scripts.get('/api/scripts', requireAnyStaff, async (c) => {
 // below: submitting a suggestion is not the same privilege as publishing one.
 scripts.post('/api/scripts/submit', requireAnyStaff, async (c) => {
   const user = c.get('user');
-  const { title, content, lead_type, callerId } = await c.req.json().catch(() => ({}));
+  const { title, content, lead_type } = await c.req.json().catch(() => ({}));
   if (!title || !content) return bad(c, 'Title and content required');
-  const submitterId = user?.id || callerId || null;
-  const [row] = await sql`INSERT INTO scripts (title, content, lead_type, status, submitted_by) VALUES (${title}, ${content}, ${lead_type || 'general'}, 'pending', ${submitterId}) RETURNING *`;
+  const [row] = await sql`INSERT INTO scripts (title, content, lead_type, status, submitted_by, tenant_id) VALUES (${title}, ${content}, ${lead_type || 'general'}, 'pending', ${user.id}, ${user.tenant_id}) RETURNING *`;
   return c.json({ data: row });
 });
 
 scripts.get('/api/admin/scripts', requireRole('admin'), async (c) => {
-  const rows = await sql`SELECT scripts.*, users.name as submitted_by_name FROM scripts LEFT JOIN users ON users.id = scripts.submitted_by ORDER BY scripts.created_at DESC`;
+  const user = c.get('user');
+  const rows = await sql`SELECT scripts.*, users.name as submitted_by_name FROM scripts LEFT JOIN users ON users.id = scripts.submitted_by WHERE scripts.tenant_id = ${user.tenant_id} ORDER BY scripts.created_at DESC`;
   return c.json({ data: rows });
 });
 scripts.post('/api/admin/scripts', requireRole('admin'), async (c) => {
+  const user = c.get('user');
   const { title, content, lead_type } = await c.req.json().catch(() => ({}));
   if (!title || !content) return bad(c, 'Title and content required');
-  const [row] = await sql`INSERT INTO scripts (title, content, lead_type, status) VALUES (${title}, ${content}, ${lead_type || 'general'}, 'approved') RETURNING *`;
+  const [row] = await sql`INSERT INTO scripts (title, content, lead_type, status, tenant_id) VALUES (${title}, ${content}, ${lead_type || 'general'}, 'approved', ${user.tenant_id}) RETURNING *`;
   return c.json({ data: row });
 });
 scripts.delete('/api/admin/scripts/:id', requireRole('admin'), async (c) => {
-  await sql`DELETE FROM scripts WHERE id = ${c.req.param('id')}`;
+  const user = c.get('user');
+  await sql`DELETE FROM scripts WHERE id = ${c.req.param('id')} AND tenant_id = ${user.tenant_id}`;
   return c.json({ ok: true });
 });
 scripts.post('/api/admin/scripts/:id/approve', requireRole('admin'), async (c) => {
-  const [row] = await sql`UPDATE scripts SET status = 'approved' WHERE id = ${c.req.param('id')} RETURNING *`;
+  const user = c.get('user');
+  const [row] = await sql`UPDATE scripts SET status = 'approved' WHERE id = ${c.req.param('id')} AND tenant_id = ${user.tenant_id} RETURNING *`;
   if (!row) return bad(c, 'Not found', 404);
   return c.json({ data: row });
 });
