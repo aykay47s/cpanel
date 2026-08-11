@@ -633,14 +633,14 @@ function renderTelephonyLocal() {
   el.innerHTML = \`
     <div class="panel p fade-up" style="border-color:var(--gold-glow);">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
-        <span class="badge important">Coming Soon</span>
+        \${connected ? '<span class="badge successful_call">Live</span>' : '<span class="badge important">Ready to Connect</span>'}
         <div class="section-title" style="margin:0;">Inbound Call Routing</div>
       </div>
       <p style="font-size:12.5px;color:var(--text-dim);line-height:1.6;">
-        This configures how inbound calls to your business number get handled. It needs a connected Twilio number to actually receive calls — everything below can be set up now so it's ready the moment that's connected.
+        This is fully built and tested. \${connected ? 'Your number is connected and live - test it below with a real call.' : 'Connect your Twilio number below and it starts working immediately - no other setup needed.'}
       </p>
       <p style="font-size:12.5px;color:var(--text-dim);line-height:1.6;margin-top:10px;">
-        <b style="color:var(--text);">How it'll work:</b> a caller dials your number → hears your menu and picks an option → hears your hold music while the system finds an available caller → the call gets bridged straight to that caller's phone, ringing them until they pick up.
+        <b style="color:var(--text);">How it works:</b> a caller dials your number → hears your menu and picks an option → hears your hold music while the system finds an available caller → the call gets bridged straight to that caller's phone, ringing them until they pick up.
       </p>
     </div>
 
@@ -664,6 +664,16 @@ function renderTelephonyLocal() {
     </div>
 
     \${connected ? \`<div class="panel p fade-up">
+      <div class="section-title" style="margin-top:0;">Send Test Call</div>
+      <p style="font-size:12px;color:var(--text-dim);margin-bottom:12px;">The only way to hear the exact real voice - Twilio will actually call the number you enter and play your live greeting.</p>
+      <div style="display:flex;gap:8px;">
+        <input id="testCallNumber" placeholder="+441234567890" style="flex:1;" />
+        <button class="btn btn-gold" onclick="sendTestCall()">Call Me</button>
+      </div>
+      <div id="testCallStatus" style="font-size:12px;margin-top:8px;"></div>
+    </div>\` : ''}
+
+    \${connected ? \`<div class="panel p fade-up">
       <div class="section-title" style="margin-top:0;">Recent Inbound Calls</div>
       <div id="inboundCallsList">Loading…</div>
     </div>\` : ''}
@@ -677,7 +687,9 @@ function renderTelephonyLocal() {
       <div class="section-title" style="margin-top:0;">Greeting</div>
       <p style="font-size:12px;color:var(--text-dim);margin-bottom:12px;">What the caller hears named at the start. Leave blank to use your panel name automatically.</p>
       <div class="field"><label>Say this name</label><input id="greetingName" value="\${esc(cfg.greeting_name || '')}" placeholder="e.g. FRPTS Support" onchange="updateGreetingName(this.value)" /></div>
-      <p style="font-size:11.5px;color:var(--text-faint);margin-top:8px;">Preview: "Thanks for calling \${esc(cfg.greeting_name || '[your panel name]')}\${cfg.menu_options.length ? '. ' + cfg.menu_options.map(o => 'Press ' + esc(o.digit) + ' for ' + esc(o.label) + '.').join(' ') : '. Please hold while we connect you.'}"</p>
+      <p style="font-size:11.5px;color:var(--text-faint);margin-top:8px;" id="greetingPreviewText">Preview: "Thanks for calling \${esc(cfg.greeting_name || '[your panel name]')}\${cfg.menu_options.length ? '. ' + cfg.menu_options.map(o => 'Press ' + esc(o.digit) + ' for ' + esc(o.label) + '.').join(' ') : '. Please hold while we connect you.'}"</p>
+      <button class="btn btn-ghost btn-sm" style="margin-top:8px;" onclick="playGreetingPreview()">\${ICONS.phone} Play Preview (approximate voice)</button>
+      <p style="font-size:10.5px;color:var(--text-faint);margin-top:6px;">This uses your browser's voice, not Twilio's actual voice (Polly.Amy) - close, not identical. \${connected ? 'For the exact real voice, use Send Test Call below once connected.' : 'Connect Twilio below to send a real test call with the exact voice.'}</p>
     </div>
 
     <div class="panel p fade-up">
@@ -733,6 +745,16 @@ async function connectTwilio() {
   if (!res.ok) { status.textContent = data.error || 'Connection failed.'; status.style.color = 'var(--danger)'; return; }
   renderAdminTab('telephony');
 }
+async function sendTestCall() {
+  const to_number = document.getElementById('testCallNumber').value.trim();
+  const status = document.getElementById('testCallStatus');
+  if (!to_number) { status.textContent = 'Enter a number first.'; status.style.color = 'var(--danger)'; return; }
+  status.textContent = 'Calling…'; status.style.color = 'var(--text-dim)';
+  const res = await api('/api/admin/telephony-config/test-call', { method: 'POST', body: JSON.stringify({ to_number }) });
+  const data = await res.json();
+  if (!res.ok) { status.textContent = data.error || 'Call failed.'; status.style.color = 'var(--danger)'; return; }
+  status.textContent = 'Calling you now - answer to hear the real greeting.'; status.style.color = 'var(--success)';
+}
 async function disconnectTwilio() {
   if (!confirm('Disconnect this Twilio number? Inbound calls will stop routing here.')) return;
   await api('/api/admin/telephony-config/disconnect-twilio', { method: 'POST' });
@@ -748,9 +770,34 @@ function removeMenuOption(i) {
 }
 function updateMenuOption(i, field, value) {
   window._telephonyConfig.menu_options[i][field] = value;
+  updateGreetingPreviewText();
 }
 function updateGreetingName(value) {
   window._telephonyConfig.greeting_name = value;
+  updateGreetingPreviewText();
+}
+function updateGreetingPreviewText() {
+  const cfg = window._telephonyConfig;
+  const el = document.getElementById('greetingPreviewText');
+  if (!el) return;
+  const name = cfg.greeting_name || '[your panel name]';
+  const menuText = cfg.menu_options.length
+    ? '. ' + cfg.menu_options.map(o => 'Press ' + o.digit + ' for ' + o.label + '.').join(' ')
+    : '. Please hold while we connect you.';
+  el.textContent = 'Preview: "Thanks for calling ' + name + menuText + '"';
+}
+function playGreetingPreview() {
+  if (!('speechSynthesis' in window)) { alert('Your browser does not support speech preview.'); return; }
+  const cfg = window._telephonyConfig;
+  const name = cfg.greeting_name || 'us';
+  const menuText = cfg.menu_options.length
+    ? '. ' + cfg.menu_options.map(o => 'Press ' + o.digit + ' for ' + o.label + '.').join(' ')
+    : '. Please hold while we connect you.';
+  const text = 'Thanks for calling ' + name + menuText;
+  window.speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.rate = 0.95;
+  window.speechSynthesis.speak(utter);
 }
 function handleHoldMusicUpload(event) {
   const file = event.target.files[0];

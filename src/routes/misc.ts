@@ -87,6 +87,44 @@ misc.post('/api/admin/telephony-config/disconnect-twilio', requireRole('admin'),
   return c.json({ ok: true });
 });
 
+// The only way to hear the ACTUAL Twilio voice (not the browser approximation) —
+// places a real outbound call from the connected number to whatever number the
+// admin enters, playing the exact same greeting TwiML a real caller would hear.
+misc.post('/api/admin/telephony-config/test-call', requireRole('admin'), async (c) => {
+  const { to_number } = await c.req.json().catch(() => ({}));
+  if (!to_number) return c.json({ error: 'Enter a phone number to call' }, 400);
+  const [cfgRow] = await sql`SELECT value FROM settings WHERE key = 'telephony_config'`;
+  const cfg = cfgRow ? JSON.parse(cfgRow.value) : {};
+  if (!cfg.twilio_connected) return c.json({ error: 'Connect Twilio first' }, 400);
+  const [tokenRow] = await sql`SELECT value FROM settings WHERE key = 'twilio_auth_token'`;
+  if (!tokenRow) return c.json({ error: 'No Twilio credentials stored — reconnect Twilio' }, 400);
+
+  const authHeader = 'Basic ' + Buffer.from(`${cfg.twilio_account_sid}:${tokenRow.value}`).toString('base64');
+  const origin = new URL(c.req.url).origin;
+  try {
+    const res = await fetch(
+      `https://api.twilio.com/2010-04-01/Accounts/${encodeURIComponent(cfg.twilio_account_sid)}/Calls.json`,
+      {
+        method: 'POST',
+        headers: { Authorization: authHeader, 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          To: to_number,
+          From: cfg.twilio_phone_number,
+          Url: `${origin}/api/telephony/inbound`,
+          Method: 'POST',
+        }),
+      }
+    );
+    if (!res.ok) {
+      const errBody: any = await res.json().catch(() => ({}));
+      return c.json({ error: errBody.message || ('Twilio rejected the call (status ' + res.status + ')') }, 400);
+    }
+    return c.json({ ok: true });
+  } catch (err: any) {
+    return c.json({ error: 'Network error reaching Twilio: ' + (err?.message || 'unknown') }, 502);
+  }
+});
+
 misc.get('/api/branding', async (c) => {
   const rows = await sql`SELECT key, value FROM settings WHERE key IN ('panel_name', 'panel_logo')`;
   const map = Object.fromEntries(rows.map((r: any) => [r.key, r.value]));
