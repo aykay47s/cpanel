@@ -485,6 +485,7 @@ async function enterApp() {
   if (fresh) { me = { ...me, ...fresh }; localStorage.setItem('dispatch_me', JSON.stringify(me)); }
   connectEvents();
   refreshNotifBadge();
+  registerServiceWorker();
   if (me.role === 'admin') {
     document.getElementById('adminApp').classList.remove('hidden');
     switchAdminTab('dashboard');
@@ -495,6 +496,13 @@ async function enterApp() {
     switchStaffTab('home');
   }
   checkFirstLoginTutorial();
+}
+// Registered unconditionally on every login, not just when someone opts into push -
+// an active service worker is also what makes Chrome/Android treat this as a real
+// installable app in the first place, not just a bookmark.
+async function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  try { await navigator.serviceWorker.register('/sw.js'); } catch {}
 }
 function renderStaffNav() {
   const nav = document.getElementById('staffNav');
@@ -821,6 +829,18 @@ function dismissFirstLoginTutorial() {
   if (me) localStorage.setItem('tutorial_seen_' + me.id, '1');
   const modal = document.getElementById('firstLoginTutorial');
   if (modal) modal.remove();
+  if (me && me.role !== 'admin') promptForPushAfterTutorial();
+}
+// Right after the home-screen tutorial, while they're already paying attention -
+// asking cold from a random Profile tab gets ignored, asking right here gets seen.
+async function promptForPushAfterTutorial() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  try {
+    const reg = await navigator.serviceWorker.getRegistration();
+    const existing = reg && await reg.pushManager.getSubscription();
+    if (existing) return; // already subscribed, nothing to do
+    if (typeof togglePush === 'function') await togglePush();
+  } catch {}
 }
 
 // Mobile fix: tapping the Dial button backgrounds the app (native phone UI takes
