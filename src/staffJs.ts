@@ -25,7 +25,7 @@ async function switchStaffTab(tab) {
 let queuePollInterval = null;
 function startQueuePolling() {
   stopQueuePolling();
-  queuePollInterval = setInterval(() => { if (staffTab === 'queue') smoothRerender(renderStaffQueue); }, 12000);
+  queuePollInterval = setInterval(() => { if (staffTab === 'queue') smoothRerender(renderStaffQueue); }, 4000);
 }
 function stopQueuePolling() {
   if (queuePollInterval) { clearInterval(queuePollInterval); queuePollInterval = null; }
@@ -120,7 +120,7 @@ async function renderStaffQueue() {
     if (!me.clocked_in) { body.innerHTML = offlineHtml(); return; }
     const qRes = await api('/api/caller/queue');
     let rows = (await qRes.json()).data;
-    rows = rows.filter(o => !skippedLeadIds.has(o.id));
+    rows = rows.filter(o => !skippedLeadIds.has(o.id) && !recentlyClaimedIds.has(o.id));
     body.innerHTML = rows.length ? rows.map(o => offerCardHtml(o)).join('') : (skippedLeadIds.size ? skippedOnlyHtml() : radarHtml());
   } else if (me.role === 'finisher') {
     const qRes = await api('/api/finisher/queue');
@@ -150,9 +150,11 @@ function startFinishingCall(id) { workingFinisherLeadId = id; renderStaffQueue()
 async function claimLead(id) {
   const card = document.querySelector('[data-lead-id="' + id + '"]');
   if (card) card.style.opacity = '.5'; // instant feedback before the network even responds
+  recentlyClaimedIds.add(id);
+  setTimeout(() => recentlyClaimedIds.delete(id), 15000);
   const res = await api('/api/caller/leads/' + id + '/claim', { method: 'POST' });
   const data = await res.json();
-  if (res.status === 409) { if (card) card.style.opacity = '.4'; renderStaffQueue(); return; }
+  if (res.status === 409) { recentlyClaimedIds.delete(id); if (card) card.style.opacity = '.4'; renderStaffQueue(); return; }
   if (data.claimed && data.data) {
     // Already have the claimed lead's data from the claim response itself — jump
     // straight to the active call screen instead of a redundant re-fetch.

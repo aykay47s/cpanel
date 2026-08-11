@@ -156,6 +156,11 @@ label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spa
 .brand-mark{width:22px;height:22px;border-radius:7px;background:var(--gold);position:relative;flex-shrink:0;overflow:hidden;}
 .topbar-actions{display:flex;gap:8px;align-items:center;}
 .icon-btn{width:38px;height:38px;border-radius:50%;background:var(--s2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;position:relative;color:var(--text-dim);transition:all .12s ease;}
+.clock-toggle{display:flex;align-items:center;gap:8px;padding:9px 16px 9px 12px;border-radius:100px;font-size:12.5px;font-weight:700;font-family:'JetBrains Mono',monospace;letter-spacing:-.01em;background:rgba(255,255,255,.05);border:1px solid var(--border-2);color:var(--text-dim);transition:all .15s ease;}
+.clock-toggle:active{transform:scale(.96);}
+.clock-toggle .clock-dot{width:8px;height:8px;border-radius:50%;background:var(--text-faint);flex-shrink:0;transition:all .15s ease;}
+.clock-toggle.on{background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.35);color:var(--success);}
+.clock-toggle.on .clock-dot{background:var(--success);box-shadow:0 0 0 0 rgba(34,197,94,.55);animation:liveDotPulse 1.8s ease-out infinite;}
 .icon-btn:hover{color:var(--text);border-color:var(--border-2);background:var(--s3);}
 .icon-btn .dot{position:absolute;top:6px;right:6px;width:7px;height:7px;border-radius:50%;background:var(--crimson);}
 
@@ -386,7 +391,7 @@ tr.clickable:active{background:rgba(255,255,255,.05);}
     <div class="brand"><div class="brand-mark"></div>Frap Ties</div>
     <div class="topbar-actions">
       <div class="icon-btn" onclick="toggleNotifPanel()" id="notifBtnStaff">${ICONS_SVG.bell}</div>
-      <button class="btn btn-sm btn-ghost" id="clockBtn" onclick="toggleClock()">Clock In</button>
+      <button class="clock-toggle" id="clockBtn" onclick="toggleClock()"><span class="clock-dot"></span><span id="clockLabel">Clock In</span></button>
     </div>
   </div>
   <div class="staff-body" id="staffBody"></div>
@@ -421,6 +426,7 @@ const ICONS = {
 let me = JSON.parse(localStorage.getItem('dispatch_me') || 'null');
 let pinBuffer = '';
 let es = null;
+let recentlyClaimedIds = new Set();
 let callTimerInterval = null, callStart = null;
 let staffTab = 'home';
 
@@ -523,7 +529,16 @@ function connectEvents() {
   if (es) es.close();
   es = new EventSource('/api/events?uid=' + me.id + '&pin=' + me.pin);
   es.addEventListener('new_lead', () => { if (staffTab === 'queue') renderStaffQueue(); pingNav('queue'); if (me.role==='admin') maybeRefreshAdmin('leads'); });
-  es.addEventListener('lead_claimed', (e) => { const d = JSON.parse(e.data); const card = document.querySelector('[data-lead-id="' + d.id + '"]'); if (card) card.remove(); });
+  es.addEventListener('lead_claimed', (e) => {
+    const d = JSON.parse(e.data);
+    const card = document.querySelector('[data-lead-id="' + d.id + '"]');
+    if (card) card.remove();
+    // A poll request that was already in flight when this claim happened can still
+    // land afterward with a stale response that includes this lead - remembering it
+    // was just claimed stops it from being silently re-added for a few seconds.
+    recentlyClaimedIds.add(d.id);
+    setTimeout(() => recentlyClaimedIds.delete(d.id), 15000);
+  });
   es.addEventListener('lead_updated', () => { if (me.role === 'admin') maybeRefreshAdmin(['dashboard','leads','finishing']); });
   es.addEventListener('announcement', () => { if (staffTab === 'home') renderStaffHome(); if (me.role==='admin') maybeRefreshAdmin('announcements'); });
   es.addEventListener('chat_message', (e) => { const d = JSON.parse(e.data); if (staffTab === 'chat' || (me.role==='admin' && currentAdminTab==='chat')) appendChatMessage(d); else pingNav('chat'); });
@@ -602,9 +617,10 @@ async function markAllRead() {
 let clockDurationInterval;
 async function updateClockBtn() {
   const btn = document.getElementById('clockBtn');
+  const label = document.getElementById('clockLabel');
   clearInterval(clockDurationInterval);
   if (me.clocked_in) {
-    btn.className = 'btn btn-sm btn-teal';
+    btn.classList.add('on');
     let clockedInAt;
     try {
       const res = await api('/api/clock/status');
@@ -614,13 +630,13 @@ async function updateClockBtn() {
     const tick = () => {
       const s = Math.max(0, Math.floor((Date.now() - clockedInAt) / 1000));
       const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60;
-      btn.textContent = 'Clocked In — ' + String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0') + ':' + String(ss).padStart(2, '0');
+      label.textContent = String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0') + ':' + String(ss).padStart(2, '0');
     };
     tick();
     clockDurationInterval = setInterval(tick, 1000);
   } else {
-    btn.textContent = 'Clock In';
-    btn.className = 'btn btn-sm btn-ghost';
+    label.textContent = 'Clock In';
+    btn.classList.remove('on');
   }
 }
 async function toggleClock() {
@@ -702,11 +718,11 @@ function avatarColor(seed) {
 // Single shared avatar renderer used everywhere a person needs a picture: a real
 // uploaded photo when set, otherwise a colored initials circle — no emoji.
 function avatarHtml(person, size) {
-  if (person && person.pfp_data) return '<img src="' + person.pfp_data + '" style="width:' + size + 'px;height:' + size + 'px;border-radius:50%;object-fit:cover;flex-shrink:0;" />';
+  if (person && person.pfp_data) return '<img src="' + person.pfp_data + '" style="width:' + size + 'px;height:' + size + 'px;border-radius:50%;object-fit:cover;flex-shrink:0;box-shadow:0 0 0 2px rgba(255,255,255,.08), 0 2px 6px rgba(0,0,0,.3);" />';
   const name = person ? (person.name || fullName(person)) : '';
   const color = avatarColor((person && person.id) || name);
   const fontSize = Math.round(size * 0.4);
-  return '<div style="width:' + size + 'px;height:' + size + 'px;border-radius:50%;background:' + color + ';display:flex;align-items:center;justify-content:center;font-size:' + fontSize + 'px;font-weight:700;color:#fff;flex-shrink:0;letter-spacing:-.02em;">' + initials(name) + '</div>';
+  return '<div style="width:' + size + 'px;height:' + size + 'px;border-radius:50%;background:' + color + ';display:flex;align-items:center;justify-content:center;font-size:' + fontSize + 'px;font-weight:700;color:#fff;flex-shrink:0;letter-spacing:-.02em;box-shadow:0 0 0 2px rgba(255,255,255,.08), 0 2px 6px rgba(0,0,0,.3);">' + initials(name) + '</div>';
 }
 
 // Shared lead-category badge (used on both the admin leads table and caller-facing
