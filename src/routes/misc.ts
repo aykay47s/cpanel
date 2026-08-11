@@ -6,6 +6,18 @@ import { VAPID_PUBLIC_KEY, saveSubscription, removeSubscription } from '../push'
 
 export const misc = new Hono();
 
+misc.get('/api/admin/telephony-config', requireRole('admin'), async (c) => {
+  const [row] = await sql`SELECT value FROM settings WHERE key = 'telephony_config'`;
+  return c.json({ data: row ? JSON.parse(row.value) : null });
+});
+misc.post('/api/admin/telephony-config', requireRole('admin'), async (c) => {
+  const body = await c.req.json().catch(() => null);
+  if (!body) return c.json({ error: 'Invalid config' }, 400);
+  if (body.hold_music_url && body.hold_music_url.length > 2000000) return c.json({ error: 'Audio file too large' }, 400);
+  await sql`INSERT INTO settings (key, value) VALUES ('telephony_config', ${JSON.stringify(body)}) ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(body)}`;
+  return c.json({ ok: true });
+});
+
 misc.get('/api/branding', async (c) => {
   const rows = await sql`SELECT key, value FROM settings WHERE key IN ('panel_name', 'panel_logo')`;
   const map = Object.fromEntries(rows.map((r: any) => [r.key, r.value]));

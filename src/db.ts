@@ -189,6 +189,18 @@ export async function ensureDb() {
   if (!brandRow) {
     await sql`INSERT INTO settings (key, value) VALUES ('panel_name', 'FRPTS') ON CONFLICT (key) DO NOTHING`;
   }
+  const [telRow] = await sql`SELECT 1 FROM settings WHERE key = 'telephony_config'`;
+  if (!telRow) {
+    const defaultTelephony = JSON.stringify({
+      menu_options: [
+        { digit: '1', label: 'Sales' },
+        { digit: '2', label: 'Support' },
+      ],
+      hold_music_url: null,
+      ring_behavior: 'keep_ringing',
+    });
+    await sql`INSERT INTO settings (key, value) VALUES ('telephony_config', ${defaultTelephony}) ON CONFLICT (key) DO NOTHING`;
+  }
   const [catRow] = await sql`SELECT 1 FROM lead_categories LIMIT 1`;
   if (!catRow) {
     await sql`INSERT INTO lead_categories (name, color) VALUES

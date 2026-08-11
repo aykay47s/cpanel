@@ -56,7 +56,12 @@ body{
   font-size:14px;line-height:1.5;letter-spacing:-.006em;
 }
 .app-shell{
-  margin:18px; border-radius:26px; overflow:hidden; background:var(--bg);
+  margin:18px; border-radius:26px; overflow:hidden;
+  background:
+    radial-gradient(ellipse 70% 50% at 10% 0%, rgba(124,92,255,.16), transparent 55%),
+    radial-gradient(ellipse 60% 45% at 100% 15%, rgba(79,140,255,.13), transparent 55%),
+    radial-gradient(ellipse 55% 50% at 30% 100%, rgba(45,212,191,.09), transparent 60%),
+    var(--bg);
   box-shadow:0 2px 8px rgba(0,0,0,.3), 0 24px 64px rgba(0,0,0,.5);
   min-height:calc(100vh - 36px); min-height:calc(100dvh - 36px);
 }
@@ -79,9 +84,11 @@ a{color:inherit;text-decoration:none;}
 
 button{font-family:'Inter',sans-serif;cursor:pointer;border:none;outline:none;transition:all .12s ease;}
 .panel{
-  background:var(--s1);
-  border:1px solid var(--border); border-radius:20px;
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.04), 0 2px 4px rgba(0,0,0,.3), 0 12px 28px rgba(0,0,0,.34), 0 24px 56px rgba(0,0,0,.22);
+  background:rgba(255,255,255,.045);
+  backdrop-filter:blur(24px) saturate(1.4);
+  -webkit-backdrop-filter:blur(24px) saturate(1.4);
+  border:1px solid rgba(255,255,255,.09); border-radius:20px;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.07), 0 2px 4px rgba(0,0,0,.3), 0 12px 28px rgba(0,0,0,.34), 0 24px 56px rgba(0,0,0,.22);
   transition:border-color .15s ease, box-shadow .15s ease, transform .15s ease;
 }
 .panel-inset{background:var(--bg-2);border:1px solid var(--border);border-radius:14px;}
@@ -98,7 +105,7 @@ button{font-family:'Inter',sans-serif;cursor:pointer;border:none;outline:none;tr
 .btn-ghost:hover{color:var(--text);border-color:rgba(255,255,255,.26);}
 .btn-block{width:100%;}
 .btn-sm{padding:8px 14px;font-size:12px;border-radius:8px;}
-input,select,textarea{width:100%;padding:12px 16px;border-radius:14px;border:1px solid var(--border-2);background:var(--bg-2);color:var(--text);font-size:16px;outline:none;font-family:inherit;-webkit-appearance:none;appearance:none;transition:border-color .12s ease, box-shadow .12s ease;}
+input,select,textarea{width:100%;padding:12px 16px;border-radius:14px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);color:var(--text);font-size:16px;outline:none;font-family:inherit;-webkit-appearance:none;appearance:none;transition:border-color .12s ease, box-shadow .12s ease;}
 input:focus,select:focus,textarea:focus{border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-glow);}
 label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.7px;display:block;margin-bottom:7px;font-weight:600;}
 .field{margin-bottom:15px;}
@@ -139,7 +146,7 @@ label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spa
 .login-error{color:var(--danger);font-size:12.5px;margin-top:12px;min-height:16px;}
 
 /* ---------- Shell layout ---------- */
-.topbar{position:sticky;top:0;z-index:60;display:flex;justify-content:space-between;align-items:center;padding:calc(16px + env(safe-area-inset-top)) 22px 16px;background:rgba(10,10,12,.85);backdrop-filter:blur(20px) saturate(1.4);border-bottom:1px solid var(--border);}
+.topbar{position:sticky;top:0;z-index:60;display:flex;justify-content:space-between;align-items:center;padding:calc(16px + env(safe-area-inset-top)) 22px 16px;background:rgba(255,255,255,.03);backdrop-filter:blur(24px) saturate(1.4);-webkit-backdrop-filter:blur(24px) saturate(1.4);border-bottom:1px solid rgba(255,255,255,.08);}
 .brand{font-family:'Manrope',sans-serif;font-weight:800;font-size:15.5px;display:flex;align-items:center;gap:10px;letter-spacing:-.02em;}
 .brand-mark{width:22px;height:22px;border-radius:7px;background:var(--gold);position:relative;flex-shrink:0;overflow:hidden;}
 .topbar-actions{display:flex;gap:8px;align-items:center;}
@@ -149,7 +156,7 @@ label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spa
 
 /* Admin: sidebar */
 .admin-shell{display:flex;min-height:100vh;min-height:100dvh;}
-.admin-sidebar{width:236px;flex-shrink:0;background:var(--bg-2);border-right:1px solid var(--border);padding:20px 14px;position:sticky;top:0;height:100vh;height:100dvh;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+.admin-sidebar{width:236px;flex-shrink:0;background:rgba(255,255,255,.02);backdrop-filter:blur(24px) saturate(1.3);-webkit-backdrop-filter:blur(24px) saturate(1.3);border-right:1px solid rgba(255,255,255,.08);padding:20px 14px;position:sticky;top:0;height:100vh;height:100dvh;overflow-y:auto;-webkit-overflow-scrolling:touch;}
 .side-link{display:flex;align-items:center;gap:11px;padding:9px 12px;border-radius:8px;font-size:13px;font-weight:500;color:var(--text-dim);cursor:pointer;margin-bottom:1px;transition:background .1s ease, color .1s ease;}
 .side-link:hover{background:var(--s2);color:var(--text);}
 .side-link.active{background:#fff;color:#0a0a0c;font-weight:600;}
@@ -352,6 +359,7 @@ tr.clickable:active{background:rgba(255,255,255,.05);}
       <div class="side-link" data-tab="template" onclick="switchAdminTab('template')">${ICONS_SVG.doc} Call Template</div>
       <div class="side-link" data-tab="categories" onclick="switchAdminTab('categories')">${ICONS_SVG.flag} Lead Categories</div>
       <div class="side-link" data-tab="branding" onclick="switchAdminTab('branding')">${ICONS_SVG.gear} Branding</div>
+      <div class="side-link" data-tab="telephony" onclick="switchAdminTab('telephony')">${ICONS_SVG.bell} Call Routing</div>
       <div class="side-link" onclick="logout()" style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px;">${ICONS_SVG.exit} Exit</div>
     </div>
     <div class="admin-main">

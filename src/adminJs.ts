@@ -24,6 +24,7 @@ async function renderAdminTab(tab) {
     if (tab === 'categories') return await renderAdminCategories(el);
     if (tab === 'leaderboard') return await renderAdminLeaderboard(el);
     if (tab === 'branding') return await renderAdminBranding(el);
+    if (tab === 'telephony') return await renderAdminTelephony(el);
   } catch (err) {
     console.error('Tab render failed:', tab, err);
     el.innerHTML = '<div class="panel p fade-up" style="text-align:center;"><div style="font-size:14px;margin-bottom:10px;">Something went wrong loading this.</div><div style="font-size:12px;color:var(--text-dim);margin-bottom:14px;">' + esc(String(err && err.message || err)) + '</div><button class="btn btn-gold" onclick="renderAdminTab(\\'' + tab + '\\')">Retry</button></div>';
@@ -598,6 +599,88 @@ async function saveBranding() {
   pendingBrandLogo = null;
   const status = document.getElementById('brandStatus');
   status.textContent = 'Saved - reload to see it everywhere ✓';
+  status.style.color = 'var(--success)';
+}
+
+async function renderAdminTelephony(el) {
+  const res = await api('/api/admin/telephony-config');
+  const cfg = (await res.json()).data || { menu_options: [], hold_music_url: null, ring_behavior: 'keep_ringing' };
+  window._telephonyConfig = cfg;
+  window._telephonyEl = el;
+  renderTelephonyLocal();
+}
+function renderTelephonyLocal() {
+  const el = window._telephonyEl;
+  const cfg = window._telephonyConfig;
+  el.innerHTML = \`
+    <div class="panel p fade-up" style="border-color:var(--gold-glow);">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+        <span class="badge important">Coming Soon</span>
+        <div class="section-title" style="margin:0;">Inbound Call Routing</div>
+      </div>
+      <p style="font-size:12.5px;color:var(--text-dim);line-height:1.6;">
+        This configures how inbound calls to your business number get handled, but it isn't live yet - it needs a connected phone number through a telephony provider (Twilio) to actually receive calls. You can set everything up now so it's ready the moment that's connected.
+      </p>
+      <p style="font-size:12.5px;color:var(--text-dim);line-height:1.6;margin-top:10px;">
+        <b style="color:var(--text);">How it'll work:</b> a caller dials your number → hears your menu and picks an option → hears your hold music while the system finds an available caller → the call gets bridged straight to that caller's phone, ringing them until they pick up.
+      </p>
+    </div>
+
+    <div class="panel p fade-up">
+      <div class="section-title" style="margin-top:0;">Menu Options</div>
+      <p style="font-size:12px;color:var(--text-dim);margin-bottom:12px;">What callers hear and can press. Each option routes to a different team or queue once this is live.</p>
+      <div id="menuOptionsList">\${cfg.menu_options.map((o, i) => \`<div class="row-flex" style="margin-bottom:8px;" data-menu-row="\${i}">
+        <div class="field" style="max-width:70px;"><label>Press</label><input value="\${esc(o.digit)}" maxlength="1" onchange="updateMenuOption(\${i}, 'digit', this.value)" /></div>
+        <div class="field"><label>Routes To</label><input value="\${esc(o.label)}" placeholder="e.g. Sales" onchange="updateMenuOption(\${i}, 'label', this.value)" /></div>
+        <button class="btn btn-danger btn-sm" style="align-self:flex-end;margin-bottom:13px;" onclick="removeMenuOption(\${i})">Remove</button>
+      </div>\`).join('')}</div>
+      <button class="btn btn-ghost btn-sm" onclick="addMenuOption()">+ Add Option</button>
+    </div>
+
+    <div class="panel p fade-up">
+      <div class="section-title" style="margin-top:0;">Hold Music</div>
+      <p style="font-size:12px;color:var(--text-dim);margin-bottom:12px;">Plays to the caller while the system looks for an available caller to bridge them to.</p>
+      <div style="display:flex;align-items:center;gap:12px;">
+        <label class="btn btn-ghost btn-sm" style="cursor:pointer;">Upload Audio<input type="file" accept="audio/*" id="holdMusicFile" style="display:none;" onchange="handleHoldMusicUpload(event)" /></label>
+        <span id="holdMusicStatus" style="font-size:12px;color:var(--text-dim);">\${cfg.hold_music_url ? 'Audio uploaded' : 'No audio uploaded yet'}</span>
+      </div>
+    </div>
+
+    <div class="panel p fade-up">
+      <div class="section-title" style="margin-top:0;">When No One's Available</div>
+      <p style="font-size:12px;color:var(--text-dim);">Set to keep ringing/holding until a caller picks up - no voicemail fallback for now.</p>
+      <div class="badge" style="margin-top:6px;">Keep ringing until answered</div>
+    </div>
+
+    <button class="btn btn-gold btn-block" onclick="saveTelephonyConfig()">Save Configuration</button>
+    <div id="telephonyStatus" style="font-size:12px;margin-top:10px;text-align:center;"></div>
+  \`;
+}
+function addMenuOption() {
+  window._telephonyConfig.menu_options.push({ digit: String(window._telephonyConfig.menu_options.length + 1), label: '' });
+  renderTelephonyLocal();
+}
+function removeMenuOption(i) {
+  window._telephonyConfig.menu_options.splice(i, 1);
+  renderTelephonyLocal();
+}
+function updateMenuOption(i, field, value) {
+  window._telephonyConfig.menu_options[i][field] = value;
+}
+function handleHoldMusicUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    window._telephonyConfig.hold_music_url = e.target.result;
+    document.getElementById('holdMusicStatus').textContent = 'Audio uploaded (' + file.name + ')';
+  };
+  reader.readAsDataURL(file);
+}
+async function saveTelephonyConfig() {
+  await api('/api/admin/telephony-config', { method: 'POST', body: JSON.stringify(window._telephonyConfig) });
+  const status = document.getElementById('telephonyStatus');
+  status.textContent = 'Saved - ready for when a number is connected';
   status.style.color = 'var(--success)';
 }
 `;
