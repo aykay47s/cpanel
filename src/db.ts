@@ -210,6 +210,7 @@ export async function ensureDb() {
     `ALTER TABLE leads ADD COLUMN IF NOT EXISTS merged_into_id INTEGER`,
     `ALTER TABLE leads ADD COLUMN IF NOT EXISTS phone_e164 TEXT`,
     `ALTER TABLE leads ADD COLUMN IF NOT EXISTS extra_info TEXT`,
+    `ALTER TABLE leads ADD COLUMN IF NOT EXISTS date_of_birth DATE`,
     `ALTER TABLE announcements ADD COLUMN IF NOT EXISTS important BOOLEAN NOT NULL DEFAULT false`,
     `ALTER TABLE announcements ADD COLUMN IF NOT EXISTS target_role TEXT NOT NULL DEFAULT 'all'`,
     `ALTER TABLE announcements ADD COLUMN IF NOT EXISTS created_by INTEGER REFERENCES users(id)`,
@@ -331,6 +332,6 @@ export async function ensureDb() {
 }
 
 export const LEAD_STATUSES = [
-  'not_called', 'calling', 'active_call', 'call_ended', 'successful_call',
+  'vaulted', 'not_called', 'calling', 'active_call', 'call_ended', 'successful_call',
   'assigned_to_finisher', 'ready_for_finishing', 'completed', 'failed', 'requires_review',
 ] as const;

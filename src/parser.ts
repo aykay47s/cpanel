@@ -123,6 +123,7 @@ export interface ParsedLead {
   email: string | null;
   address: string | null;
   notes: string | null;
+  date_of_birth: string | null;
 }
 
 // Detects the delimiter style (pipe, comma, tab) and normalizes into structured rows,
@@ -190,29 +191,44 @@ function parseDelimited(lines: string[], delim: string): ParsedLead[] {
   for (let i = startIdx; i < lines.length; i++) {
     const cells = lines[i].split(delim).map(c => c.trim()).filter(c => c !== '');
     let first_name: string | null = null, last_name: string | null = null;
-    let phone: string | null = null, email: string | null = null, address: string | null = null;
+    let phone: string | null = null, email: string | null = null, address: string | null = null, dob: string | null = null;
     const leftovers: string[] = [];
     for (const cell of cells) {
       const { phone: cellPhone } = extractPhone(cell);
       if (!phone && cellPhone) { phone = cellPhone; continue; }
       if (!email && EMAIL_RE.test(cell)) { email = cell.match(EMAIL_RE)![0]; continue; }
+      if (!dob) { const d = tryParseDob(cell); if (d) { dob = d; continue; } }
       if (!address && STREET_WORDS.test(cell) && /\d/.test(cell)) { address = cell; continue; }
       if (!first_name && !/\d/.test(cell) && NAME_RE.test(cell)) {
         const [f, l] = splitName(cell); first_name = f; last_name = l; continue;
       }
       leftovers.push(cell);
     }
-    if (phone) leads.push({ first_name, last_name, phone, email, address, notes: leftovers.join(' ') || null });
+    if (phone) leads.push({ first_name, last_name, phone, email, address, notes: leftovers.join(' ') || null, date_of_birth: dob });
   }
   return leads;
 }
 
-function classifyToken(token: string, isCell: boolean = true): { type: 'phone' | 'email' | 'address' | 'name' | 'notes'; value: string } {
+const DOB_RE = /^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})$/;
+function tryParseDob(trimmed: string): string | null {
+  const m = trimmed.match(DOB_RE);
+  if (!m) return null;
+  const day = parseInt(m[1], 10), month = parseInt(m[2], 10), year = parseInt(m[3], 10);
+  const thisYear = new Date().getFullYear();
+  // A real date of birth, not some other DD/MM/YYYY-shaped number (day/month order
+  // assumed UK-style since this parser is built around UK lead data throughout).
+  if (day < 1 || day > 31 || month < 1 || month > 12 || year < 1900 || year > thisYear) return null;
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+function classifyToken(token: string, isCell: boolean = true): { type: 'phone' | 'email' | 'address' | 'name' | 'notes' | 'dob'; value: string } {
   const trimmed = token.trim();
   if (!trimmed) return { type: 'notes', value: '' };
   if (EMAIL_RE.test(trimmed) && trimmed.replace(EMAIL_RE, '').trim().length < 3) {
     return { type: 'email', value: trimmed.match(EMAIL_RE)![0] };
   }
+  const dob = tryParseDob(trimmed);
+  if (dob) return { type: 'dob', value: dob };
   const { phone, remainder } = extractPhone(trimmed);
   // For an individual delimited field (a "cell"), a phone-shaped run anywhere in it is
   // overwhelmingly likely to BE the phone field — don't require it to dominate the
@@ -228,12 +244,12 @@ function classifyToken(token: string, isCell: boolean = true): { type: 'phone' |
 
 function parseFreeform(lines: string[]): ParsedLead[] {
   const leads: ParsedLead[] = [];
-  let pending: { name: string | null; address: string | null; email: string | null; notes: string | null } = { name: null, address: null, email: null, notes: null };
+  let pending: { name: string | null; address: string | null; email: string | null; notes: string | null; dob: string | null } = { name: null, address: null, email: null, notes: null, dob: null };
   let open: (ParsedLead & { _rawName: string | null }) | null = null;
   const flush = () => {
     if (open && open.phone) {
       const [f, l] = open._rawName ? splitName(open._rawName) : [null, null];
-      leads.push({ first_name: f, last_name: l, phone: open.phone, email: open.email, address: open.address, notes: open.notes });
+      leads.push({ first_name: f, last_name: l, phone: open.phone, email: open.email, address: open.address, notes: open.notes, date_of_birth: (open as any).date_of_birth || null });
     }
     open = null;
   };
@@ -241,10 +257,12 @@ function parseFreeform(lines: string[]): ParsedLead[] {
     if (!t.value) return;
     if (t.type === 'phone') {
       flush();
-      open = { _rawName: pending.name, phone: t.value, email: pending.email, address: pending.address, notes: pending.notes, first_name: null, last_name: null };
-      pending = { name: null, address: null, email: null, notes: null };
+      open = { _rawName: pending.name, phone: t.value, email: pending.email, address: pending.address, notes: pending.notes, first_name: null, last_name: null, date_of_birth: pending.dob } as any;
+      pending = { name: null, address: null, email: null, notes: null, dob: null };
     } else if (t.type === 'email') {
       if (open) open.email = t.value; else pending.email = t.value;
+    } else if (t.type === 'dob') {
+      if (open) (open as any).date_of_birth = t.value; else pending.dob = t.value;
     } else if (t.type === 'address') {
       if (open) open.address = open.address ? open.address + ', ' + t.value : t.value;
       else pending.address = pending.address ? pending.address + ', ' + t.value : t.value;
@@ -256,7 +274,7 @@ function parseFreeform(lines: string[]): ParsedLead[] {
         pending.name = pending.name + ' ' + t.value;
       } else {
         flush();
-        pending = { name: t.value, address: null, email: null, notes: null };
+        pending = { name: t.value, address: null, email: null, notes: null, dob: null };
       }
     } else {
       if (open) open.notes = open.notes ? open.notes + ' ' + t.value : t.value;

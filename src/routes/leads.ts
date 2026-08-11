@@ -40,8 +40,9 @@ leads.post('/api/admin/leads/import/preview', requireRole('admin'), async (c) =>
 
 leads.post('/api/admin/leads/import/confirm', requireRole('admin'), async (c) => {
   const user = c.get('user');
-  const { leads: rows, source, lead_type } = await c.req.json().catch(() => ({ leads: [] }));
+  const { leads: rows, source, lead_type, to_vault } = await c.req.json().catch(() => ({ leads: [] }));
   if (!Array.isArray(rows) || !rows.length) return bad(c, 'No leads to import');
+  const initialStatus = to_vault ? 'vaulted' : 'not_called';
 
   const existing = await sql`SELECT id, first_name, last_name, phone, phone_e164, email FROM leads WHERE merged_into_id IS NULL AND tenant_id = ${user.tenant_id}`;
   let inserted = 0, flagged = 0;
@@ -50,12 +51,12 @@ leads.post('/api/admin/leads/import/confirm', requireRole('admin'), async (c) =>
     const norm = normalizePhone(r.phone);
     const displayPhone = norm.valid ? norm.display : r.phone;
     const [lead] = await sql`
-      INSERT INTO leads (first_name, last_name, phone, phone_e164, email, address, notes, extra_info, source, lead_type, uploaded_by, tenant_id)
-      VALUES (${r.first_name || null}, ${r.last_name || null}, ${displayPhone}, ${norm.e164}, ${r.email || null}, ${r.address || null}, ${r.notes || null}, ${(r as any).extra_info || null}, ${source || 'import'}, ${lead_type || 'general'}, ${user.id}, ${user.tenant_id})
+      INSERT INTO leads (first_name, last_name, phone, phone_e164, email, address, notes, extra_info, date_of_birth, source, lead_type, uploaded_by, tenant_id, status)
+      VALUES (${r.first_name || null}, ${r.last_name || null}, ${displayPhone}, ${norm.e164}, ${r.email || null}, ${r.address || null}, ${r.notes || null}, ${(r as any).extra_info || null}, ${(r as any).date_of_birth || null}, ${source || 'import'}, ${lead_type || 'general'}, ${user.id}, ${user.tenant_id}, ${initialStatus})
       RETURNING *
     `;
     inserted++;
-    await logEvent(lead.id, 'uploaded', user, null, 'not_called', { source: source || 'import' });
+    await logEvent(lead.id, 'uploaded', user, null, initialStatus, { source: source || 'import', vaulted: !!to_vault });
 
     let bestMatch: { leadId: number; confidence: number; reasons: string[] } | null = null;
     for (const e of existing) {
@@ -68,9 +69,11 @@ leads.post('/api/admin/leads/import/confirm', requireRole('admin'), async (c) =>
       flagged++;
     }
     existing.push({ id: lead.id, first_name: lead.first_name, last_name: lead.last_name, phone: lead.phone, phone_e164: lead.phone_e164, email: lead.email });
-    broadcast('new_lead', lead);
+    // A vaulted lead isn't actually available to anyone yet - no point alerting
+    // callers to a lead they can't take until an admin releases it.
+    if (!to_vault) broadcast('new_lead', lead);
   }
-  if (inserted > 0) {
+  if (inserted > 0 && !to_vault) {
     const name = inserted === 1 ? (rows[0] as ParsedLead).first_name || 'A lead' : `${inserted} leads`;
     await sendPushToRole('caller', 'New lead available', `${name} just came in — first to claim it wins.`, '/');
   }
@@ -109,6 +112,69 @@ leads.post('/api/admin/duplicates/:id/resolve', requireRole('admin'), async (c) 
 });
 
 // ================= ADMIN: LIST / DETAIL =================
+// ================= LEAD VAULT =================
+// Imported leads can go here instead of straight to the live queue - admin controls
+// exactly when (and how many at a time) become callable, useful when leads need
+// reviewing first or should be drip-fed rather than all hitting the queue at once.
+leads.get('/api/admin/vault', requireRole('admin'), async (c) => {
+  const user = c.get('user');
+  const ageGroup = c.req.query('age_group');
+  let ageFilter = sql``;
+  if (ageGroup && ageGroup !== 'all') {
+    const ranges: Record<string, [number, number]> = {
+      '18-25': [18, 25], '26-35': [26, 35], '36-45': [36, 45],
+      '46-55': [46, 55], '56-65': [56, 65], '65+': [65, 150],
+    };
+    const range = ranges[ageGroup];
+    if (range) ageFilter = sql`AND date_of_birth IS NOT NULL AND date_part('year', age(date_of_birth)) BETWEEN ${range[0]} AND ${range[1]}`;
+  }
+  const rows = await sql`SELECT *, CASE WHEN date_of_birth IS NOT NULL THEN date_part('year', age(date_of_birth))::int ELSE NULL END as age
+    FROM leads WHERE status = 'vaulted' AND tenant_id = ${user.tenant_id} ${ageFilter} ORDER BY created_at ASC`;
+  const [ageStats] = await sql`SELECT
+      COUNT(*) FILTER (WHERE date_of_birth IS NOT NULL AND date_part('year', age(date_of_birth)) BETWEEN 18 AND 25)::int as "18-25",
+      COUNT(*) FILTER (WHERE date_of_birth IS NOT NULL AND date_part('year', age(date_of_birth)) BETWEEN 26 AND 35)::int as "26-35",
+      COUNT(*) FILTER (WHERE date_of_birth IS NOT NULL AND date_part('year', age(date_of_birth)) BETWEEN 36 AND 45)::int as "36-45",
+      COUNT(*) FILTER (WHERE date_of_birth IS NOT NULL AND date_part('year', age(date_of_birth)) BETWEEN 46 AND 55)::int as "46-55",
+      COUNT(*) FILTER (WHERE date_of_birth IS NOT NULL AND date_part('year', age(date_of_birth)) BETWEEN 56 AND 65)::int as "56-65",
+      COUNT(*) FILTER (WHERE date_of_birth IS NOT NULL AND date_part('year', age(date_of_birth)) > 65)::int as "65+",
+      COUNT(*) FILTER (WHERE date_of_birth IS NULL)::int as unknown
+    FROM leads WHERE status = 'vaulted' AND tenant_id = ${user.tenant_id}`;
+  return c.json({ data: rows, ageStats });
+});
+
+leads.post('/api/admin/vault/release', requireRole('admin'), async (c) => {
+  const user = c.get('user');
+  const { ids, count, age_group } = await c.req.json().catch(() => ({}));
+  const admin = c.get('user');
+  let targetIds: number[] = [];
+  if (Array.isArray(ids) && ids.length) {
+    targetIds = ids;
+  } else if (count) {
+    // "Release N at a time" - oldest-vaulted-first, optionally within one age group.
+    const ranges: Record<string, [number, number]> = {
+      '18-25': [18, 25], '26-35': [26, 35], '36-45': [36, 45],
+      '46-55': [46, 55], '56-65': [56, 65], '65+': [65, 150],
+    };
+    const range = age_group && ranges[age_group];
+    const rows = range
+      ? await sql`SELECT id FROM leads WHERE status = 'vaulted' AND tenant_id = ${user.tenant_id} AND date_of_birth IS NOT NULL AND date_part('year', age(date_of_birth)) BETWEEN ${range[0]} AND ${range[1]} ORDER BY created_at ASC LIMIT ${count}`
+      : await sql`SELECT id FROM leads WHERE status = 'vaulted' AND tenant_id = ${user.tenant_id} ORDER BY created_at ASC LIMIT ${count}`;
+    targetIds = rows.map((r: any) => r.id);
+  }
+  if (!targetIds.length) return c.json({ released: 0 });
+
+  const released = await sql`UPDATE leads SET status = 'not_called', updated_at = now() WHERE id = ANY(${targetIds}) AND tenant_id = ${user.tenant_id} AND status = 'vaulted' RETURNING *`;
+  for (const lead of released) {
+    await logEvent(lead.id, 'released_from_vault', admin, 'vaulted', 'not_called', {});
+    broadcast('new_lead', lead);
+  }
+  if (released.length) {
+    const name = released.length === 1 ? (released[0].first_name || 'A lead') : `${released.length} leads`;
+    await sendPushToRole('caller', 'New lead available', `${name} just came in — first to claim it wins.`, '/');
+  }
+  return c.json({ released: released.length });
+});
+
 leads.get('/api/admin/leads', requireRole('admin'), async (c) => {
   const user = c.get('user');
   const { status, assigned_caller_id, assigned_finisher_id, search } = c.req.query();

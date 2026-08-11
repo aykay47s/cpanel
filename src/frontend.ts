@@ -358,6 +358,7 @@ tr.clickable:active{background:rgba(255,255,255,.05);}
       <div class="side-sec">Leads</div>
       <div class="side-link" data-tab="leads" onclick="switchAdminTab('leads')">${ICONS_SVG.list} All Leads</div>
       <div class="side-link" data-tab="import" onclick="switchAdminTab('import')">${ICONS_SVG.upload} Import</div>
+      <div class="side-link" data-tab="vault" onclick="switchAdminTab('vault')">${ICONS_SVG.flag} Lead Vault</div>
       <div class="side-link" data-tab="duplicates" onclick="switchAdminTab('duplicates')">${ICONS_SVG.warn} Duplicates</div>
       <div class="side-link" data-tab="finishing" onclick="switchAdminTab('finishing')">${ICONS_SVG.flag} Finishing Queue</div>
       <div class="side-sec">Team</div>
