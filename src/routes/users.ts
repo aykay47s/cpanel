@@ -104,8 +104,17 @@ users.delete('/api/admin/lead-categories/:id', requireRole('admin'), async (c) =
 
 // ================= ADMIN: ROSTER =================
 users.get('/api/admin/users', requireRole('admin'), async (c) => {
-  const rows = await sql`SELECT id, name, pin, role, avatar, pfp_data, xp, clocked_in, status, call_phone, created_at FROM users ORDER BY created_at DESC`;
+  const rows = await sql`SELECT id, name, pin, role, avatar, pfp_data, xp, clocked_in, status, call_phone, inbound_eligible, inbound_priority, created_at FROM users ORDER BY created_at DESC`;
   return c.json({ data: rows });
+});
+
+users.patch('/api/admin/users/:id/inbound-settings', requireRole('admin'), async (c) => {
+  const { inbound_eligible, inbound_priority } = await c.req.json().catch(() => ({}));
+  const id = c.req.param('id');
+  if (inbound_eligible !== undefined) await sql`UPDATE users SET inbound_eligible = ${inbound_eligible} WHERE id = ${id}`;
+  if (inbound_priority !== undefined) await sql`UPDATE users SET inbound_priority = ${inbound_priority} WHERE id = ${id}`;
+  const [row] = await sql`SELECT id, name, inbound_eligible, inbound_priority FROM users WHERE id = ${id}`;
+  return c.json({ data: row });
 });
 
 users.post('/api/admin/users', requireRole('admin'), async (c) => {

@@ -187,6 +187,8 @@ export async function ensureDb() {
     `ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS call_phone TEXT`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS pfp_data TEXT`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS inbound_eligible BOOLEAN DEFAULT true`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS inbound_priority INTEGER DEFAULT 100`,
   ];
   for (const stmt of alters) {
     await sql.unsafe(`DO $$ BEGIN ${stmt}; EXCEPTION WHEN OTHERS THEN NULL; END $$;`);
@@ -213,6 +215,7 @@ export async function ensureDb() {
       ],
       hold_music_url: null,
       ring_behavior: 'keep_ringing',
+      inbound_mode: 'everyone',
       twilio_account_sid: null,
       twilio_phone_number: null,
       twilio_connected: false,

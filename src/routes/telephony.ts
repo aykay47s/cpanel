@@ -17,6 +17,21 @@ async function getPanelName() {
   const [row] = await sql`SELECT value FROM settings WHERE key = 'panel_name'`;
   return row?.value || 'us';
 }
+// Ordered list of who's actually eligible to receive an inbound call right now —
+// respects the admin's "everyone" vs "selected callers only" setting, and calls
+// higher-priority (lower number) callers first.
+async function getEligibleCallers(cfg: any) {
+  const mode = cfg.inbound_mode || 'everyone';
+  return mode === 'selected'
+    ? await sql`SELECT id, call_phone FROM users WHERE role = 'caller' AND clocked_in = true AND call_phone IS NOT NULL AND call_phone != '' AND inbound_eligible = true ORDER BY inbound_priority ASC, id ASC`
+    : await sql`SELECT id, call_phone FROM users WHERE role = 'caller' AND clocked_in = true AND call_phone IS NOT NULL AND call_phone != '' ORDER BY inbound_priority ASC, id ASC`;
+}
+// How many other calls are currently mid-routing (ringing) ahead of this one —
+// used to tell the caller their real position, not a fake number.
+async function getQueuePosition(excludeCallSid: string) {
+  const [row] = await sql`SELECT COUNT(*)::int as n FROM inbound_calls WHERE status = 'ringing' AND twilio_call_sid != ${excludeCallSid}`;
+  return (row?.n || 0) + 1;
+}
 
 // The first thing Twilio hits when someone calls the connected number. Reads the
 // configured menu options and builds the <Gather> prompt dynamically.
@@ -79,10 +94,9 @@ async function routeCall(c: any, digit: string, callSid: string) {
     await sql`UPDATE inbound_calls SET menu_selection = ${label} WHERE twilio_call_sid = ${callSid}`;
   }
 
-  // Available callers to try, in order — everyone clocked in with a call-from
-  // number set. "Keep ringing until answered" means we try them one after another
-  // rather than giving up after one.
-  const callers = await sql`SELECT id, call_phone FROM users WHERE role = 'caller' AND clocked_in = true AND call_phone IS NOT NULL AND call_phone != ''`;
+  // Who's actually eligible to take this call, in priority order — respects the
+  // admin's everyone/selected-callers setting.
+  const callers = await getEligibleCallers(cfg);
 
   if (!callers.length) {
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -93,6 +107,13 @@ async function routeCall(c: any, digit: string, callSid: string) {
     return c.text(twiml, 200, { 'Content-Type': 'text/xml' });
   }
 
+  // Real queue position — how many other calls are currently being routed —
+  // announced only when there's genuinely someone ahead, not a fake reassurance.
+  const position = callSid ? await getQueuePosition(callSid) : 1;
+  const queueSay = position > 1
+    ? `<Say voice="Polly.Amy">You are number ${position} in the queue.</Say>`
+    : '';
+
   const holdSay = cfg.hold_music_url
     ? `<Play>${esc(cfg.hold_music_url)}</Play>`
     : `<Say voice="Polly.Amy">Please hold while we connect you.</Say>`;
@@ -102,6 +123,7 @@ async function routeCall(c: any, digit: string, callSid: string) {
   // this flow with the next caller in the list (see /dial-result below).
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
+  ${queueSay}
   ${holdSay}
   <Dial timeout="20" action="/api/telephony/dial-result?next=1&amp;digit=${encodeURIComponent(digit)}" method="POST">
     <Number>${esc(callers[0].call_phone)}</Number>
@@ -125,7 +147,8 @@ telephony.post('/api/telephony/dial-result', async (c) => {
     return c.text(`<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>`, 200, { 'Content-Type': 'text/xml' });
   }
 
-  const callers = await sql`SELECT id, call_phone FROM users WHERE role = 'caller' AND clocked_in = true AND call_phone IS NOT NULL AND call_phone != ''`;
+  const cfg = await getTelephonyConfig();
+  const callers = await getEligibleCallers(cfg);
   if (nextIndex >= callers.length) {
     const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
@@ -136,7 +159,6 @@ telephony.post('/api/telephony/dial-result', async (c) => {
     return c.text(twiml, 200, { 'Content-Type': 'text/xml' });
   }
 
-  const cfg = await getTelephonyConfig();
   const holdSay = cfg.hold_music_url ? `<Play>${esc(cfg.hold_music_url)}</Play>` : '';
   const twiml = `<?xml version="1.0" encoding="UTF-8"?>
 <Response>

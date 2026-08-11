@@ -620,10 +620,11 @@ async function saveBranding() {
 }
 
 async function renderAdminTelephony(el) {
-  const res = await api('/api/admin/telephony-config');
+  const [res, callersRes] = await Promise.all([api('/api/admin/telephony-config'), api('/api/admin/users')]);
   const cfg = (await res.json()).data || { menu_options: [], hold_music_url: null, ring_behavior: 'keep_ringing' };
   window._telephonyConfig = cfg;
   window._telephonyEl = el;
+  window._telephonyCallers = (await callersRes.json()).data.filter(u => u.role === 'caller');
   renderTelephonyLocal();
 }
 function renderTelephonyLocal() {
@@ -672,6 +673,24 @@ function renderTelephonyLocal() {
       </div>
       <div id="testCallStatus" style="font-size:12px;margin-top:8px;"></div>
     </div>\` : ''}
+
+    <div class="panel p fade-up">
+      <div class="section-title" style="margin-top:0;">Who Takes Inbound Calls</div>
+      <div class="field"><label>Mode</label>
+        <select id="inboundMode" onchange="updateInboundMode(this.value)">
+          <option value="everyone" \${cfg.inbound_mode !== 'selected' ? 'selected' : ''}>Everyone clocked in</option>
+          <option value="selected" \${cfg.inbound_mode === 'selected' ? 'selected' : ''}>Only selected callers below</option>
+        </select>
+      </div>
+      <p style="font-size:11.5px;color:var(--text-dim);margin:6px 0 14px;line-height:1.5;">\${cfg.inbound_mode === 'selected' ? 'Only callers checked below (and clocked in) will ever receive an inbound call.' : 'Any clocked-in caller with a call-from number set can receive an inbound call - the toggles below are ignored in this mode.'}</p>
+      <div class="section-title" style="font-size:10.5px;">Call Order (lower number = called first)</div>
+      \${window._telephonyCallers.map(u => \`<div class="row-flex" style="align-items:center;margin-bottom:8px;">
+        \${cfg.inbound_mode === 'selected' ? '<input type="checkbox" ' + (u.inbound_eligible !== false ? 'checked' : '') + ' onchange="updateCallerInbound(' + u.id + ', this.checked, null)" style="width:auto;margin-right:8px;" />' : ''}
+        \${avatarHtml(u, 26)}
+        <span style="flex:1;margin-left:8px;font-size:13px;">\${esc(u.name)}\${!u.call_phone ? ' <span style="color:var(--danger);font-size:11px;">(no call-from number set)</span>' : ''}</span>
+        <input type="number" value="\${u.inbound_priority ?? 100}" style="width:70px;" onchange="updateCallerInbound(\${u.id}, null, this.value)" />
+      </div>\`).join('') || '<div style="color:var(--text-dim);font-size:12.5px;">No callers yet.</div>'}
+    </div>
 
     \${connected ? \`<div class="panel p fade-up">
       <div class="section-title" style="margin-top:0;">Recent Inbound Calls</div>
@@ -744,6 +763,18 @@ async function connectTwilio() {
   const data = await res.json();
   if (!res.ok) { status.textContent = data.error || 'Connection failed.'; status.style.color = 'var(--danger)'; return; }
   renderAdminTab('telephony');
+}
+function updateInboundMode(value) {
+  window._telephonyConfig.inbound_mode = value;
+  renderTelephonyLocal();
+}
+async function updateCallerInbound(userId, eligible, priority) {
+  const body = {};
+  if (eligible !== null) body.inbound_eligible = eligible;
+  if (priority !== null) body.inbound_priority = parseInt(priority, 10) || 100;
+  await api('/api/admin/users/' + userId + '/inbound-settings', { method: 'PATCH', body: JSON.stringify(body) });
+  const u = window._telephonyCallers.find(c => c.id === userId);
+  if (u) { if (eligible !== null) u.inbound_eligible = eligible; if (priority !== null) u.inbound_priority = body.inbound_priority; }
 }
 async function sendTestCall() {
   const to_number = document.getElementById('testCallNumber').value.trim();
