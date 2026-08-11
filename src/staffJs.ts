@@ -11,6 +11,7 @@ async function switchStaffTab(tab) {
     else if (tab === 'chat') { body.innerHTML = '<div class="fade-up" id="staffChatWrap"></div>'; await renderChatInto(document.getElementById('staffChatWrap')); }
     else if (tab === 'board') await renderStaffBoard();
     else if (tab === 'profile') await renderStaffProfile();
+    body.classList.remove('page-transition'); void body.offsetWidth; body.classList.add('page-transition');
   } catch (err) {
     console.error('Staff tab render failed:', tab, err);
     body.innerHTML = '<div class="panel p fade-up" style="text-align:center;"><div style="font-size:14px;margin-bottom:10px;">Something went wrong loading this.</div><div style="font-size:12px;color:var(--text-dim);margin-bottom:14px;">' + esc(String(err && err.message || err)) + '</div><button class="btn btn-gold" onclick="switchStaffTab(\\'' + tab + '\\')">Retry</button></div>';

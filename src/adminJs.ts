@@ -10,21 +10,22 @@ async function renderAdminTab(tab) {
   const el = document.getElementById('adminContent');
   if (tab !== 'chat') el.innerHTML = '<div class="loading-shimmer"></div><div class="loading-shimmer" style="width:70%;"></div>';
   try {
-    if (tab === 'dashboard') return await renderAdminDashboard(el);
-    if (tab === 'leads') return await renderAdminLeads(el);
-    if (tab === 'import') return await renderAdminImport(el);
-    if (tab === 'duplicates') return await renderAdminDuplicates(el);
-    if (tab === 'finishing') return await renderAdminFinishing(el);
-    if (tab === 'roster') return await renderAdminRoster(el);
-    if (tab === 'chat') { el.innerHTML = '<div class="fade-up" id="adminChatWrap"></div>'; return await renderChatInto(document.getElementById('adminChatWrap')); }
-    if (tab === 'announcements') return await renderAdminAnnouncements(el);
-    if (tab === 'goal') return await renderAdminGoal(el);
-    if (tab === 'scripts') return await renderAdminScripts(el);
-    if (tab === 'template') return await renderAdminTemplate(el);
-    if (tab === 'categories') return await renderAdminCategories(el);
-    if (tab === 'leaderboard') return await renderAdminLeaderboard(el);
-    if (tab === 'branding') return await renderAdminBranding(el);
-    if (tab === 'telephony') return await renderAdminTelephony(el);
+    if (tab === 'dashboard') await renderAdminDashboard(el);
+    else if (tab === 'leads') await renderAdminLeads(el);
+    else if (tab === 'import') await renderAdminImport(el);
+    else if (tab === 'duplicates') await renderAdminDuplicates(el);
+    else if (tab === 'finishing') await renderAdminFinishing(el);
+    else if (tab === 'roster') await renderAdminRoster(el);
+    else if (tab === 'chat') { el.innerHTML = '<div class="fade-up" id="adminChatWrap"></div>'; await renderChatInto(document.getElementById('adminChatWrap')); }
+    else if (tab === 'announcements') await renderAdminAnnouncements(el);
+    else if (tab === 'goal') await renderAdminGoal(el);
+    else if (tab === 'scripts') await renderAdminScripts(el);
+    else if (tab === 'template') await renderAdminTemplate(el);
+    else if (tab === 'categories') await renderAdminCategories(el);
+    else if (tab === 'leaderboard') await renderAdminLeaderboard(el);
+    else if (tab === 'branding') await renderAdminBranding(el);
+    else if (tab === 'telephony') await renderAdminTelephony(el);
+    el.classList.remove('page-transition'); void el.offsetWidth; el.classList.add('page-transition');
   } catch (err) {
     console.error('Tab render failed:', tab, err);
     el.innerHTML = '<div class="panel p fade-up" style="text-align:center;"><div style="font-size:14px;margin-bottom:10px;">Something went wrong loading this.</div><div style="font-size:12px;color:var(--text-dim);margin-bottom:14px;">' + esc(String(err && err.message || err)) + '</div><button class="btn btn-gold" onclick="renderAdminTab(\\'' + tab + '\\')">Retry</button></div>';

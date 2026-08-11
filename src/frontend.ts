@@ -74,6 +74,8 @@ a{color:inherit;text-decoration:none;}
 ::-webkit-scrollbar-thumb{background:var(--border-2);border-radius:3px;}
 
 @keyframes fadeUp{from{opacity:0;transform:translateY(8px);}to{opacity:1;transform:translateY(0);}}
+@keyframes pageIn{from{opacity:0;transform:translateY(14px) scale(.98);}to{opacity:1;transform:translateY(0) scale(1);}}
+.page-transition{animation:pageIn .32s cubic-bezier(.16,1,.3,1) both;}
 @keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
 @keyframes shimmer{0%{background-position:-200% 0;}100%{background-position:200% 0;}}
 .fade-up{animation:fadeUp .3s ease both;}
@@ -92,7 +94,7 @@ button{font-family:'Inter',sans-serif;cursor:pointer;border:none;outline:none;tr
   transition:border-color .15s ease, box-shadow .15s ease, transform .15s ease;
 }
 .panel-inset{background:var(--bg-2);border:1px solid var(--border);border-radius:14px;}
-.btn{padding:12px 22px;border-radius:100px;font-weight:600;font-size:13.5px;background:var(--s3);border:1px solid var(--border-2);color:var(--text);letter-spacing:-.005em;box-shadow:inset 0 1px 0 rgba(255,255,255,.06), 0 1px 2px rgba(0,0,0,.3), 0 4px 10px rgba(0,0,0,.24);}
+.btn{padding:12px 22px;border-radius:100px;font-weight:600;font-size:13.5px;background:var(--s3);border:1px solid var(--border-2);color:var(--text);letter-spacing:-.005em;box-shadow:inset 0 1px 0 rgba(255,255,255,.06), 0 1px 2px rgba(0,0,0,.3), 0 4px 10px rgba(0,0,0,.24);transition:transform .28s cubic-bezier(.34,1.56,.64,1), background .12s ease, box-shadow .15s ease;}
 .btn:hover{background:#323240;border-color:rgba(255,255,255,.26);transform:translateY(-1px);box-shadow:inset 0 1px 0 rgba(255,255,255,.08), 0 2px 4px rgba(0,0,0,.32), 0 8px 18px rgba(0,0,0,.3);}
 .btn:active{transform:translateY(1px) scale(.98);box-shadow:inset 0 1px 3px rgba(0,0,0,.3);}
 .btn-gold{background:linear-gradient(180deg,var(--gold-bright),var(--gold));color:#fff;border:none;font-weight:700;box-shadow:inset 0 1px 0 rgba(255,255,255,.25), 0 2px 4px rgba(0,0,0,.25), 0 8px 20px rgba(79,140,255,.35);}
@@ -185,7 +187,7 @@ label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spa
 .nav-badge{position:absolute;top:2px;right:24%;width:7px;height:7px;border-radius:50%;background:var(--crimson);}
 
 .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:24px;}
-.stat-box{padding:22px 24px;border-radius:20px;}
+.stat-box{padding:18px 20px;border-radius:18px;}
 .stat-box .num{font-size:29px;font-weight:800;font-family:'Space Grotesk',sans-serif;letter-spacing:-.03em;line-height:1.1;}
 .stat-box .lbl{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px;margin-top:5px;font-weight:600;}
 .stat-box.accent{border-color:var(--gold-glow);}
