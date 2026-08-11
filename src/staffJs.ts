@@ -38,7 +38,7 @@ async function renderStaffHome() {
         <div style="flex:1;">
           <div style="font-size:19px;">\${esc(me.name)}</div>
           <div style="display:flex;gap:6px;margin-top:5px;">
-            <span class="badge \${me.role}">\${me.role}</span>
+            \${statusBadge(me.role)}
             <span class="badge" style="background:rgba(139,111,201,.14);color:var(--violet);">Lvl \${level}</span>
             <span class="badge" style="background:rgba(255,255,255,.06);color:var(--text-dim);">Rank #\${myRank}</span>
           </div>
@@ -133,7 +133,7 @@ async function renderActiveCall(body, lead, role) {
   body.innerHTML = \`
     \${template && !isFinisher ? \`<div class="panel p fade-up" style="border-color:var(--gold-glow);"><div class="section-title" style="margin-top:0;">Call Guide</div><div style="font-size:13px;line-height:1.7;white-space:pre-wrap;color:var(--text);">\${esc(template)}</div></div>\` : ''}
     <div class="panel call-card fade-up">
-      <div class="call-status-row"><span class="badge \${lead.status}">\${lead.status.replace(/_/g,' ')}</span><span class="call-timer mono" id="callTimer">00:00</span></div>
+      <div class="call-status-row">\${statusBadge(lead.status)}<span class="call-timer mono" id="callTimer">00:00</span></div>
       <div class="info-row"><span class="k">Name</span><span class="v">\${fullName(lead)}</span></div>
       <div class="info-row"><span class="k">Phone</span><span class="v mono">\${lead.phone}</span></div>
       \${lead.email ? '<div class="info-row"><span class="k">Email</span><span class="v">' + lead.email + '</span></div>' : ''}
@@ -222,7 +222,7 @@ async function renderStaffBoard() {
     <div class="panel p fade-up">
       \${rest.length ? rest.map((r, i) => \`
         <div class="lb-row"><div class="rank">\${i+4}</div>\${avatarHtml(r, 30)}
-          <div class="lb-name" style="margin-left:6px;">\${esc(r.name)}\${r.id===me.id?' <span style="color:var(--gold-bright);">(you)</span>':''} <span class="badge \${r.role}" style="margin-left:4px;">\${r.role}</span></div>
+          <div class="lb-name" style="margin-left:6px;">\${esc(r.name)}\${r.id===me.id?' <span style="color:var(--gold-bright);">(you)</span>':''} \${statusBadge(r.role)}</div>
           <div class="lb-stats"><span><b>\${r.successful_calls||0}</b> success</span><span style="color:var(--violet);"><b>\${r.xp}</b> xp</span></div></div>\`).join('') : (podium.length ? '' : '<div style="color:var(--text-dim);text-align:center;padding:20px;">No one on the board yet.</div>')}
     </div>\`;
 }

@@ -67,7 +67,7 @@ function onCallHtml(rows) {
         <div style="font-size:13px;font-weight:700;">\${esc(r.caller_name)} <span style="color:var(--text-dim);font-weight:500;">→ \${fullName(r)}</span></div>
         <div style="font-size:11px;color:var(--text-dim);" class="mono">\${r.phone} · started \${new Date(r.call_started_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</div>
       </div>
-      <span class="badge \${r.status}">\${r.status === 'active_call' ? 'Live' : 'Dialing'}</span>
+      \${statusBadge(r.status)}
       <span class="mono on-call-timer" data-started="\${r.call_started_at}" style="font-size:13px;color:var(--gold-bright);min-width:48px;text-align:right;">00:00</span>
     </div>\`).join('');
 }
@@ -94,13 +94,30 @@ async function renderAdminLeads(el) {
   const rows = (await res.json()).data;
   callerListCache = (await callersRes.json()).data.filter(u => u.role === 'caller');
   categoryCache = (await catsRes.json()).data;
+  window._allLeadsCache = rows;
+  const PASSED = ['successful_call', 'completed'];
+  const FAILED = ['failed', 'cancelled', 'chopped_previously'];
+  const passedCount = rows.filter(l => PASSED.includes(l.status) || PASSED.includes(l.outcome)).length;
+  const failedCount = rows.filter(l => FAILED.includes(l.status) || FAILED.includes(l.outcome)).length;
+  const OUTCOMES = ['voicemail','no_answer','hung_up','busy','callback_requested','successful_call','failed','requires_review','cancelled','chopped_previously'];
   el.innerHTML = \`
+    <div class="row-flex" style="margin-bottom:14px;gap:10px;">
+      <div class="stat-box panel" style="flex:1;padding:14px 18px;"><div class="num" style="font-size:20px;color:var(--success);" data-count="\${passedCount}">0</div><div class="lbl">Total Passed</div></div>
+      <div class="stat-box panel" style="flex:1;padding:14px 18px;"><div class="num" style="font-size:20px;color:var(--danger);" data-count="\${failedCount}">0</div><div class="lbl">Total Failed</div></div>
+    </div>
     <div class="row-flex fade-up" style="margin-bottom:16px;">
       <div class="field"><input id="leadSearch" placeholder="Search name, phone, email…" oninput="debouncedLeadSearch()" /></div>
-      <select id="leadStatusFilter" style="max-width:220px;" onchange="filterLeadsByStatus()"><option value="">All statuses</option>\${LEAD_STATUSES.map(s => '<option value="' + s + '">' + s.replace(/_/g,' ') + '</option>').join('')}</select>
+      <select id="leadStatusFilter" style="max-width:200px;" onchange="filterLeadsByStatus()"><option value="">All statuses</option>\${LEAD_STATUSES.map(s => '<option value="' + s + '">' + titleCase(s) + '</option>').join('')}</select>
+      <select id="leadOutcomeFilter" style="max-width:200px;" onchange="filterLeadsByOutcome()"><option value="">All outcomes</option>\${OUTCOMES.map(s => '<option value="' + s + '">' + titleCase(s) + '</option>').join('')}</select>
     </div>
     <div class="panel p fade-up"><table><thead><tr><th>Lead</th><th>Category</th><th>Phone</th><th>Status</th><th>Caller</th><th>Finisher</th><th>Uploaded</th><th>Send To</th><th></th></tr></thead>
     <tbody id="leadsTbody">\${rows.map(leadRowHtml).join('')}</tbody></table></div>\`;
+  animateCountUps(el);
+}
+function filterLeadsByOutcome() {
+  const outcome = document.getElementById('leadOutcomeFilter').value;
+  const rows = outcome ? window._allLeadsCache.filter(l => l.outcome === outcome) : window._allLeadsCache;
+  document.getElementById('leadsTbody').innerHTML = rows.map(leadRowHtml).join('');
 }
 let callerListCache = [];
 let categoryCache = [];
@@ -114,7 +131,7 @@ function leadRowHtml(l) {
   const sendCell = l.status === 'not_called'
     ? \`<select onclick="event.stopPropagation()" onchange="event.stopPropagation(); sendLeadToCaller(\${l.id}, this.value)"><option value="">Send to…</option>\${callerListCache.map(c => '<option value="' + c.id + '">' + esc(c.name) + '</option>').join('')}</select>\`
     : '<span style="color:var(--text-faint);">—</span>';
-  return \`<tr class="clickable" data-lead-row="\${l.id}"><td onclick="openLeadDetail(\${l.id})">\${esc(fullName(l))} \${l.dedup_status === 'flagged' ? '<span class="dup-warn">possible dup</span>' : ''}\${l.note_count > 0 ? ' <span class="badge" style="background:rgba(79,140,255,.15);color:var(--gold-bright);" title="' + l.note_count + ' caller note(s)">' + l.note_count + ' note' + (l.note_count === 1 ? '' : 's') + '</span>' : ''}\${l.extra_info ? ' <span class="badge" style="background:rgba(239,68,68,.15);color:var(--danger);" title="Sensitive info was flagged in this import">Sensitive</span>' : ''}</td><td onclick="openLeadDetail(\${l.id})">\${categoryBadge(l.lead_type)}</td><td class="mono" onclick="openLeadDetail(\${l.id})">\${l.phone}</td><td onclick="openLeadDetail(\${l.id})"><span class="badge \${l.status}">\${l.status.replace(/_/g,' ')}</span></td><td onclick="openLeadDetail(\${l.id})">\${l.caller_name || '—'}</td><td onclick="openLeadDetail(\${l.id})">\${l.finisher_name || '—'}</td><td onclick="openLeadDetail(\${l.id})">\${timeAgo(l.created_at)}</td><td>\${sendCell}</td><td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); deleteLead(\${l.id})">Delete</button></td></tr>\`;
+  return \`<tr class="clickable" data-lead-row="\${l.id}"><td onclick="openLeadDetail(\${l.id})">\${esc(fullName(l))} \${l.dedup_status === 'flagged' ? '<span class="dup-warn">possible dup</span>' : ''}\${l.note_count > 0 ? ' <span class="badge" style="background:rgba(79,140,255,.15);color:var(--gold-bright);" title="' + l.note_count + ' caller note(s)">' + l.note_count + ' note' + (l.note_count === 1 ? '' : 's') + '</span>' : ''}\${l.extra_info ? ' <span class="badge" style="background:rgba(239,68,68,.15);color:var(--danger);" title="Sensitive info was flagged in this import">Sensitive</span>' : ''}</td><td onclick="openLeadDetail(\${l.id})">\${categoryBadge(l.lead_type)}</td><td class="mono" onclick="openLeadDetail(\${l.id})">\${l.phone}</td><td onclick="openLeadDetail(\${l.id})">\${statusBadge(l.status)}</td><td onclick="openLeadDetail(\${l.id})">\${l.caller_name || '—'}</td><td onclick="openLeadDetail(\${l.id})">\${l.finisher_name || '—'}</td><td onclick="openLeadDetail(\${l.id})">\${timeAgo(l.created_at)}</td><td>\${sendCell}</td><td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); deleteLead(\${l.id})">Delete</button></td></tr>\`;
 }
 async function sendLeadToCaller(leadId, callerId) {
   if (!callerId) return;
@@ -149,7 +166,7 @@ async function openLeadDetail(id) {
     <div class="panel p fade-up" style="margin-top:14px;">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;">
         <div><h2 style="font-size:24px;">\${esc(fullName(l))}</h2><div style="color:var(--text-dim);font-size:13px;margin-top:4px;" class="mono">\${l.phone}\${l.email ? ' · ' + l.email : ''}</div></div>
-        <span class="badge \${l.status}">\${l.status.replace(/_/g,' ')}</span>
+        \${statusBadge(l.status)}
       </div>
       \${l.address ? '<div class="info-row"><span class="k">Address</span><span class="v">' + esc(l.address) + '</span></div>' : ''}
       <div class="info-row"><span class="k">Uploaded by</span><span class="v">\${l.uploaded_by_name || '—'} · \${timeAgo(l.created_at)}</span></div>
@@ -287,7 +304,7 @@ async function renderAdminFinishing(el) {
   const rows = (await queueRes.json()).data;
   const finishers = (await usersRes.json()).data.filter(u => u.role === 'finisher');
   el.innerHTML = \`<div class="panel p fade-up"><table><thead><tr><th>Lead</th><th>Phone</th><th>Status</th><th>Finisher</th><th>Assign</th></tr></thead>
-    <tbody>\${rows.map(l => \`<tr><td>\${esc(fullName(l))}</td><td class="mono">\${l.phone}</td><td><span class="badge \${l.status}">\${l.status.replace(/_/g,' ')}</span></td><td>\${l.finisher_name || '—'}</td>
+    <tbody>\${rows.map(l => \`<tr><td>\${esc(fullName(l))}</td><td class="mono">\${l.phone}</td><td>\${statusBadge(l.status)}</td><td>\${l.finisher_name || '—'}</td>
       <td><select onchange="assignFinisher(\${l.id}, this.value)"><option value="">Choose…</option>\${finishers.map(f => '<option value="' + f.id + '">' + f.name + '</option>').join('')}</select></td></tr>\`).join('') || '<tr><td colspan="5" style="color:var(--text-dim);">Nothing waiting.</td></tr>'}</tbody></table></div>\`;
 }
 async function assignFinisher(leadId, finisherId) { if (!finisherId) return; await api('/api/admin/leads/' + leadId + '/assign-finisher', { method: 'POST', body: JSON.stringify({ finisherId: Number(finisherId) }) }); renderAdminTab('finishing'); }
@@ -306,9 +323,9 @@ async function renderAdminRoster(el) {
       <div id="newPinBanner"></div>
     </div>
     <div class="panel p fade-up"><table><thead><tr><th></th><th>Name</th><th>PIN</th><th>Role</th><th>Call Number</th><th>XP</th><th>Status</th><th></th></tr></thead>
-    <tbody>\${rows.map(u => \`<tr><td>\${avatarHtml(u, 24)}</td><td>\${esc(u.name)}</td><td class="pin-display">\${u.pin}</td><td><span class="badge \${u.role}">\${u.role}</span></td>
+    <tbody>\${rows.map(u => \`<tr><td>\${avatarHtml(u, 24)}</td><td>\${esc(u.name)}</td><td class="pin-display">\${u.pin}</td><td>\${statusBadge(u.role)}</td>
       <td>\${u.call_phone ? '<span class="blur-phone mono" onclick="this.classList.toggle(\\'revealed\\')">' + esc(u.call_phone) + '</span>' : '<span style="color:var(--text-faint);">—</span>'}</td>
-      <td>\${u.xp}</td><td><span class="badge \${u.status}">\${u.status}</span>\${u.clocked_in ? ' <span class="mono roster-clock-timer" data-uid="' + u.id + '" style="font-size:10.5px;color:var(--gold-bright);"></span>' : ''}</td>
+      <td>\${u.xp}</td><td>\${statusBadge(u.status)}\${u.clocked_in ? ' <span class="mono roster-clock-timer" data-uid="' + u.id + '" style="font-size:10.5px;color:var(--gold-bright);"></span>' : ''}</td>
       <td style="display:flex;gap:6px;"><select onchange="changeRole(\${u.id}, this.value)" style="width:auto;padding:6px 8px;font-size:11px;"><option value="">Change role…</option><option value="caller">Caller</option><option value="finisher">Finisher</option><option value="admin">Admin</option></select><button class="btn btn-ghost btn-sm" onclick="viewClockHistory(\${u.id},'\${esc(u.name)}')">History</button><button class="btn btn-danger btn-sm" onclick="removeUser(\${u.id})">Remove</button></td></tr>\`).join('')}</tbody></table></div>
     <div id="clockHistoryPanel"></div>\`;
   loadRosterClockTimers(rows);
@@ -505,7 +522,7 @@ async function renderAdminLeaderboard(el) {
     </div>\` : '<div class="panel p" style="color:var(--text-dim);">No activity yet.</div>'}
     \${rest.length ? \`<div class="panel p fade-up"><div class="section-title" style="margin-top:0;">Full Board</div>
       \${rest.map((r, i) => \`<div class="lb-row"><div class="rank">\${i+4}</div>\${avatarHtml(r, 30)}
-        <div class="lb-name" style="margin-left:6px;">\${esc(r.name)} <span class="badge \${r.role}" style="margin-left:4px;">\${r.role}</span></div>
+        <div class="lb-name" style="margin-left:6px;">\${esc(r.name)} \${statusBadge(r.role)}</div>
         <div class="lb-stats"><span><b>\${r.successful_calls||0}</b> success</span><span style="color:var(--violet);"><b>\${r.xp}</b> xp</span></div></div>\`).join('')}
     </div>\` : ''}\`;
 }
