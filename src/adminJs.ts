@@ -663,6 +663,11 @@ function renderTelephonyLocal() {
       \`}
     </div>
 
+    \${connected ? \`<div class="panel p fade-up">
+      <div class="section-title" style="margin-top:0;">Recent Inbound Calls</div>
+      <div id="inboundCallsList">Loading…</div>
+    </div>\` : ''}
+
     <div class="panel p fade-up">
       <div class="section-title" style="margin-top:0;">3CX</div>
       <p style="font-size:12px;color:var(--text-dim);line-height:1.6;">3CX is a different kind of system (a PBX you self-host or run through their cloud, not a simple API like Twilio) — connecting it needs a separate integration built specifically for it. Not available yet. If you want this instead of or alongside Twilio, flag it and it can be scoped properly.</p>
@@ -697,6 +702,17 @@ function renderTelephonyLocal() {
     <button class="btn btn-gold btn-block" onclick="saveTelephonyConfig()">Save Configuration</button>
     <div id="telephonyStatus" style="font-size:12px;margin-top:10px;text-align:center;"></div>
   \`;
+  if (connected) loadInboundCalls();
+}
+async function loadInboundCalls() {
+  const res = await api('/api/admin/inbound-calls');
+  const rows = (await res.json()).data;
+  const list = document.getElementById('inboundCallsList');
+  if (!list) return;
+  list.innerHTML = rows.length ? rows.map(r => \`<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border);">
+    <div><div style="font-size:13px;font-weight:600;" class="mono">\${esc(r.from_number || 'Unknown')}</div><div style="font-size:11px;color:var(--text-dim);">\${r.menu_selection ? esc(r.menu_selection) + ' · ' : ''}\${timeAgo(r.created_at)}</div></div>
+    \${statusBadge(r.status)}
+  </div>\`).join('') : '<div style="color:var(--text-dim);font-size:12.5px;">No calls yet.</div>';
 }
 async function connectTwilio() {
   const account_sid = document.getElementById('twilioSid').value.trim();

@@ -125,6 +125,8 @@ label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spa
 .badge.important{background:#4f8cff;color:#fff;}
 .badge.voicemail,.badge.no_answer,.badge.hung_up,.badge.busy{background:#3a3a44;color:#d4d4dc;}
 .badge.callback_requested{background:#a78bfa;color:#1a1025;}
+.badge.ringing,.badge.in-progress{background:#4f8cff;color:#fff;}
+.badge.missed,.badge.no-answer{background:#ef4444;color:#fff;}
 
 /* icons (inline SVG line-icon set) */
 .ic{width:17px;height:17px;display:inline-block;vertical-align:-3px;stroke:currentColor;stroke-width:1.7;fill:none;stroke-linecap:round;stroke-linejoin:round;}

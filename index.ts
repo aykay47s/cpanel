@@ -7,6 +7,7 @@ import { notifications } from './src/routes/notifications';
 import { announcements } from './src/routes/announcements';
 import { scripts } from './src/routes/scripts';
 import { misc } from './src/routes/misc';
+import { telephony } from './src/routes/telephony';
 import { page } from './src/frontend';
 
 const app = new Hono();
@@ -37,6 +38,7 @@ app.route('/', notifications);
 app.route('/', announcements);
 app.route('/', scripts);
 app.route('/', misc);
+app.route('/', telephony);
 
 app.get('/sw.js', async (c) => {
   const file = Bun.file('./public/sw.js');

@@ -70,6 +70,21 @@ export async function ensureDb() {
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`;
 
+  // Inbound calls received through a connected Twilio number — logged whether
+  // answered, missed, or abandoned in the menu, so admins have visibility even
+  // before this becomes a full call center feature.
+  await sql`CREATE TABLE IF NOT EXISTS inbound_calls (
+    id SERIAL PRIMARY KEY,
+    twilio_call_sid TEXT UNIQUE,
+    from_number TEXT,
+    menu_selection TEXT,
+    routed_to_user_id INTEGER REFERENCES users(id),
+    status TEXT DEFAULT 'ringing',
+    duration_seconds INTEGER,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    ended_at TIMESTAMPTZ
+  )`;
+
   await sql`CREATE TABLE IF NOT EXISTS duplicate_flags (
     id SERIAL PRIMARY KEY,
     lead_id_a INTEGER REFERENCES leads(id) ON DELETE CASCADE,
