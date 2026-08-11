@@ -322,13 +322,30 @@ async function renderAdminRoster(el) {
       </div>
       <div id="newPinBanner"></div>
     </div>
-    <div class="panel p fade-up"><table><thead><tr><th></th><th>Name</th><th>PIN</th><th>Role</th><th>Call Number</th><th>XP</th><th>Status</th><th></th></tr></thead>
+    <div class="panel p fade-up"><table><thead><tr><th></th><th>Name</th><th>PIN</th><th>Role</th><th>Call Number</th><th>XP</th><th>Clocked</th><th>Right Now</th><th></th></tr></thead>
     <tbody>\${rows.map(u => \`<tr><td>\${avatarHtml(u, 24)}</td><td>\${esc(u.name)}</td><td class="pin-display">\${u.pin}</td><td>\${statusBadge(u.role)}</td>
       <td>\${u.call_phone ? '<span class="blur-phone mono" onclick="this.classList.toggle(\\'revealed\\')">' + esc(u.call_phone) + '</span>' : '<span style="color:var(--text-faint);">—</span>'}</td>
       <td>\${u.xp}</td><td>\${statusBadge(u.status)}\${u.clocked_in ? ' <span class="mono roster-clock-timer" data-uid="' + u.id + '" style="font-size:10.5px;color:var(--gold-bright);"></span>' : ''}</td>
+      <td>\${rightNowBadge(u)}</td>
       <td style="display:flex;gap:6px;"><select onchange="changeRole(\${u.id}, this.value)" style="width:auto;padding:6px 8px;font-size:11px;"><option value="">Change role…</option><option value="caller">Caller</option><option value="finisher">Finisher</option><option value="admin">Admin</option></select><button class="btn btn-ghost btn-sm" onclick="viewClockHistory(\${u.id},'\${esc(u.name)}')">History</button><button class="btn btn-danger btn-sm" onclick="removeUser(\${u.id})">Remove</button></td></tr>\`).join('')}</tbody></table></div>
     <div id="clockHistoryPanel"></div>\`;
   loadRosterClockTimers(rows);
+}
+// What a clocked-in caller is genuinely doing right now, not just "online" - on a
+// call (with who), actively using the app (recent heartbeat), or clocked in but the
+// app hasn't checked in recently (backgrounded, or just sitting idle on a screen
+// that isn't making any requests).
+function rightNowBadge(u) {
+  if (!u.clocked_in) return '<span style="color:var(--text-faint);font-size:12px;">—</span>';
+  if (u.active_lead_status) {
+    const leadName = [u.active_lead_first_name, u.active_lead_last_name].filter(Boolean).join(' ') || 'Unknown';
+    return '<span class="badge calling">On Call</span> <span style="font-size:11px;color:var(--text-dim);">' + esc(leadName) + '</span>';
+  }
+  if (!u.last_seen_at) return '<span class="badge not_called">Away</span>';
+  const secondsAgo = (Date.now() - new Date(u.last_seen_at).getTime()) / 1000;
+  if (secondsAgo < 60) return '<span class="badge successful_call">Active</span>';
+  if (secondsAgo < 300) return '<span class="badge important">Idle</span> <span style="font-size:11px;color:var(--text-dim);">' + Math.round(secondsAgo/60) + 'm</span>';
+  return '<span class="badge not_called">Away</span> <span style="font-size:11px;color:var(--text-dim);">' + Math.round(secondsAgo/60) + 'm</span>';
 }
 let rosterClockInterval;
 async function loadRosterClockTimers(rows) {

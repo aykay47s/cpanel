@@ -104,7 +104,16 @@ users.delete('/api/admin/lead-categories/:id', requireRole('admin'), async (c) =
 
 // ================= ADMIN: ROSTER =================
 users.get('/api/admin/users', requireRole('admin'), async (c) => {
-  const rows = await sql`SELECT id, name, pin, role, avatar, pfp_data, xp, clocked_in, status, call_phone, inbound_eligible, inbound_priority, created_at FROM users ORDER BY created_at DESC`;
+  const rows = await sql`
+    SELECT users.id, users.name, users.pin, users.role, users.avatar, users.pfp_data, users.xp, users.clocked_in, users.status,
+      users.call_phone, users.inbound_eligible, users.inbound_priority, users.created_at, users.last_seen_at,
+      active_lead.first_name as active_lead_first_name, active_lead.last_name as active_lead_last_name, active_lead.status as active_lead_status
+    FROM users
+    LEFT JOIN LATERAL (
+      SELECT first_name, last_name, status FROM leads
+      WHERE assigned_caller_id = users.id AND status IN ('calling','active_call') LIMIT 1
+    ) active_lead ON true
+    ORDER BY users.created_at DESC`;
   return c.json({ data: rows });
 });
 

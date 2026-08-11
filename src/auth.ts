@@ -20,6 +20,12 @@ export async function authenticate(c: Context): Promise<AuthUser | null> {
   const pin = c.req.header('x-user-pin') || c.req.query('pin');
   if (!uid || !pin) return null;
   const [user] = await sql`SELECT id, name, pin, role, avatar, pfp_data, xp, clocked_in FROM users WHERE id = ${uid} AND pin = ${pin}`;
+  if (user) {
+    // Throttled to at most once per 20s per user regardless of request volume —
+    // this is what actually powers "online and active right now" on the roster,
+    // separate from clocked_in which only changes on an explicit clock in/out.
+    sql`UPDATE users SET last_seen_at = now() WHERE id = ${user.id} AND (last_seen_at IS NULL OR last_seen_at < now() - INTERVAL '20 seconds')`.catch(() => {});
+  }
   return (user as AuthUser) || null;
 }
 
