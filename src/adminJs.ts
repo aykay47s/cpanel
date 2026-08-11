@@ -674,6 +674,13 @@ function renderTelephonyLocal() {
     </div>
 
     <div class="panel p fade-up">
+      <div class="section-title" style="margin-top:0;">Greeting</div>
+      <p style="font-size:12px;color:var(--text-dim);margin-bottom:12px;">What the caller hears named at the start. Leave blank to use your panel name automatically.</p>
+      <div class="field"><label>Say this name</label><input id="greetingName" value="\${esc(cfg.greeting_name || '')}" placeholder="e.g. FRPTS Support" onchange="updateGreetingName(this.value)" /></div>
+      <p style="font-size:11.5px;color:var(--text-faint);margin-top:8px;">Preview: "Thanks for calling \${esc(cfg.greeting_name || '[your panel name]')}\${cfg.menu_options.length ? '. ' + cfg.menu_options.map(o => 'Press ' + esc(o.digit) + ' for ' + esc(o.label) + '.').join(' ') : '. Please hold while we connect you.'}"</p>
+    </div>
+
+    <div class="panel p fade-up">
       <div class="section-title" style="margin-top:0;">Menu Options</div>
       <p style="font-size:12px;color:var(--text-dim);margin-bottom:12px;">What callers hear and can press. Each option routes to a different team or queue once this is live.</p>
       <div id="menuOptionsList">\${cfg.menu_options.map((o, i) => \`<div class="row-flex" style="margin-bottom:8px;" data-menu-row="\${i}">
@@ -741,6 +748,9 @@ function removeMenuOption(i) {
 }
 function updateMenuOption(i, field, value) {
   window._telephonyConfig.menu_options[i][field] = value;
+}
+function updateGreetingName(value) {
+  window._telephonyConfig.greeting_name = value;
 }
 function handleHoldMusicUpload(event) {
   const file = event.target.files[0];

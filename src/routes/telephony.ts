@@ -11,7 +11,11 @@ function esc(s: string) {
 
 async function getTelephonyConfig() {
   const [row] = await sql`SELECT value FROM settings WHERE key = 'telephony_config'`;
-  return row ? JSON.parse(row.value) : { menu_options: [], hold_music_url: null, ring_behavior: 'keep_ringing' };
+  return row ? JSON.parse(row.value) : { menu_options: [], hold_music_url: null, ring_behavior: 'keep_ringing', greeting_name: null };
+}
+async function getPanelName() {
+  const [row] = await sql`SELECT value FROM settings WHERE key = 'panel_name'`;
+  return row?.value || 'us';
 }
 
 // The first thing Twilio hits when someone calls the connected number. Reads the
@@ -27,11 +31,14 @@ telephony.post('/api/telephony/inbound', async (c) => {
     broadcast('inbound_call', { callSid, from });
   }
 
+  // Says whatever name is configured in Call Routing (falls back to the panel
+  // branding name if nothing's set specifically for the phone greeting).
+  const greetingName = cfg.greeting_name || await getPanelName();
   const options = cfg.menu_options || [];
   const promptParts = options.map((o: any) => `Press ${o.digit} for ${o.label}.`).join(' ');
   const prompt = options.length
-    ? `Thanks for calling. ${promptParts}`
-    : `Thanks for calling. Please hold while we connect you.`;
+    ? `Thanks for calling ${greetingName}. ${promptParts}`
+    : `Thanks for calling ${greetingName}. Please hold while we connect you.`;
 
   if (!options.length) {
     // No menu configured — skip straight to finding an available caller.
