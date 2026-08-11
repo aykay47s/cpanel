@@ -131,7 +131,7 @@ function leadRowHtml(l) {
   const sendCell = l.status === 'not_called'
     ? \`<select onclick="event.stopPropagation()" onchange="event.stopPropagation(); sendLeadToCaller(\${l.id}, this.value)"><option value="">Send to…</option>\${callerListCache.map(c => '<option value="' + c.id + '">' + esc(c.name) + '</option>').join('')}</select>\`
     : '<span style="color:var(--text-faint);">—</span>';
-  return \`<tr class="clickable" data-lead-row="\${l.id}"><td onclick="openLeadDetail(\${l.id})">\${esc(fullName(l))} \${l.dedup_status === 'flagged' ? '<span class="dup-warn">possible dup</span>' : ''}\${l.note_count > 0 ? ' <span class="badge" style="background:rgba(79,140,255,.15);color:var(--gold-bright);" title="' + l.note_count + ' caller note(s)">' + l.note_count + ' note' + (l.note_count === 1 ? '' : 's') + '</span>' : ''}\${l.extra_info ? ' <span class="badge" style="background:rgba(239,68,68,.15);color:var(--danger);" title="Sensitive info was flagged in this import">Sensitive</span>' : ''}</td><td onclick="openLeadDetail(\${l.id})">\${categoryBadge(l.lead_type)}</td><td class="mono" onclick="openLeadDetail(\${l.id})">\${l.phone}</td><td onclick="openLeadDetail(\${l.id})">\${statusBadge(l.status)}</td><td onclick="openLeadDetail(\${l.id})">\${l.caller_name || '—'}</td><td onclick="openLeadDetail(\${l.id})">\${l.finisher_name || '—'}</td><td onclick="openLeadDetail(\${l.id})">\${timeAgo(l.created_at)}</td><td>\${sendCell}</td><td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); deleteLead(\${l.id})">Delete</button></td></tr>\`;
+  return \`<tr class="clickable" data-lead-row="\${l.id}"><td onclick="openLeadDetail(\${l.id})">\${esc(fullName(l))} \${l.dedup_status === 'flagged' ? '<span class="dup-warn">possible dup</span>' : ''}\${l.note_count > 0 ? ' <span class="badge" style="background:rgba(79,140,255,.15);color:var(--gold-bright);" title="' + l.note_count + ' caller note(s)">' + l.note_count + ' note' + (l.note_count === 1 ? '' : 's') + '</span>' : ''}</td><td onclick="openLeadDetail(\${l.id})">\${categoryBadge(l.lead_type)}</td><td class="mono" onclick="openLeadDetail(\${l.id})">\${l.phone}</td><td onclick="openLeadDetail(\${l.id})">\${statusBadge(l.status)}</td><td onclick="openLeadDetail(\${l.id})">\${l.caller_name || '—'}</td><td onclick="openLeadDetail(\${l.id})">\${l.finisher_name || '—'}</td><td onclick="openLeadDetail(\${l.id})">\${timeAgo(l.created_at)}</td><td>\${sendCell}</td><td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); deleteLead(\${l.id})">Delete</button></td></tr>\`;
 }
 async function sendLeadToCaller(leadId, callerId) {
   if (!callerId) return;
@@ -173,7 +173,7 @@ async function openLeadDetail(id) {
       <div class="info-row"><span class="k">Caller</span><span class="v">\${l.caller_name || '—'}</span></div>
       <div class="info-row"><span class="k">Finisher</span><span class="v">\${l.finisher_name || '—'}</span></div>
       \${l.notes ? '<div class="info-row"><span class="k">Notes</span><span class="v">' + esc(l.notes) + '</span></div>' : ''}
-      \${l.extra_info ? '<div class="info-row"><span class="k">Sensitive Info</span><span class="v"><span class="blur-phone" onclick="this.classList.toggle(\\'revealed\\')">' + esc(l.extra_info) + '</span></span></div>' : ''}
+      \${l.extra_info ? '<div class="info-row"><span class="k">Card on File</span><span class="v">' + esc(l.extra_info) + '</span></div>' : ''}
       \${l.status === 'requires_review' ? \`<div style="margin-top:16px;display:flex;gap:8px;"><button class="btn btn-teal btn-sm" onclick="overrideStatus(\${l.id},'ready_for_finishing')">Send to Finishing</button><button class="btn btn-ghost btn-sm" onclick="overrideStatus(\${l.id},'not_called')">Reset to Not Called</button><button class="btn btn-danger btn-sm" onclick="overrideStatus(\${l.id},'failed')">Mark Failed</button></div>\` : ''}
     </div>
     <div class="section-title">Caller Notes \${l.callerNotes.length ? '(' + l.callerNotes.length + ')' : ''}</div>
@@ -629,6 +629,7 @@ async function renderAdminTelephony(el) {
 function renderTelephonyLocal() {
   const el = window._telephonyEl;
   const cfg = window._telephonyConfig;
+  const connected = cfg.twilio_connected;
   el.innerHTML = \`
     <div class="panel p fade-up" style="border-color:var(--gold-glow);">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
@@ -636,7 +637,7 @@ function renderTelephonyLocal() {
         <div class="section-title" style="margin:0;">Inbound Call Routing</div>
       </div>
       <p style="font-size:12.5px;color:var(--text-dim);line-height:1.6;">
-        This configures how inbound calls to your business number get handled, but it isn't live yet - it needs a connected phone number through a telephony provider (Twilio) to actually receive calls. You can set everything up now so it's ready the moment that's connected.
+        This configures how inbound calls to your business number get handled. It needs a connected Twilio number to actually receive calls — everything below can be set up now so it's ready the moment that's connected.
       </p>
       <p style="font-size:12.5px;color:var(--text-dim);line-height:1.6;margin-top:10px;">
         <b style="color:var(--text);">How it'll work:</b> a caller dials your number → hears your menu and picks an option → hears your hold music while the system finds an available caller → the call gets bridged straight to that caller's phone, ringing them until they pick up.
@@ -644,11 +645,35 @@ function renderTelephonyLocal() {
     </div>
 
     <div class="panel p fade-up">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+        <div class="section-title" style="margin:0;">Twilio Connection</div>
+        \${connected ? '<span class="badge successful_call">Connected</span>' : '<span class="badge not_called">Not Connected</span>'}
+      </div>
+      <p style="font-size:12px;color:var(--text-dim);margin-bottom:14px;line-height:1.6;">Connect your own Twilio account. This automatically points your number's webhook at this server — no manual setup on Twilio's side needed. Requires: a Twilio account, a phone number purchased on it, the Account SID and Auth Token from your Twilio console.</p>
+      \${connected ? \`
+        <div class="info-row"><span class="k">Account SID</span><span class="v mono">\${esc(cfg.twilio_account_sid || '')}</span></div>
+        <div class="info-row"><span class="k">Number</span><span class="v mono">\${esc(cfg.twilio_phone_number || '')}</span></div>
+        <button class="btn btn-danger btn-sm" style="margin-top:10px;" onclick="disconnectTwilio()">Disconnect</button>
+      \` : \`
+        <div class="field"><label>Account SID</label><input id="twilioSid" placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" /></div>
+        <div class="field"><label>Auth Token</label><input id="twilioToken" type="password" placeholder="Your Twilio Auth Token" /></div>
+        <div class="field"><label>Phone Number</label><input id="twilioPhone" placeholder="+441234567890" /></div>
+        <button class="btn btn-gold btn-block" onclick="connectTwilio()">Connect &amp; Auto-Configure</button>
+        <div id="twilioConnectStatus" style="font-size:12px;margin-top:8px;"></div>
+      \`}
+    </div>
+
+    <div class="panel p fade-up">
+      <div class="section-title" style="margin-top:0;">3CX</div>
+      <p style="font-size:12px;color:var(--text-dim);line-height:1.6;">3CX is a different kind of system (a PBX you self-host or run through their cloud, not a simple API like Twilio) — connecting it needs a separate integration built specifically for it. Not available yet. If you want this instead of or alongside Twilio, flag it and it can be scoped properly.</p>
+    </div>
+
+    <div class="panel p fade-up">
       <div class="section-title" style="margin-top:0;">Menu Options</div>
       <p style="font-size:12px;color:var(--text-dim);margin-bottom:12px;">What callers hear and can press. Each option routes to a different team or queue once this is live.</p>
       <div id="menuOptionsList">\${cfg.menu_options.map((o, i) => \`<div class="row-flex" style="margin-bottom:8px;" data-menu-row="\${i}">
         <div class="field" style="max-width:70px;"><label>Press</label><input value="\${esc(o.digit)}" maxlength="1" onchange="updateMenuOption(\${i}, 'digit', this.value)" /></div>
-        <div class="field"><label>Routes To</label><input value="\${esc(o.label)}" placeholder="e.g. Sales" onchange="updateMenuOption(\${i}, 'label', this.value)" /></div>
+        <div class="field"><label>Routes To</label><input value="\${esc(o.label)}" placeholder="e.g. New Enquiry" onchange="updateMenuOption(\${i}, 'label', this.value)" /></div>
         <button class="btn btn-danger btn-sm" style="align-self:flex-end;margin-bottom:13px;" onclick="removeMenuOption(\${i})">Remove</button>
       </div>\`).join('')}</div>
       <button class="btn btn-ghost btn-sm" onclick="addMenuOption()">+ Add Option</button>
@@ -666,12 +691,29 @@ function renderTelephonyLocal() {
     <div class="panel p fade-up">
       <div class="section-title" style="margin-top:0;">When No One's Available</div>
       <p style="font-size:12px;color:var(--text-dim);">Set to keep ringing/holding until a caller picks up - no voicemail fallback for now.</p>
-      <div class="badge" style="margin-top:6px;">Keep ringing until answered</div>
+      <div class="badge not_called" style="margin-top:6px;">Keep Ringing Until Answered</div>
     </div>
 
     <button class="btn btn-gold btn-block" onclick="saveTelephonyConfig()">Save Configuration</button>
     <div id="telephonyStatus" style="font-size:12px;margin-top:10px;text-align:center;"></div>
   \`;
+}
+async function connectTwilio() {
+  const account_sid = document.getElementById('twilioSid').value.trim();
+  const auth_token = document.getElementById('twilioToken').value.trim();
+  const phone_number = document.getElementById('twilioPhone').value.trim();
+  const status = document.getElementById('twilioConnectStatus');
+  if (!account_sid || !auth_token || !phone_number) { status.textContent = 'All three fields are required.'; status.style.color = 'var(--danger)'; return; }
+  status.textContent = 'Connecting…'; status.style.color = 'var(--text-dim);';
+  const res = await api('/api/admin/telephony-config/connect-twilio', { method: 'POST', body: JSON.stringify({ account_sid, auth_token, phone_number }) });
+  const data = await res.json();
+  if (!res.ok) { status.textContent = data.error || 'Connection failed.'; status.style.color = 'var(--danger)'; return; }
+  renderAdminTab('telephony');
+}
+async function disconnectTwilio() {
+  if (!confirm('Disconnect this Twilio number? Inbound calls will stop routing here.')) return;
+  await api('/api/admin/telephony-config/disconnect-twilio', { method: 'POST' });
+  renderAdminTab('telephony');
 }
 function addMenuOption() {
   window._telephonyConfig.menu_options.push({ digit: String(window._telephonyConfig.menu_options.length + 1), label: '' });

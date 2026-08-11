@@ -109,20 +109,22 @@ input,select,textarea{width:100%;padding:12px 16px;border-radius:14px;border:1px
 input:focus,select:focus,textarea:focus{border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-glow);}
 label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.7px;display:block;margin-bottom:7px;font-weight:600;}
 .field{margin-bottom:15px;}
-.badge{padding:0;font-size:11.5px;font-weight:600;letter-spacing:-.005em;display:inline-flex;align-items:center;gap:5px;line-height:1.6;background:transparent!important;border:none!important;}
-.badge-ic{width:12px;height:12px;flex-shrink:0;display:inline-flex;}
-.badge-ic svg{width:100%;height:100%;}
-.badge.not_called{background:rgba(139,139,147,.1);color:var(--text-dim);border-color:rgba(139,139,147,.25);}
-.badge.calling,.badge.active_call{background:rgba(79,140,255,.1);color:var(--gold-bright);border-color:rgba(79,140,255,.3);}
-.badge.call_ended{background:rgba(167,139,250,.1);color:var(--violet);border-color:rgba(167,139,250,.3);}
-.badge.successful_call,.badge.completed{background:rgba(34,197,94,.1);color:var(--success);border-color:rgba(34,197,94,.3);}
-.badge.ready_for_finishing,.badge.assigned_to_finisher{background:rgba(45,212,191,.1);color:var(--teal);border-color:rgba(45,212,191,.3);}
-.badge.failed{background:rgba(239,68,68,.1);color:var(--danger);border-color:rgba(239,68,68,.3);}
-.badge.requires_review{background:rgba(79,140,255,.14);color:var(--gold-bright);border-color:rgba(79,140,255,.35);}
-.badge.admin{background:rgba(239,68,68,.1);color:#f0958a;border-color:rgba(239,68,68,.28);}
-.badge.caller{background:rgba(255,255,255,.05);color:var(--text-dim);border-color:var(--border-2);}
-.badge.finisher{background:rgba(45,212,191,.1);color:var(--teal);border-color:rgba(45,212,191,.3);}
-.badge.important{background:rgba(79,140,255,.14);color:var(--gold-bright);border-color:var(--gold-glow);}
+.badge{padding:5px 11px;font-size:11px;font-weight:700;letter-spacing:-.005em;display:inline-flex;align-items:center;border-radius:100px;line-height:1.4;}
+.badge-ic{display:none;}
+.badge.not_called{background:#3a3a44;color:#d4d4dc;}
+.badge.calling,.badge.active_call{background:#4f8cff;color:#fff;}
+.badge.call_ended{background:#a78bfa;color:#1a1025;}
+.badge.successful_call,.badge.completed{background:#22c55e;color:#062611;}
+.badge.ready_for_finishing,.badge.assigned_to_finisher{background:#2dd4bf;color:#042e29;}
+.badge.failed{background:#ef4444;color:#2b0605;}
+.badge.cancelled,.badge.chopped_previously{background:#71717a;color:#fff;}
+.badge.requires_review{background:#f59e0b;color:#2e1a02;}
+.badge.admin{background:#ef4444;color:#fff;}
+.badge.caller{background:#4f8cff;color:#fff;}
+.badge.finisher{background:#2dd4bf;color:#042e29;}
+.badge.important{background:#4f8cff;color:#fff;}
+.badge.voicemail,.badge.no_answer,.badge.hung_up,.badge.busy{background:#3a3a44;color:#d4d4dc;}
+.badge.callback_requested{background:#a78bfa;color:#1a1025;}
 
 /* icons (inline SVG line-icon set) */
 .ic{width:17px;height:17px;display:inline-block;vertical-align:-3px;stroke:currentColor;stroke-width:1.7;fill:none;stroke-linecap:round;stroke-linejoin:round;}
@@ -640,7 +642,7 @@ function timeAgo(ts) {
 }
 function esc(s) { return (s || '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
 function fullName(l) { return [l.first_name, l.last_name].filter(Boolean).join(' ') || 'Unknown'; }
-function titleCase(s) { return String(s || '').replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()); }
+function titleCase(s) { return String(s || '').replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase()); }
 const STATUS_ICONS = {
   successful_call: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12l5 5L19 7"/></svg>',
   completed: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12l5 5L19 7"/></svg>',
@@ -664,8 +666,7 @@ const STATUS_ICONS = {
   finisher: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M9 11l3 3L22 4"/><path d="M21 12v6a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h11"/></svg>',
 };
 function statusBadge(status, extraClass) {
-  const icon = STATUS_ICONS[status] || '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><circle cx="12" cy="12" r="4"/></svg>';
-  return '<span class="badge ' + status + (extraClass ? ' ' + extraClass : '') + '"><span class="badge-ic">' + icon + '</span>' + titleCase(status) + '</span>';
+  return '<span class="badge ' + status + (extraClass ? ' ' + extraClass : '') + '">' + titleCase(status) + '</span>';
 }
 function initials(name) {
   const parts = (name || '').trim().split(/\s+/).filter(Boolean);

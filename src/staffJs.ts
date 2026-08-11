@@ -139,6 +139,7 @@ async function renderActiveCall(body, lead, role) {
       \${lead.email ? '<div class="info-row"><span class="k">Email</span><span class="v">' + lead.email + '</span></div>' : ''}
       \${lead.address ? '<div class="info-row"><span class="k">Address</span><span class="v">' + esc(lead.address) + '</span></div>' : ''}
       \${lead.notes ? '<div class="info-row"><span class="k">Notes</span><span class="v" style="white-space:pre-wrap;text-align:left;">' + esc(lead.notes) + '</span></div>' : ''}
+      \${lead.extra_info ? '<div class="info-row"><span class="k">Card on File</span><span class="v">' + esc(lead.extra_info) + '</span></div>' : ''}
       \${!isFinisher ? \`<div class="call-action-row">
         <a class="dial-btn" href="tel:\${lead.phone}">\${ICONS.phone} Dial</a>
         \${lead.status === 'calling' ? '<button class="oncall-btn" onclick="connectCall(' + lead.id + ')">Mark On Call</button>' : '<button class="endcall-btn" style="grid-column:auto;" onclick="endCall(' + lead.id + ')">End Call</button>'}
