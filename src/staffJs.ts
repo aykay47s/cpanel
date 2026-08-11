@@ -4,9 +4,10 @@ async function switchStaffTab(tab) {
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   if (tab === 'queue' || tab === 'chat') clearNavBadge(tab);
   const body = document.getElementById('staffBody');
+  stopQueuePolling();
   try {
     if (tab === 'home') await renderStaffHome();
-    else if (tab === 'queue') await renderStaffQueue();
+    else if (tab === 'queue') { await renderStaffQueue(); startQueuePolling(); }
     else if (tab === 'chat') { body.innerHTML = '<div class="fade-up" id="staffChatWrap"></div>'; await renderChatInto(document.getElementById('staffChatWrap')); }
     else if (tab === 'board') await renderStaffBoard();
     else if (tab === 'profile') await renderStaffProfile();
@@ -14,6 +15,20 @@ async function switchStaffTab(tab) {
     console.error('Staff tab render failed:', tab, err);
     body.innerHTML = '<div class="panel p fade-up" style="text-align:center;"><div style="font-size:14px;margin-bottom:10px;">Something went wrong loading this.</div><div style="font-size:12px;color:var(--text-dim);margin-bottom:14px;">' + esc(String(err && err.message || err)) + '</div><button class="btn btn-gold" onclick="switchStaffTab(\\'' + tab + '\\')">Retry</button></div>';
   }
+}
+// Belt-and-suspenders alongside SSE: mobile browsers frequently suspend an
+// EventSource connection silently (no error event fires) when backgrounded, which
+// left callers staring at a stale queue - leads already taken by someone else never
+// disappeared, and genuinely new leads never appeared. This polls independently of
+// whatever state the SSE connection is actually in, so the queue self-heals within
+// seconds regardless. Only runs while actually on the queue tab.
+let queuePollInterval = null;
+function startQueuePolling() {
+  stopQueuePolling();
+  queuePollInterval = setInterval(() => { if (staffTab === 'queue') smoothRerender(renderStaffQueue); }, 12000);
+}
+function stopQueuePolling() {
+  if (queuePollInterval) { clearInterval(queuePollInterval); queuePollInterval = null; }
 }
 
 async function renderStaffHome() {

@@ -25,6 +25,7 @@ async function renderAdminTab(tab) {
     if (tab === 'leaderboard') return await renderAdminLeaderboard(el);
     if (tab === 'branding') return await renderAdminBranding(el);
     if (tab === 'telephony') return await renderAdminTelephony(el);
+    if (tab === 'master') return await renderMasterControl(el);
   } catch (err) {
     console.error('Tab render failed:', tab, err);
     el.innerHTML = '<div class="panel p fade-up" style="text-align:center;"><div style="font-size:14px;margin-bottom:10px;">Something went wrong loading this.</div><div style="font-size:12px;color:var(--text-dim);margin-bottom:14px;">' + esc(String(err && err.message || err)) + '</div><button class="btn btn-gold" onclick="renderAdminTab(\\'' + tab + '\\')">Retry</button></div>';
@@ -862,5 +863,83 @@ async function saveTelephonyConfig() {
   const status = document.getElementById('telephonyStatus');
   status.textContent = 'Saved - ready for when a number is connected';
   status.style.color = 'var(--success)';
+}
+
+async function renderMasterControl(el) {
+  el.innerHTML = '<div class="panel p">Loading tenants...</div>';
+  const [tenantsRes, liveRes] = await Promise.all([
+    api('/api/master/tenants'),
+    api('/api/master/live-stats'),
+  ]);
+  const tenants = (await tenantsRes.json()).data;
+  const live = (await liveRes.json()).data;
+  const liveById = Object.fromEntries(live.map(l => [l.id, l]));
+
+  const totalRevenue = tenants.reduce((sum, t) => sum + parseFloat(t.price_paid || 0), 0);
+  const totalCallers = live.reduce((sum, l) => sum + (l.callers || 0), 0);
+  const totalManagers = live.reduce((sum, l) => sum + (l.managers || 0), 0);
+  const totalLeads = live.reduce((sum, l) => sum + (l.total_leads || 0), 0);
+
+  el.innerHTML = \`
+    <div class="stat-grid stagger" style="margin-bottom:20px;">
+      <div class="stat-box panel accent"><div class="num" data-count="\${Math.round(totalRevenue)}">0</div><div class="lbl">Total Revenue (£)</div></div>
+      <div class="stat-box panel"><div class="num" data-count="\${tenants.length}">0</div><div class="lbl">Tenants</div></div>
+      <div class="stat-box panel"><div class="num" data-count="\${totalCallers}">0</div><div class="lbl">Total Callers</div></div>
+      <div class="stat-box panel"><div class="num" data-count="\${totalManagers}">0</div><div class="lbl">Total Managers</div></div>
+      <div class="stat-box panel"><div class="num" data-count="\${totalLeads}">0</div><div class="lbl">Total Leads Across All</div></div>
+    </div>
+
+    <div class="panel p fade-up">
+      <div class="section-title" style="margin-top:0;">Add Tenant</div>
+      <p style="font-size:12px;color:var(--text-dim);margin-bottom:12px;">Register a customer instance you've provisioned - a separate deployment with its own database, not shared data.</p>
+      <div class="row-flex">
+        <div class="field"><label>Customer Name</label><input id="tName" placeholder="e.g. Acme Recovery Ltd" /></div>
+        <div class="field"><label>Instance URL</label><input id="tUrl" placeholder="https://acme.up.railway.app" /></div>
+      </div>
+      <div class="row-flex">
+        <div class="field"><label>Plan</label><select id="tPlan"><option value="trial">Trial</option><option value="3day">3 Day - £99</option><option value="7day">7 Day - £180</option><option value="monthly">1 Month - £750</option></select></div>
+        <div class="field"><label>Price Paid (£)</label><input id="tPrice" type="number" value="0" /></div>
+      </div>
+      <div class="field"><label>Notes</label><input id="tNotes" placeholder="Optional" /></div>
+      <button class="btn btn-gold btn-block" onclick="addTenant()">Add Tenant</button>
+      <div id="addTenantStatus" style="font-size:12px;margin-top:8px;"></div>
+    </div>
+
+    <div class="panel p fade-up">
+      <div class="section-title" style="margin-top:0;">All Tenants</div>
+      <table><thead><tr><th>Name</th><th>Plan</th><th>Paid</th><th>Status</th><th>Callers</th><th>Managers</th><th>Leads</th><th>Reachable</th><th></th></tr></thead>
+      <tbody>\${tenants.map(t => {
+        const l = liveById[t.id] || {};
+        return \`<tr>
+          <td>\${esc(t.name)}\${t.is_self ? ' <span class="badge important">You</span>' : ''}</td>
+          <td>\${esc(t.plan)}</td>
+          <td>£\${parseFloat(t.price_paid || 0).toFixed(2)}</td>
+          <td>\${statusBadge(t.status)}</td>
+          <td>\${l.callers ?? '—'}</td>
+          <td>\${l.managers ?? '—'}</td>
+          <td>\${l.total_leads ?? '—'}</td>
+          <td>\${l.reachable ? '<span class="badge successful_call">Online</span>' : '<span class="badge failed">Unreachable</span>'}</td>
+          <td>\${t.is_self ? '' : '<button class="btn btn-danger btn-sm" onclick="deleteTenant(' + t.id + ')">Remove</button>'}</td>
+        </tr>\`;
+      }).join('')}</tbody></table>
+    </div>\`;
+  animateCountUps(el);
+}
+async function addTenant() {
+  const name = document.getElementById('tName').value.trim();
+  const url = document.getElementById('tUrl').value.trim();
+  const plan = document.getElementById('tPlan').value;
+  const price_paid = parseFloat(document.getElementById('tPrice').value) || 0;
+  const notes = document.getElementById('tNotes').value.trim();
+  const status = document.getElementById('addTenantStatus');
+  if (!name || !url) { status.textContent = 'Name and URL are required.'; status.style.color = 'var(--danger)'; return; }
+  const res = await api('/api/master/tenants', { method: 'POST', body: JSON.stringify({ name, url, plan, price_paid, notes }) });
+  if (!res.ok) { status.textContent = 'Failed to add tenant.'; status.style.color = 'var(--danger)'; return; }
+  renderAdminTab('master');
+}
+async function deleteTenant(id) {
+  if (!confirm('Remove this tenant from tracking? This does not delete or affect their actual instance.')) return;
+  await api('/api/master/tenants/' + id, { method: 'DELETE' });
+  renderAdminTab('master');
 }
 `;

@@ -10,7 +10,7 @@ function genPin() { return String(Math.floor(1000 + Math.random() * 9000)); }
 users.post('/api/auth/login', async (c) => {
   const { pin } = await c.req.json().catch(() => ({}));
   if (!pin) return bad(c, 'PIN required');
-  const [user] = await sql`SELECT id, name, pin, role, avatar, pfp_data, xp, clocked_in FROM users WHERE pin = ${pin}`;
+  const [user] = await sql`SELECT id, name, pin, role, avatar, pfp_data, xp, clocked_in, is_super_admin FROM users WHERE pin = ${pin}`;
   if (!user) return bad(c, 'Invalid PIN', 401);
   return c.json({ data: user });
 });
@@ -18,7 +18,7 @@ users.post('/api/auth/login', async (c) => {
 users.get('/api/me', async (c) => {
   const user = await authenticate(c);
   if (!user) return bad(c, 'Unauthorized', 401);
-  const [fresh] = await sql`SELECT id, name, pin, role, avatar, pfp_data, xp, clocked_in, notif_prefs FROM users WHERE id = ${user.id}`;
+  const [fresh] = await sql`SELECT id, name, pin, role, avatar, pfp_data, xp, clocked_in, notif_prefs, is_super_admin FROM users WHERE id = ${user.id}`;
   return c.json({ data: fresh });
 });
 

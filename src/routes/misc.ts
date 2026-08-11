@@ -1,10 +1,71 @@
 import { Hono } from 'hono';
 import { sql } from '../db';
-import { requireRole, authenticate } from '../auth';
+import { requireRole, authenticate, requireSuperAdmin } from '../auth';
 import { registerClient, unregisterClient } from '../realtime';
 import { VAPID_PUBLIC_KEY, saveSubscription, removeSubscription } from '../push';
 
 export const misc = new Hono();
+
+// Public but deliberately minimal - just aggregate counts, never any lead/customer
+// data. This is what lets a super-admin's control panel pull live numbers from a
+// resold customer instance without needing that customer's admin credentials.
+misc.get('/api/tenant-stats', async (c) => {
+  const [callers] = await sql`SELECT COUNT(*)::int as n FROM users WHERE role = 'caller'`;
+  const [managers] = await sql`SELECT COUNT(*)::int as n FROM users WHERE role = 'admin'`;
+  const [finishers] = await sql`SELECT COUNT(*)::int as n FROM users WHERE role = 'finisher'`;
+  const [leads] = await sql`SELECT COUNT(*)::int as n FROM leads`;
+  const [successful] = await sql`SELECT COUNT(*)::int as n FROM leads WHERE status IN ('successful_call','completed')`;
+  const [onlineNow] = await sql`SELECT COUNT(*)::int as n FROM users WHERE clocked_in = true`;
+  const [brandRow] = await sql`SELECT value FROM settings WHERE key = 'panel_name'`;
+  return c.json({
+    data: {
+      panel_name: brandRow?.value || null,
+      callers: callers.n, managers: managers.n, finishers: finishers.n,
+      total_leads: leads.n, successful_leads: successful.n, online_now: onlineNow.n,
+    },
+  });
+});
+
+misc.get('/api/master/tenants', requireSuperAdmin(), async (c) => {
+  const rows = await sql`SELECT * FROM tenants ORDER BY is_self DESC, created_at ASC`;
+  return c.json({ data: rows });
+});
+misc.post('/api/master/tenants', requireSuperAdmin(), async (c) => {
+  const { name, url, plan, price_paid, notes } = await c.req.json().catch(() => ({}));
+  if (!name || !url) return c.json({ error: 'Name and URL required' }, 400);
+  const [row] = await sql`INSERT INTO tenants (name, url, plan, price_paid, notes) VALUES (${name}, ${url}, ${plan || 'trial'}, ${price_paid || 0}, ${notes || null}) RETURNING *`;
+  return c.json({ data: row });
+});
+misc.patch('/api/master/tenants/:id', requireSuperAdmin(), async (c) => {
+  const id = c.req.param('id');
+  const { name, url, plan, price_paid, status, notes } = await c.req.json().catch(() => ({}));
+  const [row] = await sql`UPDATE tenants SET
+    name = COALESCE(${name}, name), url = COALESCE(${url}, url), plan = COALESCE(${plan}, plan),
+    price_paid = COALESCE(${price_paid}, price_paid), status = COALESCE(${status}, status), notes = COALESCE(${notes}, notes)
+    WHERE id = ${id} RETURNING *`;
+  return c.json({ data: row });
+});
+misc.delete('/api/master/tenants/:id', requireSuperAdmin(), async (c) => {
+  await sql`DELETE FROM tenants WHERE id = ${c.req.param('id')} AND is_self = false`;
+  return c.json({ ok: true });
+});
+// Pulls live stats from every tenant's own /api/tenant-stats endpoint. Best-effort -
+// a tenant that's down or unreachable just shows as unavailable, doesn't break the rest.
+misc.get('/api/master/live-stats', requireSuperAdmin(), async (c) => {
+  const tenants = await sql`SELECT id, name, url, is_self FROM tenants WHERE status = 'active'`;
+  const results = await Promise.all(tenants.map(async (t: any) => {
+    try {
+      const base = t.is_self ? new URL(c.req.url).origin : t.url.replace(/\/$/, '');
+      const res = await fetch(`${base}/api/tenant-stats`, { signal: AbortSignal.timeout(5000) });
+      if (!res.ok) return { id: t.id, name: t.name, reachable: false };
+      const stats = (await res.json()).data;
+      return { id: t.id, name: t.name, reachable: true, ...stats };
+    } catch {
+      return { id: t.id, name: t.name, reachable: false };
+    }
+  }));
+  return c.json({ data: results });
+});
 
 misc.get('/api/admin/telephony-config', requireRole('admin'), async (c) => {
   const [row] = await sql`SELECT value FROM settings WHERE key = 'telephony_config'`;

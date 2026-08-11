@@ -85,6 +85,24 @@ export async function ensureDb() {
     ended_at TIMESTAMPTZ
   )`;
 
+  // The control plane for reselling this panel: every separately-deployed customer
+  // instance (each on its own Railway project/database for real data isolation)
+  // gets a row here. Stats are pulled live from each tenant's own /api/tenant-stats
+  // endpoint, not stored/duplicated - this table just tracks who exists and what
+  // they're paying, revenue is entered manually since there's no payment processor
+  // wired up yet.
+  await sql`CREATE TABLE IF NOT EXISTS tenants (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    url TEXT NOT NULL,
+    plan TEXT DEFAULT 'trial',
+    price_paid NUMERIC DEFAULT 0,
+    status TEXT DEFAULT 'active',
+    is_self BOOLEAN DEFAULT false,
+    notes TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`;
+
   await sql`CREATE TABLE IF NOT EXISTS duplicate_flags (
     id SERIAL PRIMARY KEY,
     lead_id_a INTEGER REFERENCES leads(id) ON DELETE CASCADE,
@@ -189,6 +207,7 @@ export async function ensureDb() {
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS pfp_data TEXT`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS inbound_eligible BOOLEAN DEFAULT true`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS inbound_priority INTEGER DEFAULT 100`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS is_super_admin BOOLEAN DEFAULT false`,
   ];
   for (const stmt of alters) {
     await sql.unsafe(`DO $$ BEGIN ${stmt}; EXCEPTION WHEN OTHERS THEN NULL; END $$;`);
@@ -238,6 +257,24 @@ export async function ensureDb() {
       ('Santander', '#ec0000'), ('Halifax', '#0e5aa7'), ('TSB', '#0091d4'), ('Nationwide', '#1b3a6b'),
       ('RBS', '#003087'), ('Metro Bank', '#e2231a'), ('Monzo', '#f15a5a'), ('Starling', '#7433ff')
       ON CONFLICT (name) DO NOTHING`;
+  }
+
+  // First admin account ever created on an instance gets super-admin - the person
+  // who set this instance up, able to see the multi-tenant control panel.
+  const [superAdminRow] = await sql`SELECT 1 FROM users WHERE is_super_admin = true LIMIT 1`;
+  if (!superAdminRow) {
+    const [firstAdmin] = await sql`SELECT id FROM users WHERE role = 'admin' ORDER BY created_at ASC LIMIT 1`;
+    if (firstAdmin) await sql`UPDATE users SET is_super_admin = true WHERE id = ${firstAdmin.id}`;
+  }
+
+  // Every instance registers itself as a tenant of its own control plane -
+  // resold customer instances stay separate deployments (own Railway project, own
+  // database - real isolation), but each can still see its own row here if it's
+  // ever promoted to a super-admin's view. This instance is marked is_self so it
+  // reads as "your own usage" rather than a customer.
+  const [selfTenantRow] = await sql`SELECT 1 FROM tenants WHERE is_self = true LIMIT 1`;
+  if (!selfTenantRow) {
+    await sql`INSERT INTO tenants (name, url, plan, price_paid, status, is_self, notes) VALUES ('Frap Ties (self)', '', 'owner', 0, 'active', true, 'This instance - not a resold customer')`;
   }
 
   // Hard-delete expired disappearing messages every 30s. This actually removes the

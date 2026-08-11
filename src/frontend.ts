@@ -365,6 +365,7 @@ tr.clickable:active{background:rgba(255,255,255,.05);}
       <div class="side-link" data-tab="categories" onclick="switchAdminTab('categories')">${ICONS_SVG.flag} Lead Categories</div>
       <div class="side-link" data-tab="branding" onclick="switchAdminTab('branding')">${ICONS_SVG.gear} Branding</div>
       <div class="side-link" data-tab="telephony" onclick="switchAdminTab('telephony')">${ICONS_SVG.bell} Call Routing</div>
+      <div class="side-link hidden" id="masterControlLink" data-tab="master" onclick="switchAdminTab('master')">${ICONS_SVG.gear} Master Control</div>
       <div class="side-link" onclick="logout()" style="margin-top:14px;border-top:1px solid var(--border);padding-top:14px;">${ICONS_SVG.exit} Exit</div>
     </div>
     <div class="admin-main">
@@ -474,6 +475,7 @@ async function attemptLogin() {
 function logout() {
   if (me) api('/api/clock', { method: 'POST', body: JSON.stringify({ clockedIn: false }) });
   if (es) { es.close(); es = null; }
+  if (typeof stopQueuePolling === 'function') stopQueuePolling();
   localStorage.removeItem('dispatch_me'); me = null; pinBuffer = ''; renderPinDots();
   document.getElementById('adminApp').classList.add('hidden');
   document.getElementById('staffApp').classList.add('hidden');
@@ -488,6 +490,7 @@ async function enterApp() {
   registerServiceWorker();
   if (me.role === 'admin') {
     document.getElementById('adminApp').classList.remove('hidden');
+    if (me.is_super_admin) document.getElementById('masterControlLink').classList.remove('hidden');
     switchAdminTab('dashboard');
   } else {
     document.getElementById('staffApp').classList.remove('hidden');
@@ -539,15 +542,14 @@ function maybeRefreshAdmin(tabs) { const arr = Array.isArray(tabs) ? tabs : [tab
 // like the page reloading. Briefly dims the content, swaps it while invisible, then
 // fades back in — same content update, no jarring flash or re-triggered pop-in
 // animations on every background change.
-function smoothRerender(renderFn) {
+async function smoothRerender(renderFn) {
   const el = document.getElementById(me.role === 'admin' ? 'adminContent' : 'staffBody');
-  if (!el) { renderFn(); return; }
+  if (!el) { await renderFn(); return; }
   el.style.transition = 'opacity .15s ease';
   el.style.opacity = '0.4';
-  setTimeout(() => {
-    renderFn();
-    requestAnimationFrame(() => { el.style.opacity = '1'; });
-  }, 120);
+  await new Promise(r => setTimeout(r, 120));
+  await renderFn();
+  requestAnimationFrame(() => { el.style.opacity = '1'; });
 }
 
 async function refreshNotifBadge() {
@@ -854,7 +856,11 @@ document.addEventListener('visibilitychange', () => {
     if (staffTab === 'queue') renderStaffQueue();
     else if (staffTab === 'home') renderStaffHome();
   }
-  if (typeof connectEvents === 'function' && (!es || es.readyState === 2)) connectEvents();
+  // Always force a fresh SSE connection on returning to the foreground - mobile
+  // Safari in particular can leave a connection in a state that still LOOKS open
+  // (readyState never flips to CLOSED) while it's actually dead, so checking
+  // readyState alone isn't reliable enough to catch every case.
+  if (typeof connectEvents === 'function') connectEvents();
 });
 
 if (me) enterApp();

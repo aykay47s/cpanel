@@ -8,6 +8,7 @@ export interface AuthUser {
   role: 'admin' | 'caller' | 'finisher';
   avatar: string;
   pfp_data: string | null;
+  is_super_admin: boolean;
   xp: number;
   clocked_in: boolean;
 }
@@ -19,7 +20,7 @@ export async function authenticate(c: Context): Promise<AuthUser | null> {
   const uid = c.req.header('x-user-id') || c.req.query('uid');
   const pin = c.req.header('x-user-pin') || c.req.query('pin');
   if (!uid || !pin) return null;
-  const [user] = await sql`SELECT id, name, pin, role, avatar, pfp_data, xp, clocked_in FROM users WHERE id = ${uid} AND pin = ${pin}`;
+  const [user] = await sql`SELECT id, name, pin, role, avatar, pfp_data, xp, clocked_in, is_super_admin FROM users WHERE id = ${uid} AND pin = ${pin}`;
   if (user) {
     // Throttled to at most once per 20s per user regardless of request volume —
     // this is what actually powers "online and active right now" on the roster,
@@ -40,3 +41,12 @@ export function requireRole(...roles: Array<'admin' | 'caller' | 'finisher'>) {
 
 export const requireAdmin = requireRole('admin');
 export const requireAnyStaff = requireRole('admin', 'caller', 'finisher');
+
+export function requireSuperAdmin() {
+  return async (c: Context, next: Next) => {
+    const user = await authenticate(c);
+    if (!user || user.role !== 'admin' || !user.is_super_admin) return c.json({ error: 'Unauthorized' }, 403);
+    c.set('user', user);
+    await next();
+  };
+}
