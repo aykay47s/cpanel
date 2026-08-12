@@ -65,6 +65,34 @@ users.patch('/api/me/notif-prefs', async (c) => {
   return c.json({ ok: true });
 });
 
+// "End Day" - shows anyone still marked clocked_in whose last real activity was a
+// while ago (forgot to clock out, closed the tab, phone died, etc), so admin can
+// force-close those sessions in one action instead of hunting them down individually.
+users.get('/api/admin/stale-clockins', requireRole('admin'), async (c) => {
+  const user = c.get('user');
+  const rows = await sql`SELECT id, name, avatar, pfp_data, role, last_seen_at,
+      EXTRACT(EPOCH FROM (now() - COALESCE(last_seen_at, now() - INTERVAL '1 day'))) / 60 as minutes_since_seen
+    FROM users WHERE clocked_in = true AND tenant_id = ${user.tenant_id}
+    AND (last_seen_at IS NULL OR last_seen_at < now() - INTERVAL '15 minutes')
+    ORDER BY last_seen_at ASC NULLS FIRST`;
+  return c.json({ data: rows });
+});
+
+users.post('/api/admin/end-day', requireRole('admin'), async (c) => {
+  const user = c.get('user');
+  const { ids } = await c.req.json().catch(() => ({}));
+  const targetIds = Array.isArray(ids) && ids.length ? ids : null;
+  const rows = targetIds
+    ? await sql`SELECT id FROM users WHERE clocked_in = true AND tenant_id = ${user.tenant_id} AND id = ANY(${targetIds})`
+    : await sql`SELECT id FROM users WHERE clocked_in = true AND tenant_id = ${user.tenant_id} AND (last_seen_at IS NULL OR last_seen_at < now() - INTERVAL '15 minutes')`;
+  const clockedIds = rows.map((r: any) => r.id);
+  if (!clockedIds.length) return c.json({ ended: 0 });
+  await sql`UPDATE users SET clocked_in = false, status = 'offline' WHERE id = ANY(${clockedIds})`;
+  await sql`UPDATE clock_sessions SET clocked_out_at = now(), duration_seconds = EXTRACT(EPOCH FROM (now() - clocked_in_at))::int
+    WHERE user_id = ANY(${clockedIds}) AND clocked_out_at IS NULL`;
+  return c.json({ ended: clockedIds.length });
+});
+
 users.post('/api/clock', async (c) => {
   const user = await authenticate(c);
   if (!user) return bad(c, 'Unauthorized', 401);

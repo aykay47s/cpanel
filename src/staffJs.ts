@@ -130,10 +130,29 @@ function toggleCallLogExpanded() {
 function renderScriptManagerList(scripts) {
   const list = document.getElementById('scriptManagerList');
   if (!list) return;
-  list.innerHTML = scripts.length ? scripts.map(s => \`<div class="panel-inset" style="padding:12px 14px;margin-bottom:8px;">
-    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;"><b style="font-size:13px;">\${esc(s.title)}</b>\${s.lead_type && s.lead_type !== 'general' ? categoryBadgeHtml(s.lead_type) : ''}</div>
-    <div style="font-size:12.5px;color:var(--text-dim);white-space:pre-wrap;line-height:1.5;">\${esc(s.content)}</div>
+  list.innerHTML = scripts.length ? scripts.map((s, i) => \`<div class="script-manager-item" data-script-idx="\${i}" onclick="toggleScriptManagerItem(\${i})" style="padding:13px 14px;margin-bottom:8px;cursor:pointer;">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+      <div style="display:flex;align-items:baseline;gap:8px;min-width:0;"><b style="font-size:13px;">\${esc(s.title)}</b>\${s.lead_type && s.lead_type !== 'general' ? categoryBadgeHtml(s.lead_type) : ''}</div>
+      <span class="script-chevron" style="color:var(--text-faint);flex-shrink:0;transition:transform .2s ease;">▾</span>
+    </div>
+    <div class="script-manager-content" style="font-size:12.5px;color:var(--text-dim);white-space:pre-wrap;line-height:1.5;max-height:0;overflow:hidden;transition:max-height .25s ease, margin-top .25s ease;margin-top:0;">\${esc(s.content)}</div>
   </div>\`).join('') : '<div style="color:var(--text-dim);font-size:12.5px;">No approved scripts yet.</div>';
+}
+function toggleScriptManagerItem(i) {
+  const item = document.querySelector('[data-script-idx="' + i + '"]');
+  if (!item) return;
+  const content = item.querySelector('.script-manager-content');
+  const chevron = item.querySelector('.script-chevron');
+  const isOpen = content.style.maxHeight && content.style.maxHeight !== '0px';
+  if (isOpen) {
+    content.style.maxHeight = '0px';
+    content.style.marginTop = '0';
+    chevron.style.transform = 'rotate(0deg)';
+  } else {
+    content.style.maxHeight = content.scrollHeight + 'px';
+    content.style.marginTop = '10px';
+    chevron.style.transform = 'rotate(180deg)';
+  }
 }
 function filterScriptManager() {
   const q = document.getElementById('scriptSearchInput').value.trim().toLowerCase();
@@ -265,22 +284,7 @@ function renderActiveCallShell(body, lead, role, scripts, template) {
         <div id="noteConfirm" style="font-size:11px;color:var(--success);margin-top:6px;height:14px;"></div>
       </div>\` : ''}
       \${scripts.length ? \`<div class="scripts-toggle" onclick="this.nextElementSibling.classList.toggle('open')"><span>\${ICONS.doc || ''} Scripts (\${scripts.length})</span><span>▾</span></div><div class="scripts-panel">\${scripts.map(s => '<div class="script-item"><div class="title">' + esc(s.title) + '</div><div class="content">' + esc(s.content) + '</div></div>').join('')}</div>\` : ''}
-      \${!isFinisher ? \`<div class="outcome-section">
-        <button class="win-btn" onclick="recordOutcome(\${lead.id},'successful_call')">\${ICONS.check || ''} Successful Call</button>
-        <div class="outcome-grid">
-          <button onclick="recordOutcome(\${lead.id},'voicemail')">Voicemail</button>
-          <button onclick="recordOutcome(\${lead.id},'no_answer')">No Answer</button>
-          <button onclick="recordOutcome(\${lead.id},'busy')">Busy</button>
-          <button onclick="recordOutcome(\${lead.id},'hung_up')">Hung Up</button>
-          <button onclick="recordOutcome(\${lead.id},'cancelled')">Cancel</button>
-          <button onclick="recordOutcome(\${lead.id},'chopped_previously')">Chopped Previously</button>
-        </div>
-        <button class="review-btn" onclick="recordOutcome(\${lead.id},'callback_requested')">Callback Requested</button>
-        <div class="outcome-grid" style="grid-template-columns:1fr 1fr;">
-          <button class="fail-btn" onclick="recordOutcome(\${lead.id},'failed')">Unsuccessful</button>
-          <button class="review-btn" onclick="recordOutcome(\${lead.id},'requires_review')">Requires Review</button>
-        </div>
-      </div>\` : ''}
+      \${!isFinisher ? renderOutcomeSection(lead) : ''}
       \${isFinisher ? \`<div class="outcome-section">
         <button class="win-btn" onclick="finisherOutcome(\${lead.id},'completed')">\${ICONS.check || ''} Mark Completed</button>
         <div class="outcome-grid" style="grid-template-columns:1fr 1fr;">
@@ -291,6 +295,38 @@ function renderActiveCallShell(body, lead, role, scripts, template) {
     </div>\`;
   if (!callStart) callStart = Date.now();
   startCallTimer();
+}
+// The browser has no way to actually detect a real phone call connecting - there's
+// no web API for that. So this stays a manual "Mark On Call" tap, but the flow
+// enforces it properly: before that tap, only outcomes consistent with "the call
+// never actually connected" are available. Nobody can accidentally log a lead as a
+// successful call (or any other post-conversation outcome) before they've genuinely
+// marked themselves as picked-up and connected.
+function renderOutcomeSection(lead) {
+  if (lead.status === 'calling') {
+    return \`<div class="outcome-section">
+      <p style="font-size:11.5px;color:var(--text-faint);text-align:center;margin:2px 0 2px;">Tap "Mark On Call" above the moment they pick up — that unlocks the rest.</p>
+      <div class="outcome-grid" style="grid-template-columns:1fr 1fr;">
+        <button onclick="recordOutcome(\${lead.id},'voicemail')">Voicemail</button>
+        <button onclick="recordOutcome(\${lead.id},'no_answer')">No Answer</button>
+        <button onclick="recordOutcome(\${lead.id},'busy')">Number Unavailable</button>
+        <button onclick="recordOutcome(\${lead.id},'cancelled')">Cancel</button>
+      </div>
+    </div>\`;
+  }
+  return \`<div class="outcome-section">
+    <button class="win-btn" onclick="recordOutcome(\${lead.id},'successful_call')">\${ICONS.check || ''} Successful Call</button>
+    <div class="outcome-grid">
+      <button onclick="recordOutcome(\${lead.id},'hung_up')">Hung Up</button>
+      <button onclick="recordOutcome(\${lead.id},'chopped_previously')">Chopped Previously</button>
+      <button onclick="recordOutcome(\${lead.id},'cancelled')">Cancel</button>
+    </div>
+    <button class="review-btn" onclick="recordOutcome(\${lead.id},'callback_requested')">Callback Requested</button>
+    <div class="outcome-grid" style="grid-template-columns:1fr 1fr;">
+      <button class="fail-btn" onclick="recordOutcome(\${lead.id},'failed')">Unsuccessful</button>
+      <button class="review-btn" onclick="recordOutcome(\${lead.id},'requires_review')">Requires Review</button>
+    </div>
+  </div>\`;
 }
 async function pushLiveNote(leadId) {
   const input = document.getElementById('liveNoteInput');

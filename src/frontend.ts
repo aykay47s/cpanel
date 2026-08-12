@@ -94,6 +94,8 @@ button{font-family:'Inter',sans-serif;cursor:pointer;border:none;outline:none;tr
   transition:border-color .15s ease, box-shadow .15s ease, transform .15s ease;
 }
 .panel-inset{background:var(--bg-2);border:1px solid var(--border);border-radius:14px;}
+.script-manager-item{background:var(--bg-2);border:1px solid var(--border);border-radius:14px;transition:border-color .15s ease, background .15s ease;}
+.script-manager-item:active{transform:scale(.99);background:var(--s2);}
 .btn{padding:12px 22px;border-radius:100px;font-weight:600;font-size:13.5px;background:var(--s3);border:1px solid var(--border-2);color:var(--text);letter-spacing:-.005em;box-shadow:inset 0 1px 0 rgba(255,255,255,.06), 0 1px 2px rgba(0,0,0,.3), 0 4px 10px rgba(0,0,0,.24);transition:transform .28s cubic-bezier(.34,1.56,.64,1), background .12s ease, box-shadow .15s ease;}
 .btn:hover{background:#323240;border-color:rgba(255,255,255,.26);transform:translateY(-1px);box-shadow:inset 0 1px 0 rgba(255,255,255,.08), 0 2px 4px rgba(0,0,0,.32), 0 8px 18px rgba(0,0,0,.3);}
 .btn:active{transform:translateY(1px) scale(.98);box-shadow:inset 0 1px 3px rgba(0,0,0,.3);}

@@ -326,8 +326,9 @@ async function renderAdminFinishing(el) {
 async function assignFinisher(leadId, finisherId) { if (!finisherId) return; await api('/api/admin/leads/' + leadId + '/assign-finisher', { method: 'POST', body: JSON.stringify({ finisherId: Number(finisherId) }) }); renderAdminTab('finishing'); }
 
 async function renderAdminRoster(el) {
-  const res = await api('/api/admin/users');
+  const [res, staleRes] = await Promise.all([api('/api/admin/users'), api('/api/admin/stale-clockins')]);
   const rows = (await res.json()).data;
+  const stale = (await staleRes.json()).data;
   el.innerHTML = \`
     <div class="panel p fade-up">
       <div class="section-title" style="margin-top:0;">Add Team Member</div>
@@ -338,6 +339,17 @@ async function renderAdminRoster(el) {
       </div>
       <div id="newPinBanner"></div>
     </div>
+    \${stale.length ? \`<div class="panel p fade-up" style="border-color:var(--gold-glow);">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;"><span class="badge important">\${stale.length} Forgot to Clock Out</span><div class="section-title" style="margin:0;">End Day</div></div>
+      <p style="font-size:12px;color:var(--text-dim);margin-bottom:14px;">Still shown as clocked in but hasn't done anything in the app for over 15 minutes - likely just forgot to clock out at the end of their shift.</p>
+      \${stale.map(u => \`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);">
+        \${avatarHtml(u, 26)}
+        <span style="flex:1;font-size:13px;">\${esc(u.name)}</span>
+        <span style="font-size:11px;color:var(--text-faint);">\${u.minutes_since_seen ? Math.round(u.minutes_since_seen) + 'm ago' : 'never seen'}</span>
+        <button class="btn btn-ghost btn-sm" onclick="endDayFor(\${u.id})">Clock Out</button>
+      </div>\`).join('')}
+      <button class="btn btn-gold btn-block" style="margin-top:14px;" onclick="endDayAll()">Clock Out All \${stale.length}</button>
+    </div>\` : ''}
     <div class="panel p fade-up"><table><thead><tr><th></th><th>Name</th><th>PIN</th><th>Role</th><th>Call Number</th><th>XP</th><th>Clocked</th><th>Right Now</th><th></th></tr></thead>
     <tbody>\${rows.map(u => \`<tr><td>\${avatarHtml(u, 24)}</td><td>\${esc(u.name)}</td><td class="pin-display">\${u.pin}</td><td>\${statusBadge(u.role)}</td>
       <td>\${u.call_phone ? '<span class="blur-phone mono" onclick="this.classList.toggle(\\'revealed\\')">' + esc(u.call_phone) + '</span>' : '<span style="color:var(--text-faint);">—</span>'}</td>
@@ -346,6 +358,17 @@ async function renderAdminRoster(el) {
       <td style="display:flex;gap:6px;"><select onchange="changeRole(\${u.id}, this.value)" style="width:auto;padding:6px 8px;font-size:11px;"><option value="">Change role…</option><option value="caller">Caller</option><option value="finisher">Finisher</option><option value="admin">Admin</option></select><button class="btn btn-ghost btn-sm" onclick="viewClockHistory(\${u.id},'\${esc(u.name)}')">History</button><button class="btn btn-danger btn-sm" onclick="removeUser(\${u.id})">Remove</button></td></tr>\`).join('')}</tbody></table></div>
     <div id="clockHistoryPanel"></div>\`;
   loadRosterClockTimers(rows);
+}
+async function endDayFor(id) {
+  await api('/api/admin/end-day', { method: 'POST', body: JSON.stringify({ ids: [id] }) });
+  renderAdminTab('roster');
+}
+async function endDayAll() {
+  if (!confirm('Clock out everyone shown as forgotten? This ends their shift immediately.')) return;
+  const res = await api('/api/admin/end-day', { method: 'POST', body: JSON.stringify({}) });
+  const data = await res.json();
+  alert('Clocked out ' + data.ended + ' forgotten session(s).');
+  renderAdminTab('roster');
 }
 // What a clocked-in caller is genuinely doing right now, not just "online" - on a
 // call (with who), actively using the app (recent heartbeat), or clocked in but the
