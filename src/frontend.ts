@@ -110,6 +110,13 @@ button{font-family:'Inter',sans-serif;cursor:pointer;border:none;outline:none;tr
 .btn-block{width:100%;}
 .btn-sm{padding:8px 14px;font-size:12px;border-radius:8px;}
 input,select,textarea{width:100%;padding:12px 16px;border-radius:14px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);color:var(--text);font-size:16px;outline:none;font-family:inherit;-webkit-appearance:none;appearance:none;transition:border-color .12s ease, box-shadow .12s ease;}
+/* A real on/off switch, not a native checkbox — native checkboxes render as an
+   ambiguous unstyled ring on dark backgrounds with no clear on/off signal. Applied
+   via the .toggle-switch class on any checkbox used as a toggle. */
+input.toggle-switch{width:44px;height:26px;padding:0;border-radius:100px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.14);position:relative;cursor:pointer;flex-shrink:0;transition:background .2s ease, border-color .2s ease;}
+input.toggle-switch::after{content:'';position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.4);transition:transform .2s cubic-bezier(.34,1.56,.64,1);}
+input.toggle-switch:checked{background:var(--success);border-color:transparent;}
+input.toggle-switch:checked::after{transform:translateX(18px);}
 input:focus,select:focus,textarea:focus{border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-glow);}
 label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.7px;display:block;margin-bottom:7px;font-weight:600;}
 .field{margin-bottom:15px;}
@@ -197,6 +204,11 @@ label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spa
 .p{padding:24px;margin-bottom:18px;}
 
 table{width:100%;border-collapse:collapse;font-size:13px;}
+.table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.table-scroll table{min-width:640px;}
+@media (max-width:640px){
+  .table-scroll::after{content:'← swipe to see more →';display:block;text-align:center;font-size:10px;color:var(--text-faint);padding:6px 0 0;}
+}
 th{text-align:left;padding:11px 14px;color:var(--text-faint);font-weight:600;font-size:10px;text-transform:uppercase;letter-spacing:.4px;border-bottom:1px solid var(--border);}
 td{padding:13px 14px;border-bottom:1px solid var(--border);}
 tr:hover td{background:rgba(255,255,255,.012);}

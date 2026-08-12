@@ -34,9 +34,20 @@ async function renderAdminTab(tab) {
 }
 
 async function renderAdminDashboard(el) {
-  const res = await api('/api/admin/dashboard');
+  const [res, statusRes] = await Promise.all([api('/api/admin/dashboard'), api('/api/center-status')]);
   const d = (await res.json()).data;
+  const center = (await statusRes.json()).data;
   el.innerHTML = \`
+    <div class="panel p fade-up" style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;\${center.open ? '' : 'border-color:var(--gold-glow);'}">
+      <div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+          <span class="badge \${center.open ? 'successful_call' : 'failed'}">\${center.open ? 'Open' : 'Closed'}</span>
+          <b style="font-size:14px;">Call Center Status</b>
+        </div>
+        <p style="font-size:12px;color:var(--text-dim);margin:0;">\${center.open ? 'Callers and finishers can clock in normally.' : 'Callers cannot clock in until you reopen — they see: "' + esc(center.reason) + '"'}</p>
+      </div>
+      <button class="btn \${center.open ? 'btn-danger' : 'btn-gold'}" onclick="toggleCenterStatus(\${center.open})">\${center.open ? 'Close for the Day' : 'Start the Day'}</button>
+    </div>
     <div class="stat-grid stagger">
       <div class="stat-box panel accent"><div class="num" data-count="\${d.total}">0</div><div class="lbl">Total Leads</div></div>
       <div class="stat-box panel"><div class="num" data-count="\${d.uncalled}">0</div><div class="lbl">Not Called</div></div>
@@ -59,6 +70,16 @@ async function renderAdminDashboard(el) {
     </div>\`;
   animateCountUps(el);
   startOnCallTimers();
+}
+async function toggleCenterStatus(currentlyOpen) {
+  if (currentlyOpen) {
+    const reason = prompt('Message callers will see when they try to clock in (e.g. "Back at 9am tomorrow"):', 'The call center is closed right now. Check back soon.');
+    if (reason === null) return;
+    await api('/api/admin/center-status', { method: 'POST', body: JSON.stringify({ open: false, reason }) });
+  } else {
+    await api('/api/admin/center-status', { method: 'POST', body: JSON.stringify({ open: true }) });
+  }
+  renderAdminTab('dashboard');
 }
 function onCallHtml(rows) {
   if (!rows.length) return '<div style="color:var(--text-dim);font-size:13px;">Nobody is on a call right now.</div>';
@@ -112,8 +133,8 @@ async function renderAdminLeads(el) {
       <select id="leadStatusFilter" style="max-width:200px;" onchange="filterLeadsByStatus()"><option value="">All statuses</option>\${LEAD_STATUSES.map(s => '<option value="' + s + '">' + titleCase(s) + '</option>').join('')}</select>
       <select id="leadOutcomeFilter" style="max-width:200px;" onchange="filterLeadsByOutcome()"><option value="">All outcomes</option>\${OUTCOMES.map(s => '<option value="' + s + '">' + titleCase(s) + '</option>').join('')}</select>
     </div>
-    <div class="panel p fade-up"><table><thead><tr><th>Lead</th><th>Category</th><th>Phone</th><th>Status</th><th>Caller</th><th>Finisher</th><th>Uploaded</th><th>Send To</th><th></th></tr></thead>
-    <tbody id="leadsTbody">\${rows.map(leadRowHtml).join('')}</tbody></table></div>\`;
+    <div class="panel p fade-up"><div class="table-scroll"><table><thead><tr><th>Lead</th><th>Category</th><th>Phone</th><th>Status</th><th>Caller</th><th>Finisher</th><th>Uploaded</th><th>Send To</th><th></th></tr></thead>
+    <tbody id="leadsTbody">\${rows.map(leadRowHtml).join('')}</tbody></table></div></div>\`;
   animateCountUps(el);
 }
 function filterLeadsByOutcome() {
@@ -256,7 +277,7 @@ async function runImportPreview() {
       </div>
       <div id="importRows">\${lastImportPreview.map((r, i) => importRowHtml(r, i)).join('')}</div>
       <button class="btn btn-ghost btn-sm" style="margin-top:10px;" onclick="addBlankImportRow()">+ Add row manually</button>
-      <label style="display:flex;align-items:center;gap:8px;margin-top:14px;font-size:12.5px;color:var(--text-dim);cursor:pointer;"><input type="checkbox" id="importToVault" style="width:auto;" /> Send to Vault instead of the live queue (release manually later)</label>
+      <label style="display:flex;align-items:center;gap:8px;margin-top:14px;font-size:12.5px;color:var(--text-dim);cursor:pointer;"><input type="checkbox" class="toggle-switch" id="importToVault" /> Send to Vault instead of the live queue (release manually later)</label>
       <button class="btn btn-gold btn-block" style="margin-top:12px;" onclick="confirmImport()">Import <span id="importCount">\${lastImportPreview.length}</span> Leads</button>
     </div>\`;
   preview.innerHTML = html;
@@ -319,9 +340,9 @@ async function renderAdminFinishing(el) {
   const [queueRes, usersRes] = await Promise.all([api('/api/admin/finishing-queue'), api('/api/admin/users')]);
   const rows = (await queueRes.json()).data;
   const finishers = (await usersRes.json()).data.filter(u => u.role === 'finisher');
-  el.innerHTML = \`<div class="panel p fade-up"><table><thead><tr><th>Lead</th><th>Phone</th><th>Status</th><th>Finisher</th><th>Assign</th></tr></thead>
+  el.innerHTML = \`<div class="panel p fade-up"><div class="table-scroll"><table><thead><tr><th>Lead</th><th>Phone</th><th>Status</th><th>Finisher</th><th>Assign</th></tr></thead>
     <tbody>\${rows.map(l => \`<tr><td>\${esc(fullName(l))}</td><td class="mono">\${l.phone}</td><td>\${statusBadge(l.status)}</td><td>\${l.finisher_name || '—'}</td>
-      <td><select onchange="assignFinisher(\${l.id}, this.value)"><option value="">Choose…</option>\${finishers.map(f => '<option value="' + f.id + '">' + f.name + '</option>').join('')}</select></td></tr>\`).join('') || '<tr><td colspan="5" style="color:var(--text-dim);">Nothing waiting.</td></tr>'}</tbody></table></div>\`;
+      <td><select onchange="assignFinisher(\${l.id}, this.value)"><option value="">Choose…</option>\${finishers.map(f => '<option value="' + f.id + '">' + f.name + '</option>').join('')}</select></td></tr>\`).join('') || '<tr><td colspan="5" style="color:var(--text-dim);">Nothing waiting.</td></tr>'}</tbody></table></div></div>\`;
 }
 async function assignFinisher(leadId, finisherId) { if (!finisherId) return; await api('/api/admin/leads/' + leadId + '/assign-finisher', { method: 'POST', body: JSON.stringify({ finisherId: Number(finisherId) }) }); renderAdminTab('finishing'); }
 
@@ -350,12 +371,12 @@ async function renderAdminRoster(el) {
       </div>\`).join('')}
       <button class="btn btn-gold btn-block" style="margin-top:14px;" onclick="endDayAll()">Clock Out All \${stale.length}</button>
     </div>\` : ''}
-    <div class="panel p fade-up"><table><thead><tr><th></th><th>Name</th><th>PIN</th><th>Role</th><th>Call Number</th><th>XP</th><th>Clocked</th><th>Right Now</th><th></th></tr></thead>
+    <div class="panel p fade-up"><div class="table-scroll"><table><thead><tr><th></th><th>Name</th><th>PIN</th><th>Role</th><th>Call Number</th><th>XP</th><th>Clocked</th><th>Right Now</th><th></th></tr></thead>
     <tbody>\${rows.map(u => \`<tr><td>\${avatarHtml(u, 24)}</td><td>\${esc(u.name)}</td><td class="pin-display">\${u.pin}</td><td>\${statusBadge(u.role)}</td>
       <td>\${u.call_phone ? '<span class="blur-phone mono" onclick="this.classList.toggle(\\'revealed\\')">' + esc(u.call_phone) + '</span>' : '<span style="color:var(--text-faint);">—</span>'}</td>
       <td>\${u.xp}</td><td>\${statusBadge(u.status)}\${u.clocked_in ? ' <span class="mono roster-clock-timer" data-uid="' + u.id + '" style="font-size:10.5px;color:var(--gold-bright);"></span>' : ''}</td>
       <td>\${rightNowBadge(u)}</td>
-      <td style="display:flex;gap:6px;"><select onchange="changeRole(\${u.id}, this.value)" style="width:auto;padding:6px 8px;font-size:11px;"><option value="">Change role…</option><option value="caller">Caller</option><option value="finisher">Finisher</option><option value="admin">Admin</option></select><button class="btn btn-ghost btn-sm" onclick="viewClockHistory(\${u.id},'\${esc(u.name)}')">History</button><button class="btn btn-danger btn-sm" onclick="removeUser(\${u.id})">Remove</button></td></tr>\`).join('')}</tbody></table></div>
+      <td style="display:flex;gap:6px;"><select onchange="changeRole(\${u.id}, this.value)" style="width:auto;padding:6px 8px;font-size:11px;"><option value="">Change role…</option><option value="caller">Caller</option><option value="finisher">Finisher</option><option value="admin">Admin</option></select><button class="btn btn-ghost btn-sm" onclick="viewClockHistory(\${u.id},'\${esc(u.name)}')">History</button><button class="btn btn-danger btn-sm" onclick="removeUser(\${u.id})">Remove</button></td></tr>\`).join('')}</tbody></table></div></div>
     <div id="clockHistoryPanel"></div>\`;
   loadRosterClockTimers(rows);
 }
@@ -410,8 +431,8 @@ async function viewClockHistory(userId, name) {
   const rows = (await res.json()).data;
   const panel = document.getElementById('clockHistoryPanel');
   panel.innerHTML = \`<div class="panel p fade-up"><div class="section-title" style="margin-top:0;">Clock History — \${esc(name)}</div>
-    <table><thead><tr><th>Clocked In</th><th>Clocked Out</th><th>Duration</th></tr></thead>
-    <tbody>\${rows.map(s => \`<tr><td>\${new Date(s.clocked_in_at).toLocaleString()}</td><td>\${s.clocked_out_at ? new Date(s.clocked_out_at).toLocaleString() : '<span style="color:var(--gold-bright);">still active</span>'}</td><td class="mono">\${s.duration_seconds ? Math.floor(s.duration_seconds/3600)+'h '+Math.floor(s.duration_seconds%3600/60)+'m' : '—'}</td></tr>\`).join('') || '<tr><td colspan="3" style="color:var(--text-dim);">No sessions yet.</td></tr>'}</tbody></table></div>\`;
+    <div class="table-scroll"><table><thead><tr><th>Clocked In</th><th>Clocked Out</th><th>Duration</th></tr></thead>
+    <tbody>\${rows.map(s => \`<tr><td>\${new Date(s.clocked_in_at).toLocaleString()}</td><td>\${s.clocked_out_at ? new Date(s.clocked_out_at).toLocaleString() : '<span style="color:var(--gold-bright);">still active</span>'}</td><td class="mono">\${s.duration_seconds ? Math.floor(s.duration_seconds/3600)+'h '+Math.floor(s.duration_seconds%3600/60)+'m' : '—'}</td></tr>\`).join('') || '<tr><td colspan="3" style="color:var(--text-dim);">No sessions yet.</td></tr>'}</tbody></table></div></div>\`;
   panel.scrollIntoView({ behavior: 'smooth' });
 }
 async function addUser() {
@@ -435,7 +456,7 @@ async function renderAdminAnnouncements(el) {
       <textarea id="annText" rows="3" placeholder="Write something for the team…"></textarea>
       <div class="row-flex" style="margin-top:10px;">
         <div class="field"><label>Audience</label><select id="annTarget"><option value="all">Everyone</option><option value="caller">Callers only</option><option value="finisher">Finishers only</option></select></div>
-        <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text);text-transform:none;letter-spacing:0;font-weight:500;"><input type="checkbox" id="annImportant" style="width:auto;" /> Mark important</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text);text-transform:none;letter-spacing:0;font-weight:500;"><input type="checkbox" class="toggle-switch" id="annImportant" /> Mark important</label>
       </div>
       <button class="btn btn-gold btn-block" style="margin-top:10px;" onclick="postAnnouncement()">Publish</button>
     </div>
@@ -741,7 +762,7 @@ function renderTelephonyLocal() {
       <p style="font-size:11.5px;color:var(--text-dim);margin:6px 0 14px;line-height:1.5;">\${cfg.inbound_mode === 'selected' ? 'Only callers checked below (and clocked in) will ever receive an inbound call.' : 'Any clocked-in caller with a call-from number set can receive an inbound call - the toggles below are ignored in this mode.'}</p>
       <div class="section-title" style="font-size:10.5px;">Call Order (lower number = called first)</div>
       \${window._telephonyCallers.map(u => \`<div class="row-flex" style="align-items:center;margin-bottom:8px;">
-        \${cfg.inbound_mode === 'selected' ? '<input type="checkbox" ' + (u.inbound_eligible !== false ? 'checked' : '') + ' onchange="updateCallerInbound(' + u.id + ', this.checked, null)" style="width:auto;margin-right:8px;" />' : ''}
+        \${cfg.inbound_mode === 'selected' ? '<input type="checkbox" class="toggle-switch" ' + (u.inbound_eligible !== false ? 'checked' : '') + ' onchange="updateCallerInbound(' + u.id + ', this.checked, null)" style="margin-right:8px;" />' : ''}
         \${avatarHtml(u, 26)}
         <span style="flex:1;margin-left:8px;font-size:13px;">\${esc(u.name)}\${!u.call_phone ? ' <span style="color:var(--danger);font-size:11px;">(no call-from number set)</span>' : ''}</span>
         <input type="number" value="\${u.inbound_priority ?? 100}" style="width:70px;" onchange="updateCallerInbound(\${u.id}, null, this.value)" />
@@ -945,7 +966,7 @@ async function renderMasterControl(el) {
 
     <div class="panel p fade-up">
       <div class="section-title" style="margin-top:0;">All Tenants</div>
-      <table><thead><tr><th>Name</th><th>Plan</th><th>Paid</th><th>Status</th><th>Callers</th><th>Managers</th><th>Leads</th><th>Reachable</th><th></th></tr></thead>
+      <div class="table-scroll"><table><thead><tr><th>Name</th><th>Plan</th><th>Paid</th><th>Status</th><th>Callers</th><th>Managers</th><th>Leads</th><th>Reachable</th><th></th></tr></thead>
       <tbody>\${tenants.map(t => {
         const l = liveById[t.id] || {};
         return \`<tr>
@@ -959,7 +980,7 @@ async function renderMasterControl(el) {
           <td>\${l.reachable ? '<span class="badge successful_call">Online</span>' : '<span class="badge failed">Unreachable</span>'}</td>
           <td>\${t.is_self ? '' : '<button class="btn btn-danger btn-sm" onclick="deleteTenant(' + t.id + ')">Remove</button>'}</td>
         </tr>\`;
-      }).join('')}</tbody></table>
+      }).join('')}</tbody></table></div>
     </div>\`;
   animateCountUps(el);
 }
@@ -1003,8 +1024,8 @@ async function renderAdminVault(el) {
         <button class="btn btn-gold" onclick="releaseAllShown()">Release All Shown (\${rows.length})</button>
       </div>
     </div>
-    <div class="panel p fade-up"><table><thead><tr><th>Lead</th><th>Phone</th><th>Age</th><th>Category</th><th>Imported</th><th></th></tr></thead>
-    <tbody>\${rows.map(r => \`<tr><td>\${esc(fullName(r))}</td><td class="mono">\${r.phone}</td><td>\${r.age != null ? r.age : '—'}</td><td>\${categoryBadge(r.lead_type)}</td><td>\${timeAgo(r.created_at)}</td><td><button class="btn btn-teal btn-sm" onclick="releaseOne(\${r.id})">Release</button></td></tr>\`).join('') || '<tr><td colspan="6" style="color:var(--text-dim);">Nothing in the vault right now.</td></tr>'}</tbody></table></div>\`;
+    <div class="panel p fade-up"><div class="table-scroll"><table><thead><tr><th>Lead</th><th>Phone</th><th>Age</th><th>Category</th><th>Imported</th><th></th></tr></thead>
+    <tbody>\${rows.map(r => \`<tr><td>\${esc(fullName(r))}</td><td class="mono">\${r.phone}</td><td>\${r.age != null ? r.age : '—'}</td><td>\${categoryBadge(r.lead_type)}</td><td>\${timeAgo(r.created_at)}</td><td><button class="btn btn-teal btn-sm" onclick="releaseOne(\${r.id})">Release</button></td></tr>\`).join('') || '<tr><td colspan="6" style="color:var(--text-dim);">Nothing in the vault right now.</td></tr>'}</tbody></table></div></div>\`;
 }
 function setVaultAgeGroup(g) { window._vaultAgeGroup = g; renderAdminTab('vault'); }
 async function releaseOne(id) {

@@ -93,10 +93,35 @@ users.post('/api/admin/end-day', requireRole('admin'), async (c) => {
   return c.json({ ended: clockedIds.length });
 });
 
+users.get('/api/center-status', async (c) => {
+  const rows = await sql`SELECT key, value FROM settings WHERE key IN ('center_open', 'center_offline_reason')`;
+  const map = Object.fromEntries(rows.map((r: any) => [r.key, r.value]));
+  return c.json({ data: { open: map.center_open !== 'false', reason: map.center_offline_reason || 'The call center is closed right now. Check back soon.' } });
+});
+users.post('/api/admin/center-status', requireRole('admin'), async (c) => {
+  const { open, reason } = await c.req.json().catch(() => ({}));
+  if (open !== undefined) await sql`INSERT INTO settings (key, value) VALUES ('center_open', ${String(!!open)}) ON CONFLICT (key) DO UPDATE SET value = ${String(!!open)}`;
+  if (reason !== undefined) await sql`INSERT INTO settings (key, value) VALUES ('center_offline_reason', ${reason}) ON CONFLICT (key) DO UPDATE SET value = ${reason}`;
+  return c.json({ ok: true });
+});
+
 users.post('/api/clock', async (c) => {
   const user = await authenticate(c);
   if (!user) return bad(c, 'Unauthorized', 401);
   const { clockedIn } = await c.req.json().catch(() => ({}));
+
+  // Admins can always clock in - they're the ones who control open/closed. Callers
+  // and finishers can't start a shift while the center is marked closed.
+  // Note: settings are currently global (not yet tenant-scoped, same as panel_name/
+  // branding elsewhere in this codebase) - a known gap, not unique to this feature.
+  if (clockedIn && user.role !== 'admin') {
+    const [openSetting] = await sql`SELECT value FROM settings WHERE key = 'center_open'`;
+    if (openSetting && openSetting.value === 'false') {
+      const [reasonSetting] = await sql`SELECT value FROM settings WHERE key = 'center_offline_reason'`;
+      return bad(c, reasonSetting?.value || 'The call center is closed right now.', 403);
+    }
+  }
+
   const [current] = await sql`SELECT clocked_in FROM users WHERE id = ${user.id}`;
 
   if (clockedIn && !current.clocked_in) {
