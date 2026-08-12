@@ -356,7 +356,7 @@ leads.post('/api/caller/leads/:id/claim', requireRole('caller'), async (c) => {
   const id = c.req.param('id');
   // Claimable if genuinely open, OR if an admin specifically sent it to this caller -
   // and never across a tenant boundary, regardless of what id is guessed/passed in.
-  const [updated] = await sql`UPDATE leads SET status = 'calling', assigned_caller_id = ${user.id}, call_started_at = now(), updated_at = now()
+  const [updated] = await sql`UPDATE leads SET status = 'calling', assigned_caller_id = ${user.id}, call_started_at = now(), updated_at = now(), call_attempts = call_attempts + 1
     WHERE id = ${id} AND tenant_id = ${user.tenant_id} AND status = 'not_called' AND (assigned_caller_id IS NULL OR assigned_caller_id = ${user.id}) RETURNING *`;
   if (!updated) return c.json({ claimed: false, reason: 'Already taken' }, 409);
   await logEvent(updated.id, 'claimed', user, 'not_called', 'calling', {});

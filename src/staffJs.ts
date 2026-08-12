@@ -34,14 +34,16 @@ function stopQueuePolling() {
 
 async function renderStaffHome() {
   const body = document.getElementById('staffBody');
-  const [meRes, goalRes, annRes, lbRes, callLogRes] = await Promise.all([
-    api('/api/me'), api('/api/goal'), api('/api/announcements'), api('/api/leaderboard'), api('/api/caller/call-log'),
+  await loadCategoryCache();
+  const [meRes, goalRes, annRes, lbRes, callLogRes, scriptsRes] = await Promise.all([
+    api('/api/me'), api('/api/goal'), api('/api/announcements'), api('/api/leaderboard'), api('/api/caller/call-log'), api('/api/scripts'),
   ]);
   const fresh = (await meRes.json()).data; me = { ...me, ...fresh }; localStorage.setItem('dispatch_me', JSON.stringify(me));
   const goal = (await goalRes.json()).data;
   const anns = (await annRes.json()).data;
   const lb = (await lbRes.json()).data;
   const callLog = (await callLogRes.json()).data;
+  const allScripts = (await scriptsRes.json()).data;
   const myRank = (lb.findIndex(r => r.id === me.id) + 1) || '—';
   const myStat = lb.find(r => r.id === me.id) || { successful_calls: 0 };
   const level = Math.floor(me.xp / 150) + 1;
@@ -88,6 +90,12 @@ async function renderStaffHome() {
         \${statusBadge(e.outcome)}
       </div>\`).join('') : '<div style="color:var(--text-dim);font-size:12.5px;">No calls logged yet.</div>'}
     </div>
+    <div class="section-title">Script Manager</div>
+    <div class="panel p fade-up">
+      <p style="font-size:11.5px;color:var(--text-dim);margin-bottom:12px;line-height:1.4;">Every script admin has approved, browsable anytime — not just during a call.</p>
+      <input id="scriptSearchInput" placeholder="Search scripts…" oninput="filterScriptManager()" style="margin-bottom:10px;" />
+      <div id="scriptManagerList"></div>
+    </div>
     <div class="section-title">Suggest a Script</div>
     <div class="panel p fade-up">
       <p style="font-size:11.5px;color:var(--text-dim);margin-bottom:10px;line-height:1.4;">Got a line that's working well for you? Send it in — admin reviews it and can approve it for the whole team to see during calls.</p>
@@ -98,6 +106,21 @@ async function renderStaffHome() {
     </div>
   \`;
   animateCountUps(body);
+  window._allScripts = allScripts;
+  renderScriptManagerList(allScripts);
+}
+function renderScriptManagerList(scripts) {
+  const list = document.getElementById('scriptManagerList');
+  if (!list) return;
+  list.innerHTML = scripts.length ? scripts.map(s => \`<div class="panel-inset" style="padding:12px 14px;margin-bottom:8px;">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;"><b style="font-size:13px;">\${esc(s.title)}</b>\${s.lead_type && s.lead_type !== 'general' ? categoryBadgeHtml(s.lead_type) : ''}</div>
+    <div style="font-size:12.5px;color:var(--text-dim);white-space:pre-wrap;line-height:1.5;">\${esc(s.content)}</div>
+  </div>\`).join('') : '<div style="color:var(--text-dim);font-size:12.5px;">No approved scripts yet.</div>';
+}
+function filterScriptManager() {
+  const q = document.getElementById('scriptSearchInput').value.trim().toLowerCase();
+  const filtered = !q ? window._allScripts : window._allScripts.filter(s => s.title.toLowerCase().includes(q) || s.content.toLowerCase().includes(q));
+  renderScriptManagerList(filtered);
 }
 async function suggestScript() {
   const title = document.getElementById('scriptSuggestTitle').value.trim();
@@ -122,7 +145,13 @@ async function renderStaffQueue() {
     const qRes = await api('/api/caller/queue');
     let rows = (await qRes.json()).data;
     rows = rows.filter(o => !skippedLeadIds.has(o.id) && !recentlyClaimedIds.has(o.id));
-    body.innerHTML = rows.length ? rows.map(o => offerCardHtml(o)).join('') : (skippedLeadIds.size ? skippedOnlyHtml() : radarHtml());
+    if (!rows.length) { body.innerHTML = skippedLeadIds.size ? skippedOnlyHtml() : radarHtml(); return; }
+    const freshCount = rows.filter(o => !(o.call_attempts || 0)).length;
+    const retryCount = rows.length - freshCount;
+    body.innerHTML = \`<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px;padding:0 2px;">
+      <div style="font-size:15px;font-weight:700;font-family:'Space Grotesk',sans-serif;">\${rows.length} Waiting</div>
+      <div style="font-size:11.5px;color:var(--text-dim);">\${freshCount} new\${retryCount ? ' · ' + retryCount + ' retry' : ''}</div>
+    </div>\` + rows.map(o => offerCardHtml(o)).join('');
   } else if (me.role === 'finisher') {
     const qRes = await api('/api/finisher/queue');
     const rows = (await qRes.json()).data;
@@ -138,8 +167,17 @@ function skipLead(id) { skippedLeadIds.add(id); renderStaffQueue(); }
 function unskipAll() { skippedLeadIds.clear(); renderStaffQueue(); }
 function radarHtml() { return \`<div class="radar-zone panel fade-up"><div class="radar"><div class="radar-ring"></div><div class="radar-ring"></div><div class="radar-ring"></div><div class="radar-sweep"></div><div class="radar-core"></div></div><div class="waiting-title">Listening for leads</div><div class="waiting-sub">You'll be notified the instant one comes in</div></div>\`; }
 function offerCardHtml(o) {
-  return \`<div class="offer-card fade-up" data-lead-id="\${o.id}"><div class="pulse-dot"></div><div class="offer-label">New Lead</div><div class="offer-name">\${fullName(o)} \${categoryBadgeHtml(o.lead_type)}</div><div class="offer-meta mono">\${o.phone}\${o.source ? ' · ' + o.source : ''}</div>
-    <div class="offer-actions"><button class="btn btn-gold" onclick="claimLead(\${o.id})">Take Call</button><button class="btn btn-ghost" onclick="skipLead(\${o.id})">Skip</button></div></div>\`;
+  const isRetry = (o.call_attempts || 0) > 0;
+  const labelText = isRetry ? 'Retry — Attempt #' + (o.call_attempts + 1) : 'New Lead';
+  const labelColor = isRetry ? 'var(--gold-bright)' : 'var(--success)';
+  return \`<div class="offer-card fade-up" data-lead-id="\${o.id}">
+    <div class="pulse-dot" style="background:\${labelColor};"></div>
+    <div class="offer-label" style="color:\${labelColor};">\${labelText}</div>
+    <div class="offer-name">\${fullName(o)} \${categoryBadgeHtml(o.lead_type)}</div>
+    <div class="offer-meta mono">\${o.phone}\${o.source ? ' · ' + esc(o.source) : ''}</div>
+    \${isRetry ? '<div style="font-size:11.5px;color:var(--text-faint);margin:-10px 0 14px;">Nobody\\'s reached them yet — no answer/voicemail last time, not a mistake.</div>' : ''}
+    <div class="offer-actions"><button class="btn btn-gold" onclick="claimLead(\${o.id})">Take Call</button><button class="btn btn-ghost" onclick="skipLead(\${o.id})">Skip</button></div>
+  </div>\`;
 }
 function finisherCardHtml(o) {
   return \`<div class="offer-card fade-up" style="border-color:rgba(63,168,154,.4);"><div class="offer-label" style="color:var(--teal);">Ready to Finish</div><div class="offer-name">\${fullName(o)} \${categoryBadgeHtml(o.lead_type)}</div><div class="offer-meta mono">\${o.phone}</div>\${o.notes ? '<div style="font-size:12.5px;color:var(--text-dim);margin-bottom:12px;">' + esc(o.notes) + '</div>' : ''}

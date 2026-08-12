@@ -211,6 +211,7 @@ export async function ensureDb() {
     `ALTER TABLE leads ADD COLUMN IF NOT EXISTS phone_e164 TEXT`,
     `ALTER TABLE leads ADD COLUMN IF NOT EXISTS extra_info TEXT`,
     `ALTER TABLE leads ADD COLUMN IF NOT EXISTS date_of_birth DATE`,
+    `ALTER TABLE leads ADD COLUMN IF NOT EXISTS call_attempts INTEGER NOT NULL DEFAULT 0`,
     `ALTER TABLE announcements ADD COLUMN IF NOT EXISTS important BOOLEAN NOT NULL DEFAULT false`,
     `ALTER TABLE announcements ADD COLUMN IF NOT EXISTS target_role TEXT NOT NULL DEFAULT 'all'`,
     `ALTER TABLE announcements ADD COLUMN IF NOT EXISTS created_by INTEGER REFERENCES users(id)`,

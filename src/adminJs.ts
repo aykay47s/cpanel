@@ -208,7 +208,11 @@ async function renderAdminImport(el) {
     <div class="panel p fade-up">
       <div class="section-title" style="margin-top:0;">Smart Import</div>
       <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:12px;">Paste leads in any format — CSV, pipe-separated, freeform text, phone numbers with or without separators, local or international. Sensitive data (card numbers, CVVs, passwords) is automatically stripped before anything is stored.</p>
-      <textarea id="importText" rows="9" placeholder="John Smith, 555-123-4567, john@email.com, 42 Oak St&#10;or paste freeform data, CSV, or pipe-separated rows"></textarea>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+        <label class="btn btn-ghost btn-sm" style="cursor:pointer;">Upload a File Instead<input type="file" id="importFile" accept=".txt,.csv,.tsv" style="display:none;" onchange="handleImportFile(event)" /></label>
+        <span id="importFileName" style="font-size:11.5px;color:var(--text-dim);"></span>
+      </div>
+      <textarea id="importText" rows="9" placeholder="John Smith, 555-123-4567, john@email.com, 42 Oak St&#10;or paste freeform data, CSV, or pipe-separated rows — any size, including thousands of rows for a mass import"></textarea>
       <div class="row-flex" style="margin-top:12px;">
         <div class="field"><label>Assign Category</label><select id="importLeadType">\${cats.map(c => '<option value="' + esc(c.name) + '">' + esc(c.name) + '</option>').join('') || '<option value="general">General</option>'}</select></div>
         <div class="field"><label>Source Label</label><input id="importSource" placeholder="e.g. Facebook Ad" /></div>
@@ -216,6 +220,14 @@ async function renderAdminImport(el) {
       <button class="btn btn-gold btn-block" style="margin-top:12px;" onclick="runImportPreview()">Analyze</button>
     </div>
     <div id="importPreview"></div>\`;
+}
+function handleImportFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  document.getElementById('importFileName').textContent = file.name + ' (' + Math.round(file.size / 1024) + 'KB)';
+  const reader = new FileReader();
+  reader.onload = (e) => { document.getElementById('importText').value = e.target.result; };
+  reader.readAsText(file);
 }
 let lastImportPreview = [];
 async function runImportPreview() {
