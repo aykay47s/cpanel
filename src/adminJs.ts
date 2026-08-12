@@ -151,11 +151,21 @@ function filterLeadsByOutcome() {
 }
 let callerListCache = [];
 let categoryCache = [];
+const BANK_DOMAINS = {
+  'lloyds': 'lloydsbank.com', 'barclays': 'barclays.co.uk', 'hsbc': 'hsbc.co.uk',
+  'natwest': 'natwest.com', 'santander': 'santander.co.uk', 'halifax': 'halifax.co.uk',
+  'tsb': 'tsb.co.uk', 'nationwide': 'nationwide.co.uk', 'rbs': 'rbs.co.uk',
+  'metro bank': 'metrobankonline.co.uk', 'monzo': 'monzo.com', 'starling': 'starlingbank.com',
+};
 function categoryBadge(leadType) {
   if (!leadType) return '<span style="color:var(--text-faint);">—</span>';
   const cat = categoryCache.find(c => c.name.toLowerCase() === String(leadType).toLowerCase());
   const color = cat ? cat.color : 'var(--text-dim)';
-  return '<span class="badge" style="background:' + color + '22;color:' + color + ';border:1px solid ' + color + '44;">' + esc(leadType) + '</span>';
+  const domain = BANK_DOMAINS[String(leadType).toLowerCase()];
+  const logoImg = domain
+    ? '<img src="https://logo.clearbit.com/' + domain + '?size=32" alt="" style="width:14px;height:14px;border-radius:3px;object-fit:contain;background:#fff;flex-shrink:0;" onerror="this.remove()" />'
+    : '';
+  return '<span class="badge" style="background:' + color + '22;color:' + color + ';border:1px solid ' + color + '44;gap:5px;">' + logoImg + esc(leadType) + '</span>';
 }
 function leadRowHtml(l) {
   const sendCell = l.status === 'not_called'
