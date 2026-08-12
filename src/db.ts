@@ -234,6 +234,7 @@ export async function ensureDb() {
     `ALTER TABLE scripts ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id)`,
     `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ`,
     `ALTER TABLE inbound_calls ADD COLUMN IF NOT EXISTS provider TEXT NOT NULL DEFAULT 'twilio'`,
+    `ALTER TABLE inbound_calls ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id)`,
   ];
   for (const stmt of alters) {
     await sql.unsafe(`DO $$ BEGIN ${stmt}; EXCEPTION WHEN OTHERS THEN NULL; END $$;`);
@@ -322,6 +323,7 @@ export async function ensureDb() {
   await sql`UPDATE chat_messages SET tenant_id = ${selfTenantId} WHERE tenant_id IS NULL`;
   await sql`UPDATE announcements SET tenant_id = ${selfTenantId} WHERE tenant_id IS NULL`;
   await sql`UPDATE scripts SET tenant_id = ${selfTenantId} WHERE tenant_id IS NULL`;
+  await sql`UPDATE inbound_calls SET tenant_id = ${selfTenantId} WHERE tenant_id IS NULL`;
   await sql`UPDATE tenants SET slug = '' WHERE is_self = true AND slug IS NULL`;
 
   // PINs only need to be unique WITHIN a tenant now, not globally - two different

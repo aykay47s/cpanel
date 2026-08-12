@@ -78,7 +78,11 @@ async function toggleCenterStatus(currentlyOpen) {
     if (reason === null) return;
     const res = await api('/api/admin/center-status', { method: 'POST', body: JSON.stringify({ open: false, reason }) });
     const data = await res.json();
-    if (data.autoEnded > 0) alert('Closed for the day. Automatically clocked out ' + data.autoEnded + ' still-active session(s).');
+    if (data.autoEnded > 0) {
+      let msg = 'Closed for the day. Automatically clocked out ' + data.autoEnded + ' still-active session(s).';
+      if (data.interruptedCalls > 0) msg += ' ' + data.interruptedCalls + ' call(s) still in progress were moved to Requires Review.';
+      alert(msg);
+    }
   } else {
     await api('/api/admin/center-status', { method: 'POST', body: JSON.stringify({ open: true }) });
   }

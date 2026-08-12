@@ -25,11 +25,19 @@ export async function authenticate(c: Context): Promise<AuthUser | null> {
   const uid = c.req.header('x-user-id') || c.req.query('uid');
   const pin = c.req.header('x-user-pin') || c.req.query('pin');
   if (!uid || !pin) return null;
-  const [user] = await sql`SELECT id, name, pin, role, avatar, pfp_data, xp, clocked_in, is_super_admin, tenant_id FROM users WHERE id = ${uid} AND pin = ${pin}`;
-  if (user) {
-    sql`UPDATE users SET last_seen_at = now() WHERE id = ${user.id} AND (last_seen_at IS NULL OR last_seen_at < now() - INTERVAL '20 seconds')`.catch(() => {});
-  }
-  return (user as AuthUser) || null;
+  // Joined in one query rather than a second round-trip per request - this is what
+  // actually cuts off an already-logged-in session the moment their tenant's access
+  // window expires, not just new logins going forward.
+  const [row] = await sql`
+    SELECT users.id, users.name, users.pin, users.role, users.avatar, users.pfp_data, users.xp, users.clocked_in, users.is_super_admin, users.tenant_id,
+      tenants.expires_at as tenant_expires_at
+    FROM users LEFT JOIN tenants ON tenants.id = users.tenant_id
+    WHERE users.id = ${uid} AND users.pin = ${pin}`;
+  if (!row) return null;
+  if (row.tenant_expires_at && new Date(row.tenant_expires_at) < new Date()) return null;
+  sql`UPDATE users SET last_seen_at = now() WHERE id = ${row.id} AND (last_seen_at IS NULL OR last_seen_at < now() - INTERVAL '20 seconds')`.catch(() => {});
+  const { tenant_expires_at, ...user } = row;
+  return user as AuthUser;
 }
 
 export function requireRole(...roles: Array<'admin' | 'caller' | 'finisher'>) {

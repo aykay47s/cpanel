@@ -17,6 +17,10 @@ async function getPanelName() {
   const [row] = await sql`SELECT value FROM settings WHERE key = 'panel_name'`;
   return row?.value || 'us';
 }
+async function getSelfTenantId(): Promise<number | null> {
+  const [row] = await sql`SELECT id FROM tenants WHERE is_self = true`;
+  return row?.id ?? null;
+}
 // Ordered list of who's actually eligible to receive an inbound call right now —
 // respects the admin's "everyone" vs "selected callers only" setting, calls
 // higher-priority (lower number) callers first, and never bridges an inbound call
@@ -46,10 +50,18 @@ telephony.post('/api/telephony/inbound', async (c) => {
   const body = await c.req.parseBody().catch(() => ({}));
   const callSid = String((body as any).CallSid || '');
   const from = String((body as any).From || '');
+  // Twilio's connect flow currently always configures the webhook against the
+  // self tenant's origin - full per-tenant Twilio routing (a distinct webhook per
+  // resold tenant, same pattern as the 3CX slug route) is a separate, larger task
+  // since it'd need every function in this file parameterized by tenant, not just
+  // the inbound_calls insert.
+  const tenantId = await getSelfTenantId();
 
-  if (callSid) {
-    await sql`INSERT INTO inbound_calls (twilio_call_sid, from_number, status) VALUES (${callSid}, ${from}, 'ringing') ON CONFLICT (twilio_call_sid) DO NOTHING`;
+  if (callSid && tenantId) {
+    const [existingCall] = await sql`SELECT 1 FROM inbound_calls WHERE twilio_call_sid = ${callSid}`;
+    await sql`INSERT INTO inbound_calls (twilio_call_sid, from_number, status, tenant_id) VALUES (${callSid}, ${from}, 'ringing', ${tenantId}) ON CONFLICT (twilio_call_sid) DO NOTHING`;
     broadcast('inbound_call', { callSid, from });
+    if (!existingCall) await identifyAndAlertForInboundCall(from, tenantId, 'twilio').catch(() => {});
   }
 
   // Says whatever name is configured in Call Routing (falls back to the panel
@@ -190,7 +202,8 @@ telephony.post('/api/telephony/status', async (c) => {
 });
 
 telephony.get('/api/admin/inbound-calls', requireRole('admin'), async (c) => {
-  const rows = await sql`SELECT * FROM inbound_calls ORDER BY created_at DESC LIMIT 100`;
+  const user = c.get('user');
+  const rows = await sql`SELECT * FROM inbound_calls WHERE tenant_id = ${user.tenant_id} ORDER BY created_at DESC LIMIT 100`;
   return c.json({ data: rows });
 });
 
@@ -224,7 +237,7 @@ async function identifyAndAlertForInboundCall(from: string, tenantId: number, pr
   }
 }
 
-telephony.post('/api/telephony/3cx-webhook', async (c) => {
+async function handle3cxWebhook(c: any, tenantId: number) {
   const body = await c.req.json().catch(() => ({} as any));
   const callId = String(body.call_id || body.callid || body.id || '');
   const eventType = String(body.event_type || body.event || body.status || '').toLowerCase();
@@ -234,24 +247,35 @@ telephony.post('/api/telephony/3cx-webhook', async (c) => {
 
   if (['ringing', 'incoming', 'new', 'start'].some(k => eventType.includes(k))) {
     const [existingConfig] = await sql`SELECT 1 FROM inbound_calls WHERE twilio_call_sid = ${callId}`;
-    await sql`INSERT INTO inbound_calls (twilio_call_sid, from_number, status, provider) VALUES (${callId}, ${from}, 'ringing', '3cx') ON CONFLICT (twilio_call_sid) DO NOTHING`;
+    await sql`INSERT INTO inbound_calls (twilio_call_sid, from_number, status, provider, tenant_id) VALUES (${callId}, ${from}, 'ringing', '3cx', ${tenantId}) ON CONFLICT (twilio_call_sid) DO NOTHING`;
     broadcast('inbound_call', { callSid: callId, from });
     if (!existingConfig) {
       // Only look up + alert once per call, not on every duplicate ringing event
       // some 3CX configurations send.
-      // NOTE: 3CX webhook payloads carry no tenant identifier, and this single URL
-      // would be shared across any resold tenant's 3CX connection - this currently
-      // only correctly resolves the operator's own (self) tenant. Properly
-      // supporting multiple tenants each connecting their own 3CX server would need
-      // a per-tenant webhook path (e.g. /api/telephony/3cx-webhook/:tenantSlug).
-      const [tenantRow] = await sql`SELECT id FROM tenants WHERE is_self = true`;
-      if (tenantRow) await identifyAndAlertForInboundCall(from, tenantRow.id, '3cx').catch(() => {});
+      await identifyAndAlertForInboundCall(from, tenantId, '3cx').catch(() => {});
     }
   } else {
     await sql`UPDATE inbound_calls SET status = ${eventType || 'unknown'}, ended_at = CASE WHEN ${eventType} IN ('ended','completed','hangup','missed') THEN now() ELSE ended_at END WHERE twilio_call_sid = ${callId} AND provider = '3cx'`;
     broadcast('inbound_call_update', { callSid: callId, status: eventType });
   }
   return c.json({ ok: true });
+}
+
+// Backward-compatible path with no slug - resolves to the operator's own (self)
+// tenant, since that's what was already configured in any existing 3CX connection
+// before per-tenant routing existed.
+telephony.post('/api/telephony/3cx-webhook', async (c) => {
+  const [tenantRow] = await sql`SELECT id FROM tenants WHERE is_self = true`;
+  if (!tenantRow) return c.json({ ok: true });
+  return handle3cxWebhook(c, tenantRow.id);
+});
+// Per-tenant path - this is what each resold tenant's own 3CX connection actually
+// gets shown and should configure, so their inbound calls resolve to THEIR data,
+// not the operator's.
+telephony.post('/api/telephony/3cx-webhook/:slug', async (c) => {
+  const [tenantRow] = await sql`SELECT id FROM tenants WHERE slug = ${c.req.param('slug')} AND status = 'active'`;
+  if (!tenantRow) return c.json({ ok: true });
+  return handle3cxWebhook(c, tenantRow.id);
 });
 
 // ================= VONAGE (full parity with Twilio — real menu, hold music,
@@ -268,10 +292,13 @@ telephony.all('/api/telephony/vonage/answer', async (c) => {
   const params = await vonageParams(c);
   const callUuid = String(params.conversation_uuid || params.uuid || '');
   const from = String(params.from || '');
+  const tenantId = await getSelfTenantId(); // same self-tenant scoping note as the Twilio handler above
 
-  if (callUuid) {
-    await sql`INSERT INTO inbound_calls (twilio_call_sid, from_number, status, provider) VALUES (${callUuid}, ${from}, 'ringing', 'vonage') ON CONFLICT (twilio_call_sid) DO NOTHING`;
+  if (callUuid && tenantId) {
+    const [existingCall] = await sql`SELECT 1 FROM inbound_calls WHERE twilio_call_sid = ${callUuid}`;
+    await sql`INSERT INTO inbound_calls (twilio_call_sid, from_number, status, provider, tenant_id) VALUES (${callUuid}, ${from}, 'ringing', 'vonage', ${tenantId}) ON CONFLICT (twilio_call_sid) DO NOTHING`;
     broadcast('inbound_call', { callSid: callUuid, from });
+    if (!existingCall) await identifyAndAlertForInboundCall(from, tenantId, 'vonage').catch(() => {});
   }
 
   const cfg = await getTelephonyConfig();

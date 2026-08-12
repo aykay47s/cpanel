@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { sql } from '../db';
 import { requireRole, authenticate, requireAnyStaff } from '../auth';
 import { broadcast } from '../realtime';
+import { logEvent } from '../audit';
 
 export const users = new Hono();
 function bad(c: any, msg: string, code = 400) { return c.json({ error: msg }, code); }
@@ -16,8 +17,15 @@ users.post('/api/auth/login', async (c) => {
   // own instance, exactly like before multi-tenancy existed.
   let tenantId: number | null = null;
   if (slug) {
-    const [tenant] = await sql`SELECT id FROM tenants WHERE slug = ${slug} AND status = 'active'`;
+    const [tenant] = await sql`SELECT id, expires_at, name FROM tenants WHERE slug = ${slug} AND status = 'active'`;
     if (!tenant) return bad(c, 'This call center panel could not be found', 404);
+    // This is what actually enforces "access for X days" from a redeemed key -
+    // once expires_at has passed, the panel stops being reachable at all, not just
+    // visually marked as expired somewhere in Master Control.
+    if (tenant.expires_at && new Date(tenant.expires_at) < new Date()) {
+      await sql`UPDATE tenants SET status = 'expired' WHERE id = ${tenant.id}`;
+      return bad(c, 'Access to this panel has expired. Contact whoever set this up to renew it.', 403);
+    }
     tenantId = tenant.id;
   } else {
     const [selfTenant] = await sql`SELECT id FROM tenants WHERE is_self = true`;
@@ -106,12 +114,25 @@ users.post('/api/admin/center-status', requireRole('admin'), async (c) => {
   if (reason !== undefined) await sql`INSERT INTO settings (key, value) VALUES ('center_offline_reason', ${reason}) ON CONFLICT (key) DO UPDATE SET value = ${reason}`;
 
   let autoEnded = 0;
+  let interruptedCalls = 0;
   if (open === false) {
     // Closing the day should actually end everyone's shift, not just block new
     // clock-ins - nobody should stay clocked in against a center that's now closed.
     const clockedRows = await sql`SELECT id FROM users WHERE clocked_in = true AND tenant_id = ${user.tenant_id} AND role != 'admin'`;
     const ids = clockedRows.map((r: any) => r.id);
     if (ids.length) {
+      // Clocking someone out does NOT automatically end whatever lead they're mid-call
+      // on - that lead just sits at status 'calling'/'active_call' forever, which is
+      // exactly why the dashboard kept showing "on call" after the day was closed.
+      // Route any of those into requires_review instead of silently losing the fact
+      // a call was genuinely in progress when the day ended.
+      const interrupted = await sql`SELECT id, assigned_caller_id FROM leads WHERE tenant_id = ${user.tenant_id} AND assigned_caller_id = ANY(${ids}) AND status IN ('calling','active_call')`;
+      for (const lead of interrupted) {
+        await sql`UPDATE leads SET status = 'requires_review', updated_at = now() WHERE id = ${lead.id}`;
+        await logEvent(lead.id, 'day_ended_mid_call', user, 'calling', 'requires_review', { note: 'Call was in progress when the day was closed' });
+      }
+      interruptedCalls = interrupted.length;
+
       await sql`UPDATE users SET clocked_in = false, status = 'offline' WHERE id = ANY(${ids})`;
       await sql`UPDATE clock_sessions SET clocked_out_at = now(), duration_seconds = EXTRACT(EPOCH FROM (now() - clocked_in_at))::int
         WHERE user_id = ANY(${ids}) AND clocked_out_at IS NULL`;
@@ -119,7 +140,7 @@ users.post('/api/admin/center-status', requireRole('admin'), async (c) => {
       broadcast('center_closed', { reason: reason || null }, ids);
     }
   }
-  return c.json({ ok: true, autoEnded });
+  return c.json({ ok: true, autoEnded, interruptedCalls });
 });
 
 users.post('/api/clock', async (c) => {
