@@ -70,6 +70,19 @@ export async function ensureDb() {
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`;
 
+  // Every XP grant as its own row, not just a running total on users — this is
+  // what makes a weekly leaderboard possible (sum the last 7 days) and lets the
+  // board show WHY someone is ahead instead of one opaque number.
+  await sql`CREATE TABLE IF NOT EXISTS xp_events (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    amount INTEGER NOT NULL,
+    reason TEXT NOT NULL,
+    lead_id INTEGER,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`;
+  await sql`CREATE INDEX IF NOT EXISTS xp_events_user_time ON xp_events (user_id, created_at)`;
+
   // Inbound calls received through a connected Twilio number — logged whether
   // answered, missed, or abandoned in the menu, so admins have visibility even
   // before this becomes a full call center feature.

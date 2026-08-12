@@ -6,6 +6,25 @@ function switchAdminTab(tab) {
   renderAdminTab(tab);
 }
 
+// Every screen explains itself in one sentence — same place, same style, so
+// nobody needs a walkthrough to know what a tab is for or what acting on it does.
+const TAB_HINTS = {
+  dashboard: 'Live overview of the whole floor — lead totals, who is on a call right now, and everything that just happened.',
+  leads: 'Every lead in the system. Click a row for its full history, send one to a specific caller, or search and filter across all of them.',
+  import: 'Paste or upload raw lead data — it gets parsed, previewed, and de-duplicated before anything touches the live queue.',
+  vault: 'Held-back leads that callers cannot see yet. Release them into the live queue in batches whenever you want the floor to have them.',
+  duplicates: 'Leads flagged as possible duplicates of each other — confirm the match to merge them, or clear the flag.',
+  finishing: 'Successful calls waiting for a finisher — assign each one to whoever should close it out.',
+  roster: 'Everyone on the team: their PINs, roles, call-from numbers, and profile. Add people or change roles here.',
+  leaderboard: 'XP-ranked board across the team. This Week is a rolling 7-day race; All Time never resets. Expand "How XP works" below for the exact payouts.',
+  announcements: 'Broadcast to the whole team — important ones are highlighted and push-notified to everyone.',
+  goal: "One shared team target shown on every caller home screen, with live progress.",
+  scripts: 'Approved call scripts, organised by lead category — callers see the matching ones automatically during a call. Caller suggestions land here for review.',
+  template: "The call guide shown at the top of every caller active-call screen.",
+  categories: 'Lead types with their colours (and bank marks where they match a real bank) — used for badges and script matching everywhere.',
+  branding: "Your panel name and logo, applied across login, title bar, and the mobile home-screen icon.",
+  telephony: 'Inbound call routing. Connect Twilio (or 3CX) and calls to your number get menued, held, and bridged to your callers automatically.',
+};
 async function renderAdminTab(tab) {
   const el = document.getElementById('adminContent');
   if (tab !== 'chat') el.innerHTML = '<div class="loading-shimmer"></div><div class="loading-shimmer" style="width:70%;"></div>';
@@ -27,6 +46,12 @@ async function renderAdminTab(tab) {
     else if (tab === 'branding') await renderAdminBranding(el);
     else if (tab === 'telephony') await renderAdminTelephony(el);
     el.classList.remove('page-transition'); void el.offsetWidth; el.classList.add('page-transition');
+      if (TAB_HINTS[tab] && !el.querySelector('.tab-hint')) {
+      const hint = document.createElement('div');
+      hint.className = 'tab-hint';
+      hint.innerHTML = '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg><span>' + TAB_HINTS[tab] + '</span>';
+      el.prepend(hint);
+    }
   } catch (err) {
     console.error('Tab render failed:', tab, err);
     el.innerHTML = '<div class="panel p fade-up" style="text-align:center;"><div style="font-size:14px;margin-bottom:10px;">Something went wrong loading this.</div><div style="font-size:12px;color:var(--text-dim);margin-bottom:14px;">' + esc(String(err && err.message || err)) + '</div><button class="btn btn-gold" onclick="renderAdminTab(\\'' + tab + '\\')">Retry</button></div>';
@@ -593,38 +618,22 @@ async function deleteCategory(id) {
 }
 
 
+let adminLbMode = 'week';
 async function renderAdminLeaderboard(el) {
   const res = await api('/api/leaderboard');
   const rows = (await res.json()).data;
-  const podium = rows.slice(0, 3);
-  const rest = rows.slice(3);
-  const [first, second, third] = podium;
   el.innerHTML = \`
-    \${podium.length ? \`<div class="panel p fade-up" style="padding:32px 20px 16px;">
-      <div class="section-title" style="margin-top:0;">Top Performers</div>
-      <div style="display:flex;align-items:flex-end;justify-content:center;gap:14px;max-width:420px;margin:0 auto;">
-        \${second ? adminPodiumSlot(second, 2, 84) : '<div style="flex:1;"></div>'}
-        \${first ? adminPodiumSlot(first, 1, 104) : '<div style="flex:1;"></div>'}
-        \${third ? adminPodiumSlot(third, 3, 70) : '<div style="flex:1;"></div>'}
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
+      <div class="seg-tabs">
+        <button class="seg-tab \${adminLbMode==='week'?'on':''}" onclick="adminLbMode='week';renderAdminTab('leaderboard')">This Week</button>
+        <button class="seg-tab \${adminLbMode==='all'?'on':''}" onclick="adminLbMode='all';renderAdminTab('leaderboard')">All Time</button>
       </div>
-    </div>\` : '<div class="panel p" style="color:var(--text-dim);">No activity yet.</div>'}
-    \${rest.length ? \`<div class="panel p fade-up"><div class="section-title" style="margin-top:0;">Full Board</div>
-      \${rest.map((r, i) => \`<div class="lb-row"><div class="rank">\${i+4}</div>\${avatarHtml(r, 30)}
-        <div class="lb-name" style="margin-left:6px;">\${esc(r.name)} \${statusBadge(r.role)}</div>
-        <div class="lb-stats"><span><b>\${r.successful_calls||0}</b> success</span><span style="color:var(--violet);"><b>\${r.xp}</b> xp</span></div></div>\`).join('')}
-    </div>\` : ''}\`;
+    </div>
+    \${lbBoardHtml(rows, adminLbMode)}
+    \${xpGuideHtml()}\`;
+  animateCountUps(el);
 }
-function adminPodiumSlot(r, place, height) {
-  const medalLabel = place === 1 ? 'GOLD' : place === 2 ? 'SILVER' : 'BRONZE';
-  const barColor = place === 1 ? 'linear-gradient(180deg,#fbbf24,#b8860b)' : place === 2 ? 'linear-gradient(180deg,#d1d5db,#9ca3af)' : 'linear-gradient(180deg,#d97706,#92400e)';
-  return \`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;">
-    <div style="font-size:9.5px;font-weight:800;letter-spacing:.6px;color:var(--text-faint);">\${medalLabel}</div>
-    \${avatarHtml(r, place === 1 ? 56 : 46)}
-    <div style="font-size:12px;font-weight:700;text-align:center;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">\${esc(r.name)}</div>
-    <div style="font-size:10.5px;color:var(--violet);font-weight:600;">\${r.xp} xp · \${r.successful_calls||0} wins</div>
-    <div style="width:100%;height:\${height}px;border-radius:10px 10px 0 0;background:\${barColor};display:flex;align-items:flex-start;justify-content:center;padding-top:6px;font-size:16px;font-weight:800;color:rgba(0,0,0,.55);">#\${place}</div>
-  </div>\`;
-}
+
 
 async function renderAdminBranding(el) {
   const res = await api('/api/branding');

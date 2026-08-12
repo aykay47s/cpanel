@@ -286,13 +286,20 @@ users.delete('/api/admin/users/:id', requireRole('admin'), async (c) => {
 
 users.get('/api/leaderboard', requireAnyStaff, async (c) => {
   const user = c.get('user');
+  // weekly_xp comes from xp_events (last 7 days) so "This Week" is a real
+  // rolling race, not the same all-time order relabelled.
   const rows = await sql`
     SELECT users.id, users.name, users.avatar, users.pfp_data, users.role, users.xp,
-      COUNT(*) FILTER (WHERE lead_events.event_type = 'outcome_recorded' AND lead_events.to_status = 'successful_call' AND lead_events.actor_id = users.id) as successful_calls
+      COUNT(*) FILTER (WHERE lead_events.event_type = 'outcome_recorded' AND lead_events.to_status = 'successful_call' AND lead_events.actor_id = users.id) as successful_calls,
+      COALESCE(week.wxp, 0) as weekly_xp
     FROM users
     LEFT JOIN lead_events ON lead_events.actor_id = users.id
+    LEFT JOIN LATERAL (
+      SELECT SUM(amount)::int as wxp FROM xp_events
+      WHERE xp_events.user_id = users.id AND xp_events.created_at > now() - interval '7 days'
+    ) week ON true
     WHERE users.role IN ('caller','finisher') AND users.tenant_id = ${user.tenant_id}
-    GROUP BY users.id, users.name, users.avatar, users.pfp_data, users.role, users.xp
+    GROUP BY users.id, users.name, users.avatar, users.pfp_data, users.role, users.xp, week.wxp
     ORDER BY users.xp DESC
   `;
   return c.json({ data: rows });

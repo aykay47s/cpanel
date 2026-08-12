@@ -360,6 +360,7 @@ leads.post('/api/caller/leads/:id/claim', requireRole('caller'), async (c) => {
     WHERE id = ${id} AND tenant_id = ${user.tenant_id} AND status = 'not_called' AND (assigned_caller_id IS NULL OR assigned_caller_id = ${user.id}) RETURNING *`;
   if (!updated) return c.json({ claimed: false, reason: 'Already taken' }, 409);
   await logEvent(updated.id, 'claimed', user, 'not_called', 'calling', {});
+  await awardXp(user.id, 5, 'claimed', updated.id);
   broadcast('lead_claimed', { id: Number(id) });
   return c.json({ claimed: true, data: updated });
 });
@@ -370,6 +371,7 @@ leads.post('/api/caller/leads/:id/connect', requireRole('caller'), async (c) => 
   if (!lead || lead.assigned_caller_id !== user.id) return bad(c, 'Not your lead', 403);
   const [updated] = await sql`UPDATE leads SET status = 'active_call', updated_at = now() WHERE id = ${c.req.param('id')} RETURNING *`;
   await logEvent(updated.id, 'call_connected', user, 'calling', 'active_call', {});
+  await awardXp(user.id, 10, 'connected', updated.id);
   return c.json({ data: updated });
 });
 
@@ -393,6 +395,7 @@ leads.post('/api/caller/leads/:id/note', requireRole('caller'), async (c) => {
   const [noteRow] = await sql`INSERT INTO lead_notes (lead_id, author_id, content) VALUES (${c.req.param('id')}, ${user.id}, ${note.trim()}) RETURNING *`;
   await logEvent(c.req.param('id'), 'note_added', user, null, null, { note: note.trim() });
   broadcast('lead_note', { leadId: Number(c.req.param('id')), note: { ...noteRow, author_name: user.name } });
+  await awardXp(user.id, 3, 'note_added', Number(c.req.param('id')));
   return c.json({ data: noteRow });
 });
 
@@ -401,11 +404,24 @@ leads.get('/api/leads/:id/notes', requireAnyStaff, async (c) => {
   return c.json({ data: rows });
 });
 
+// XP is earned for effort, not only wins — every dial that reaches an outcome
+// pays something, so the leaderboard rewards the person grinding through 60
+// voicemails as well as the person who lands the close. A successful call is
+// still worth an order of magnitude more, because that's the job.
 const XP_MAP: Record<string, number> = {
-  successful_call: 30, failed: 5, requires_review: 5,
-  voicemail: 2, hung_up: 2, no_answer: 2, busy: 1, callback_requested: 4,
-  cancelled: 0, chopped_previously: 1,
+  successful_call: 100, callback_requested: 15, requires_review: 10, failed: 10,
+  voicemail: 5, no_answer: 5, hung_up: 5, busy: 3,
+  cancelled: 0, chopped_previously: 2,
 };
+// Single choke point for all XP: bumps the running total AND records the event
+// row that weekly leaderboards are computed from. Returns the amount so route
+// handlers can tell the client what was just earned (for the +XP toast).
+async function awardXp(userId: number, amount: number, reason: string, leadId?: number): Promise<number> {
+  if (!amount) return 0;
+  await sql`UPDATE users SET xp = xp + ${amount} WHERE id = ${userId}`;
+  await sql`INSERT INTO xp_events (user_id, amount, reason, lead_id) VALUES (${userId}, ${amount}, ${reason}, ${leadId || null})`.catch(() => {});
+  return amount;
+}
 // Outcomes where nothing meaningful happened yet — the lead goes back to the open
 // pool for someone else (or the same caller later) to try again.
 const REQUEUE_OUTCOMES = ['voicemail', 'hung_up', 'no_answer', 'busy', 'callback_requested', 'cancelled'];
@@ -442,9 +458,9 @@ leads.post('/api/caller/leads/:id/outcome', requireRole('caller'), async (c) => 
     // claim right now" moment, whatever put it back in the pool.
     await sendPushToRole('caller', 'Lead available', `${updated.first_name || 'A lead'} is back in the queue.`, '/', user.tenant_id);
   }
-  await sql`UPDATE users SET xp = xp + ${XP_MAP[outcome] || 0} WHERE id = ${user.id}`;
+  const xpAwarded = await awardXp(user.id, XP_MAP[outcome] || 0, 'outcome:' + outcome, updated.id);
   broadcast('lead_updated', updated);
-  return c.json({ data: updated });
+  return c.json({ data: updated, xp_awarded: xpAwarded });
 });
 
 // ================= FINISHER LIFECYCLE =================
@@ -462,7 +478,7 @@ leads.post('/api/finisher/leads/:id/outcome', requireRole('finisher'), async (c)
   if (!lead || lead.assigned_finisher_id !== user.id) return bad(c, 'Not your lead', 403);
   const [updated] = await sql`UPDATE leads SET status = ${outcome}, notes = COALESCE(${notes || null}, notes), updated_at = now() WHERE id = ${c.req.param('id')} RETURNING *`;
   await logEvent(updated.id, 'finisher_outcome', user, lead.status, outcome, { notes: notes || null });
-  await sql`UPDATE users SET xp = xp + ${outcome === 'completed' ? 50 : 10} WHERE id = ${user.id}`;
+  const xpAwarded = await awardXp(user.id, outcome === 'completed' ? 75 : 15, 'finisher:' + outcome, updated.id);
   broadcast('lead_updated', updated);
-  return c.json({ data: updated });
+  return c.json({ data: updated, xp_awarded: xpAwarded });
 });

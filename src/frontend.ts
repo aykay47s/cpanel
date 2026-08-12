@@ -370,6 +370,45 @@ tr.clickable:active{background:rgba(255,255,255,.05);}
 .script-item .content{font-size:12.5px;color:var(--text-dim);line-height:1.5;white-space:pre-wrap;}
 
 /* leaderboard */
+/* ---- XP toast: floats up from the bottom the moment XP lands ---- */
+.xp-toast{position:fixed;left:50%;bottom:110px;transform:translateX(-50%);z-index:200;display:flex;align-items:center;gap:8px;padding:10px 18px;border-radius:100px;background:linear-gradient(135deg,rgba(167,139,250,.25),rgba(79,140,255,.2));border:1px solid rgba(167,139,250,.45);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);font-family:'Geist Mono',monospace;font-weight:700;font-size:14px;color:var(--violet-bright);box-shadow:0 8px 30px rgba(124,92,255,.35);animation:xpRise 1.9s cubic-bezier(.16,1,.3,1) both;pointer-events:none;}
+@keyframes xpRise{0%{opacity:0;transform:translateX(-50%) translateY(24px) scale(.85);}12%{opacity:1;transform:translateX(-50%) translateY(0) scale(1.04);}20%{transform:translateX(-50%) translateY(0) scale(1);}78%{opacity:1;}100%{opacity:0;transform:translateX(-50%) translateY(-34px) scale(.94);}}
+/* ---- Level chip + progress bar, shared by home header and leaderboards ---- */
+.lvl-chip{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:100px;background:linear-gradient(135deg,rgba(167,139,250,.2),rgba(79,140,255,.14));border:1px solid rgba(167,139,250,.4);font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--violet-bright);}
+.xp-bar{height:7px;border-radius:5px;background:rgba(255,255,255,.06);overflow:hidden;position:relative;}
+.xp-bar > i{display:block;height:100%;border-radius:5px;background:linear-gradient(90deg,var(--violet),var(--gold-bright));position:relative;transition:width .8s cubic-bezier(.16,1,.3,1);}
+.xp-bar > i::after{content:'';position:absolute;inset:0;background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.35) 50%,transparent 70%);animation:xpBarSheen 2.6s ease-in-out infinite;}
+@keyframes xpBarSheen{0%{transform:translateX(-100%);}55%,100%{transform:translateX(100%);}}
+/* ---- Segmented tabs (This Week / All Time) ---- */
+.seg-tabs{display:flex;gap:4px;padding:4px;border-radius:100px;background:rgba(255,255,255,.05);border:1px solid var(--border);width:fit-content;}
+.seg-tab{padding:7px 16px;border-radius:100px;font-size:11.5px;font-weight:700;color:var(--text-dim);background:transparent;transition:all .22s var(--ease-smooth);}
+.seg-tab.on{background:linear-gradient(135deg,var(--violet-bright),var(--gold));color:#fff;box-shadow:0 2px 10px rgba(124,92,255,.35);}
+/* ---- Podium: rise-in, glow ring on #1, floating crown ---- */
+.podium-slot{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;animation:podiumRise .7s var(--ease-spring) both;}
+.podium-slot:nth-child(1){animation-delay:.12s;} .podium-slot:nth-child(3){animation-delay:.2s;}
+@keyframes podiumRise{from{opacity:0;transform:translateY(26px);}to{opacity:1;transform:none;}}
+.podium-av{position:relative;border-radius:50%;}
+.podium-av.first::before{content:'';position:absolute;inset:-5px;border-radius:50%;background:conic-gradient(from 0deg,#fbbf24,#a78bfa,#4f8cff,#fbbf24);animation:ringSpin 3.2s linear infinite;z-index:-1;}
+@keyframes ringSpin{to{transform:rotate(360deg);}}
+.podium-crown{font-size:16px;animation:crownFloat 2.6s ease-in-out infinite;line-height:1;}
+@keyframes crownFloat{0%,100%{transform:translateY(0);}50%{transform:translateY(-4px);}}
+.podium-bar{width:100%;border-radius:12px 12px 0 0;display:flex;align-items:flex-start;justify-content:center;padding-top:7px;font-size:15px;font-weight:800;color:rgba(0,0,0,.55);position:relative;overflow:hidden;}
+.podium-bar::after{content:'';position:absolute;inset:0;background:linear-gradient(115deg,transparent 35%,rgba(255,255,255,.3) 50%,transparent 65%);transform:translateX(-100%);animation:xpBarSheen 3.4s ease-in-out infinite;}
+/* ---- Board rows: hover slide, entry stagger, inline progress ---- */
+.lb-row{transition:background .18s ease, transform .18s var(--ease-smooth);border-radius:12px;animation:fadeUp .4s var(--ease-smooth) both;}
+.lb-row:hover{background:rgba(255,255,255,.035);transform:translateX(3px);}
+.lb-row.me{background:linear-gradient(90deg,rgba(167,139,250,.1),transparent 70%);border:1px solid rgba(167,139,250,.2);}
+/* ---- Tab hints: one consistent explainer style everywhere ---- */
+.tab-hint{display:flex;gap:9px;align-items:flex-start;font-size:12px;color:var(--text-dim);line-height:1.55;padding:11px 14px;border-radius:14px;background:rgba(167,139,250,.06);border:1px solid rgba(167,139,250,.14);margin-bottom:16px;animation:fadeUp .4s var(--ease-smooth) both;}
+.tab-hint .ic{width:14px;height:14px;flex-shrink:0;margin-top:2px;color:var(--violet);}
+/* ---- Call screen ---- */
+.call-lead-name{font-size:24px;font-weight:800;font-family:'Bricolage Grotesque',sans-serif;letter-spacing:-.02em;line-height:1.15;}
+.call-lead-sub{display:flex;align-items:center;gap:8px;color:var(--text-dim);font-size:13px;margin-top:5px;flex-wrap:wrap;}
+.call-timer-chip{display:inline-flex;align-items:center;gap:7px;padding:7px 13px;border-radius:100px;background:rgba(255,255,255,.05);border:1px solid var(--border-2);font-size:13.5px;font-weight:700;}
+.call-timer-chip .tdot{width:7px;height:7px;border-radius:50%;background:var(--success);animation:badgeDotPulse 1.4s ease-in-out infinite;}
+.oncall-btn,.win-btn{position:relative;overflow:hidden;}
+.oncall-btn::after,.win-btn::after{content:'';position:absolute;inset:0;background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.3) 48%,transparent 66%);transform:translateX(-120%);transition:transform .5s var(--ease-smooth);}
+.oncall-btn:hover::after,.win-btn:hover::after{transform:translateX(120%);}
 .lb-row{display:flex;align-items:center;gap:14px;padding:13px 0;border-bottom:1px solid var(--border);}
 .rank{width:29px;height:29px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12.5px;background:var(--s2);flex-shrink:0;}
 .rank.r1{background:#eab308;color:#1c1408;}
@@ -815,6 +854,79 @@ function animateCountUps(container) {
   });
 }
 
+// ---- Levels ----
+// Cost to clear level n grows by 60 XP per level: 100, 160, 220, ... so early
+// levels come fast (day one feels rewarding) and later ones are a real season.
+function levelInfo(xp) {
+  let lvl = 1, rem = Math.max(0, xp || 0), cost = 100;
+  while (rem >= cost) { rem -= cost; lvl++; cost = 100 + (lvl - 1) * 60; }
+  const bands = [[20,'Legend'],[16,'Elite'],[12,'Veteran'],[8,'Operator'],[5,'Closer'],[3,'Dialer'],[1,'Rookie']];
+  const title = bands.find(b => lvl >= b[0])[1];
+  return { level: lvl, into: rem, need: cost, pct: Math.min(100, Math.round(rem / cost * 100)), title };
+}
+// Floating "+N XP" chip — fired whenever the server reports xp_awarded, so the
+// grind is visibly paying out in the moment, not just on the leaderboard later.
+function xpToast(amount, label) {
+  if (!amount) return;
+  const el = document.createElement('div');
+  el.className = 'xp-toast';
+  el.innerHTML = '⚡ +' + amount + ' XP' + (label ? ' <span style="font-weight:500;color:var(--text-dim);font-size:12px;">· ' + esc(label) + '</span>' : '');
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 1950);
+}
+// ---- Leaderboard builders (shared by staff board and admin board) ----
+function lbSortKey(mode) { return mode === 'week' ? 'weekly_xp' : 'xp'; }
+function lbPodiumSlot(r, place, height, mode) {
+  if (!r) return '<div style="flex:1;"></div>';
+  const xpVal = mode === 'week' ? (r.weekly_xp || 0) : r.xp;
+  const li = levelInfo(r.xp);
+  const barColor = place === 1 ? 'linear-gradient(180deg,#fbbf24,#b8860b)' : place === 2 ? 'linear-gradient(180deg,#d1d5db,#9ca3af)' : 'linear-gradient(180deg,#d97706,#92400e)';
+  return '<div class="podium-slot">'
+    + (place === 1 ? '<div class="podium-crown">👑</div>' : '<div style="height:16px;"></div>')
+    + '<div class="podium-av' + (place === 1 ? ' first' : '') + '">' + avatarHtml(r, place === 1 ? 54 : 44) + '</div>'
+    + '<div style="font-size:11.5px;font-weight:700;text-align:center;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(r.name) + (typeof me !== 'undefined' && me && r.id === me.id ? ' <span style="color:var(--gold-bright);">(you)</span>' : '') + '</div>'
+    + '<span class="lvl-chip">Lv ' + li.level + ' · ' + li.title + '</span>'
+    + '<div class="mono" style="font-size:11px;color:var(--violet-bright);font-weight:700;" data-count="' + xpVal + '">0</div>'
+    + '<div class="podium-bar" style="height:' + height + 'px;background:' + barColor + ';">#' + place + '</div>'
+    + '</div>';
+}
+function lbRowHtml(r, rank, mode, delay) {
+  const xpVal = mode === 'week' ? (r.weekly_xp || 0) : r.xp;
+  const li = levelInfo(r.xp);
+  const isMe = typeof me !== 'undefined' && me && r.id === me.id;
+  return '<div class="lb-row' + (isMe ? ' me' : '') + '" style="animation-delay:' + (delay * 45) + 'ms;padding:11px 12px;">'
+    + '<div class="rank r' + rank + '">' + rank + '</div>' + avatarHtml(r, 32)
+    + '<div style="flex:1;min-width:0;margin-left:8px;">'
+    +   '<div class="lb-name">' + esc(r.name) + (isMe ? ' <span style="color:var(--gold-bright);">(you)</span>' : '') + ' <span class="lvl-chip" style="padding:2px 8px;font-size:9px;">Lv ' + li.level + '</span></div>'
+    +   '<div class="xp-bar" style="margin-top:6px;max-width:190px;"><i style="width:' + li.pct + '%;"></i></div>'
+    + '</div>'
+    + '<div class="lb-stats"><span><b>' + (r.successful_calls || 0) + '</b> wins</span><span style="color:var(--violet-bright);"><b class="mono" data-count="' + xpVal + '">0</b> xp</span></div>'
+    + '</div>';
+}
+function lbBoardHtml(rows, mode) {
+  const sorted = [...rows].sort((a, b) => (mode === 'week' ? (b.weekly_xp||0) - (a.weekly_xp||0) : b.xp - a.xp));
+  const [first, second, third] = sorted;
+  const rest = sorted.slice(3);
+  return (sorted.length ? '<div class="panel p fade-up" style="padding:24px 16px 0;">'
+      + '<div style="display:flex;align-items:flex-end;justify-content:center;gap:12px;max-width:420px;margin:0 auto;">'
+      + lbPodiumSlot(second, 2, 74, mode) + lbPodiumSlot(first, 1, 96, mode) + lbPodiumSlot(third, 3, 60, mode)
+      + '</div></div>' : '<div class="panel p" style="color:var(--text-dim);">No one on the board yet — XP starts counting from the first claimed lead.</div>')
+    + (rest.length ? '<div class="panel p fade-up">' + rest.map((r, i) => lbRowHtml(r, i + 4, mode, i)).join('') + '</div>' : '');
+}
+// How the whole economy works, in the app itself — no tribal knowledge needed.
+function xpGuideHtml() {
+  const rowsData = [['Claim a lead','+5'],['Mark on call','+10'],['Live note for admin','+3'],['Voicemail / no answer','+5'],['Callback booked','+15'],['Successful call','+100'],['Finisher: completed','+75']];
+  return "<div class='panel p fade-up'><div class='scripts-toggle' data-toggle-next='1' style='margin-bottom:0;'><span>⚡ How XP works</span><span>▾</span></div>"
+    + '<div class="scripts-panel"><div style="padding-top:12px;">'
+    + "<p style='font-size:12px;color:var(--text-dim);line-height:1.6;margin-bottom:10px;'>Every action pays XP the moment it lands — you will see it pop on screen. Levels cost more as you climb (100 XP for level 2, +60 more each level after). This Week is a rolling 7-day race; All Time keeps everything.</p>"
+    + rowsData.map(x => '<div style="display:flex;justify-content:space-between;padding:7px 2px;border-bottom:1px solid var(--border);font-size:12.5px;"><span>' + x[0] + '</span><b class="mono" style="color:var(--violet-bright);">' + x[1] + '</b></div>').join('')
+    + '</div></div></div>';
+}
+
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('[data-toggle-next]');
+  if (t && t.nextElementSibling) t.nextElementSibling.classList.toggle('open');
+});
 function timeAgo(ts) {
   const s = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
   if (s < 60) return s + 's ago';

@@ -50,8 +50,7 @@ async function renderStaffHome() {
   const allScripts = (await scriptsRes.json()).data;
   const myRank = (lb.findIndex(r => r.id === me.id) + 1) || '—';
   const myStat = lb.find(r => r.id === me.id) || { successful_calls: 0 };
-  const level = Math.floor(me.xp / 150) + 1;
-  const xpInLevel = me.xp % 150;
+  const li = levelInfo(me.xp);
   const goalPct = Math.min(100, Math.round((goal.current / goal.target) * 100));
 
   body.innerHTML = \`
@@ -62,13 +61,13 @@ async function renderStaffHome() {
           <div style="font-size:20px;font-weight:700;font-family:'Bricolage Grotesque',sans-serif;letter-spacing:-.01em;">\${esc(me.name)}</div>
           <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
             \${statusBadge(me.role)}
-            <span class="badge" style="background:#8b6fc9;color:#fff;">Lvl \${level}</span>
-            <span class="badge" style="background:#3a3a44;color:#d4d4dc;">Rank #\${myRank}</span>
+            <span class="lvl-chip">Lv \${li.level} · \${li.title}</span>
+            <span class="badge not_called">Rank #\${myRank}</span>
           </div>
         </div>
       </div>
-      <div style="font-size:11px;color:var(--text-dim);margin-bottom:7px;display:flex;justify-content:space-between;"><span>\${xpInLevel} / 150 XP</span><span>\${me.xp} total</span></div>
-      <div style="height:8px;border-radius:5px;background:var(--s3);overflow:hidden;"><div style="height:100%;width:\${Math.round(xpInLevel/150*100)}%;background:linear-gradient(90deg,var(--violet),#a78bfa);border-radius:5px;"></div></div>
+      <div style="font-size:11px;color:var(--text-dim);margin-bottom:7px;display:flex;justify-content:space-between;"><span>\${li.into} / \${li.need} XP to level \${li.level + 1}</span><span class="mono">\${me.xp.toLocaleString()} total</span></div>
+      <div class="xp-bar" style="height:8px;"><i style="width:\${li.pct}%;"></i></div>
     </div>
     <div class="stat-grid" style="grid-template-columns:repeat(3,1fr);">
       <div class="stat-box panel"><div class="num" data-count="\${myStat.successful_calls || 0}">0</div><div class="lbl">Successful</div></div>
@@ -222,10 +221,10 @@ function offerCardHtml(o) {
   const labelColor = isRetry ? 'var(--gold-bright)' : 'var(--success)';
   return \`<div class="offer-card fade-up" data-lead-id="\${o.id}">
     <div class="pulse-dot" style="background:\${labelColor};"></div>
-    <div class="offer-label" style="color:\${labelColor};">\${labelText}</div>
-    <div class="offer-name">\${fullName(o)} \${categoryBadgeHtml(o.lead_type)}</div>
-    <div class="offer-meta mono">\${o.phone}\${o.source ? ' · ' + esc(o.source) : ''}</div>
-    \${isRetry ? '<div style="font-size:11.5px;color:var(--text-faint);margin:-10px 0 14px;">Nobody\\'s reached them yet — no answer/voicemail last time, not a mistake.</div>' : ''}
+    <div class="offer-label" style="color:\${labelColor};">\${labelText} <span style="color:var(--text-faint);font-weight:600;">· \${timeAgo(o.created_at)}</span></div>
+    <div class="offer-name" style="font-size:23px;">\${fullName(o)}</div>
+    <div class="call-lead-sub" style="margin:4px 0 16px;"><span class="mono">\${o.phone}</span>\${categoryBadgeHtml(o.lead_type)}\${o.source ? '<span class="badge not_called">' + esc(o.source) + '</span>' : ''}</div>
+    \${isRetry ? '<div style="font-size:11.5px;color:var(--text-faint);margin:-8px 0 14px;">Nobody\\'s reached them yet — no answer/voicemail last time, not a mistake.</div>' : ''}
     <div class="offer-actions"><button class="btn btn-gold" onclick="claimLead(\${o.id})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" style="width:15px;height:15px;vertical-align:-2px;margin-right:5px;"><path d="M6.6 10.8a15 15 0 006.6 6.6l2.2-2.2a1 1 0 011.1-.2 11 11 0 003.4.6 1 1 0 011 1V20a1 1 0 01-1 1A17 17 0 013 5a1 1 0 011-1h3.5a1 1 0 011 1 11 11 0 00.6 3.4 1 1 0 01-.2 1.1z"/></svg>Take Call</button><button class="btn btn-ghost" onclick="skipLead(\${o.id})">Skip</button></div>
   </div>\`;
 }
@@ -275,9 +274,11 @@ function renderActiveCallShell(body, lead, role, scripts, template) {
   body.innerHTML = \`
     \${template && !isFinisher ? \`<div class="panel p fade-up" style="border-color:var(--gold-glow);"><div class="section-title" style="margin-top:0;">Call Guide</div><div style="font-size:13px;line-height:1.7;white-space:pre-wrap;color:var(--text);">\${esc(template)}</div></div>\` : ''}
     <div class="panel call-card fade-up">
-      <div class="call-status-row">\${statusBadge(lead.status)}<span class="call-timer mono" id="callTimer">00:00</span></div>
-      <div class="info-row"><span class="k">Name</span><span class="v">\${fullName(lead)}</span></div>
-      <div class="info-row"><span class="k">Phone</span><span class="v mono">\${lead.phone}</span></div>
+      <div class="call-status-row" style="margin-bottom:14px;">\${statusBadge(lead.status)}<span class="call-timer-chip mono"><span class="tdot"></span><span id="callTimer">00:00</span></span></div>
+      <div style="margin-bottom:16px;">
+        <div class="call-lead-name">\${fullName(lead)}</div>
+        <div class="call-lead-sub"><span class="mono">\${lead.phone}</span>\${categoryBadgeHtml(lead.lead_type)}\${(lead.call_attempts||0) > 1 ? '<span class="badge not_called">Attempt ' + lead.call_attempts + '</span>' : ''}</div>
+      </div>
       \${lead.email ? '<div class="info-row"><span class="k">Email</span><span class="v">' + lead.email + '</span></div>' : ''}
       \${lead.address ? '<div class="info-row"><span class="k">Address</span><span class="v">' + esc(lead.address) + '</span></div>' : ''}
       \${lead.notes ? '<div class="info-row"><span class="k">Notes</span><span class="v" style="white-space:pre-wrap;text-align:left;">' + esc(lead.notes) + '</span></div>' : ''}
@@ -360,49 +361,37 @@ function startCallTimer() {
 async function connectCall(id) { await api('/api/caller/leads/' + id + '/connect', { method: 'POST' }); renderStaffQueue(); }
 async function endCall(id) { await api('/api/caller/leads/' + id + '/end-call', { method: 'POST' }); renderStaffQueue(); }
 async function recordOutcome(id, outcome) {
-  await api('/api/caller/leads/' + id + '/outcome', { method: 'POST', body: JSON.stringify({ outcome, duration: callStart ? Math.floor((Date.now()-callStart)/1000) : 0 }) });
+  const res = await api('/api/caller/leads/' + id + '/outcome', { method: 'POST', body: JSON.stringify({ outcome, duration: callStart ? Math.floor((Date.now()-callStart)/1000) : 0 }) });
+  const data = await res.json().catch(() => ({}));
   callStart = null; clearInterval(callTimerInterval);
   renderStaffQueue();
+  xpToast(data.xp_awarded, titleCase(outcome));
 }
 async function finisherOutcome(id, outcome) {
-  await api('/api/finisher/leads/' + id + '/outcome', { method: 'POST', body: JSON.stringify({ outcome }) });
+  const res = await api('/api/finisher/leads/' + id + '/outcome', { method: 'POST', body: JSON.stringify({ outcome }) });
+  const data = await res.json().catch(() => ({}));
   callStart = null; clearInterval(callTimerInterval); workingFinisherLeadId = null;
   renderStaffQueue();
+  xpToast(data.xp_awarded, titleCase(outcome));
 }
 
+let lbMode = 'week';
 async function renderStaffBoard() {
   const body = document.getElementById('staffBody');
   const res = await api('/api/leaderboard');
   const rows = (await res.json()).data;
-  const podium = rows.slice(0, 3);
-  const rest = rows.slice(3);
-  const [first, second, third] = podium;
   body.innerHTML = \`
-    \${podium.length ? \`<div class="panel p fade-up" style="padding:28px 16px 16px;">
-      <div style="display:flex;align-items:flex-end;justify-content:center;gap:10px;">
-        \${second ? podiumSlotHtml(second, 2, 78) : '<div style="flex:1;"></div>'}
-        \${first ? podiumSlotHtml(first, 1, 96) : '<div style="flex:1;"></div>'}
-        \${third ? podiumSlotHtml(third, 3, 66) : '<div style="flex:1;"></div>'}
+    <div style="display:flex;justify-content:center;margin-bottom:14px;">
+      <div class="seg-tabs">
+        <button class="seg-tab \${lbMode==='week'?'on':''}" onclick="lbMode='week';renderStaffBoard()">This Week</button>
+        <button class="seg-tab \${lbMode==='all'?'on':''}" onclick="lbMode='all';renderStaffBoard()">All Time</button>
       </div>
-    </div>\` : ''}
-    <div class="panel p fade-up">
-      \${rest.length ? rest.map((r, i) => \`
-        <div class="lb-row"><div class="rank">\${i+4}</div>\${avatarHtml(r, 30)}
-          <div class="lb-name" style="margin-left:6px;">\${esc(r.name)}\${r.id===me.id?' <span style="color:var(--gold-bright);">(you)</span>':''} \${statusBadge(r.role)}</div>
-          <div class="lb-stats"><span><b>\${r.successful_calls||0}</b> success</span><span style="color:var(--violet);"><b>\${r.xp}</b> xp</span></div></div>\`).join('') : (podium.length ? '' : '<div style="color:var(--text-dim);text-align:center;padding:20px;">No one on the board yet.</div>')}
-    </div>\`;
+    </div>
+    \${lbBoardHtml(rows, lbMode)}
+    \${xpGuideHtml()}\`;
+  animateCountUps(body);
 }
-function podiumSlotHtml(r, place, height) {
-  const medalLabel = place === 1 ? 'GOLD' : place === 2 ? 'SILVER' : 'BRONZE';
-  const barColor = place === 1 ? 'linear-gradient(180deg,#fbbf24,#b8860b)' : place === 2 ? 'linear-gradient(180deg,#d1d5db,#9ca3af)' : 'linear-gradient(180deg,#d97706,#92400e)';
-  return \`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;">
-    <div style="font-size:9px;font-weight:800;letter-spacing:.6px;color:var(--text-faint);">\${medalLabel}</div>
-    \${avatarHtml(r, place === 1 ? 52 : 42)}
-    <div style="font-size:11.5px;font-weight:700;text-align:center;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">\${esc(r.name)}\${r.id===me.id?' <span style=\"color:var(--gold-bright);\">(you)</span>':''}</div>
-    <div style="font-size:10px;color:var(--violet);font-weight:600;">\${r.xp} xp</div>
-    <div style="width:100%;height:\${height}px;border-radius:10px 10px 0 0;background:\${barColor};display:flex;align-items:flex-start;justify-content:center;padding-top:6px;font-size:15px;font-weight:800;color:rgba(0,0,0,.55);">#\${place}</div>
-  </div>\`;
-}
+
 
 async function renderStaffProfile() {
   const body = document.getElementById('staffBody');
