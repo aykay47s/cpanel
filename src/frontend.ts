@@ -245,7 +245,7 @@ tr.clickable:active{background:rgba(255,255,255,.05);}
 .offer-actions .btn-gold{flex:2;font-weight:700;}
 .offer-actions .btn-ghost{background:rgba(255,255,255,.03);}
 
-.call-card{padding:24px;}
+.call-card{padding:24px;background:rgba(255,255,255,.055);}
 .call-status-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;}
 .call-timer{font-family:'JetBrains Mono',monospace;font-size:13px;color:var(--text-dim);font-weight:600;}
 .info-row{display:flex;justify-content:space-between;align-items:baseline;padding:11px 0;border-bottom:1px solid var(--border);}
@@ -257,13 +257,18 @@ tr.clickable:active{background:rgba(255,255,255,.05);}
 .dial-btn{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.14);color:var(--text);}
 .oncall-btn{background:linear-gradient(180deg,#3ee0cf,var(--teal));color:#04211c;border:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.25), 0 4px 14px rgba(45,212,191,.3);}
 .endcall-btn{background:linear-gradient(180deg,#f97066,var(--danger));color:#fff;border:none;grid-column:1/-1;box-shadow:inset 0 1px 0 rgba(255,255,255,.2), 0 4px 14px rgba(239,68,68,.3);}
-.outcome-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px;margin-top:8px;}
-.outcome-grid button{padding:15px 6px;font-size:12.5px;font-weight:700;border-radius:14px;letter-spacing:-.005em;transition:transform .28s cubic-bezier(.34,1.56,.64,1), box-shadow .15s ease;box-shadow:0 2px 4px rgba(0,0,0,.2), 0 6px 14px rgba(0,0,0,.18);}
+.outcome-section{margin-top:16px;display:flex;flex-direction:column;gap:10px;}
+.outcome-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;}
+.outcome-grid button{padding:14px 6px;font-size:12.5px;font-weight:700;border-radius:14px;letter-spacing:-.005em;transition:transform .28s cubic-bezier(.34,1.56,.64,1), box-shadow .15s ease;box-shadow:0 2px 4px rgba(0,0,0,.2), 0 6px 14px rgba(0,0,0,.18);}
 .outcome-grid button:active{transform:scale(.95);}
 .outcome-grid button:not(.win-btn):not(.review-btn):not(.fail-btn){background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);color:var(--text-dim);box-shadow:none;}
-.win-btn{background:linear-gradient(180deg,#3ee87f,var(--success));color:#04170a;border:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.25), 0 6px 18px rgba(34,197,94,.32);}
-.review-btn{background:rgba(79,140,255,.12);color:var(--gold-bright);border:1px solid rgba(79,140,255,.3);box-shadow:none;}
-.fail-btn{background:rgba(239,68,68,.1);color:var(--danger);border:1px solid rgba(239,68,68,.28);box-shadow:none;}
+.win-btn{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;padding:16px;font-size:14.5px;font-weight:700;border-radius:16px;background:linear-gradient(180deg,#3ee87f,var(--success));color:#04170a;border:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.25), 0 6px 18px rgba(34,197,94,.32);transition:transform .28s cubic-bezier(.34,1.56,.64,1);}
+.win-btn:active{transform:scale(.97);}
+.win-btn .ic{width:17px;height:17px;}
+.review-btn{width:100%;padding:13px;font-size:12.5px;font-weight:700;border-radius:14px;background:rgba(79,140,255,.12);color:var(--gold-bright);border:1px solid rgba(79,140,255,.3);box-shadow:none;transition:transform .2s ease;}
+.review-btn:active{transform:scale(.97);}
+.fail-btn{width:100%;padding:13px;font-size:12.5px;font-weight:700;border-radius:14px;background:rgba(239,68,68,.1);color:var(--danger);border:1px solid rgba(239,68,68,.28);box-shadow:none;transition:transform .2s ease;}
+.fail-btn:active{transform:scale(.97);}
 .scripts-toggle{display:flex;justify-content:space-between;align-items:center;padding:13px 16px;border-radius:14px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);margin-bottom:12px;cursor:pointer;font-size:12.5px;font-weight:700;color:var(--text-dim);transition:background .15s ease;}
 .scripts-toggle:active{transform:scale(.98);}
 .scripts-panel{max-height:0;overflow:hidden;transition:max-height .3s ease;}
@@ -413,6 +418,7 @@ tr.clickable:active{background:rgba(255,255,255,.05);}
 
 <script>
 const ICONS = {
+  check: '<svg class="ic" viewBox="0 0 24 24"><path d="M5 12l5 5L19 7"/></svg>',
   dashboard: '<svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>',
   list: '<svg class="ic" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r="1.2" fill="currentColor" stroke="none"/><circle cx="3.5" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="3.5" cy="18" r="1.2" fill="currentColor" stroke="none"/></svg>',
   upload: '<svg class="ic" viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M4 20h16"/></svg>',

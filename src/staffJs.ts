@@ -265,22 +265,28 @@ function renderActiveCallShell(body, lead, role, scripts, template) {
         <div id="noteConfirm" style="font-size:11px;color:var(--success);margin-top:6px;height:14px;"></div>
       </div>\` : ''}
       \${scripts.length ? \`<div class="scripts-toggle" onclick="this.nextElementSibling.classList.toggle('open')"><span>\${ICONS.doc || ''} Scripts (\${scripts.length})</span><span>▾</span></div><div class="scripts-panel">\${scripts.map(s => '<div class="script-item"><div class="title">' + esc(s.title) + '</div><div class="content">' + esc(s.content) + '</div></div>').join('')}</div>\` : ''}
-      \${!isFinisher ? \`<div class="outcome-grid" style="grid-template-columns:1fr 1fr;">
-        <button class="btn btn-ghost" onclick="recordOutcome(\${lead.id},'voicemail')">Voicemail</button>
-        <button class="btn btn-ghost" onclick="recordOutcome(\${lead.id},'no_answer')">No Answer</button>
-        <button class="btn btn-ghost" onclick="recordOutcome(\${lead.id},'hung_up')">Hung Up</button>
-        <button class="btn btn-ghost" onclick="recordOutcome(\${lead.id},'busy')">Busy</button>
-        <button class="btn btn-ghost" onclick="recordOutcome(\${lead.id},'cancelled')">Cancel</button>
-        <button class="btn btn-ghost" onclick="recordOutcome(\${lead.id},'chopped_previously')">Chopped Previously</button>
-        <button class="review-btn" style="grid-column:1/-1;" onclick="recordOutcome(\${lead.id},'callback_requested')">Callback Requested</button>
-        <button class="win-btn" style="grid-column:1/-1;" onclick="recordOutcome(\${lead.id},'successful_call')">Successful Call</button>
-        <button class="fail-btn" onclick="recordOutcome(\${lead.id},'failed')">Unsuccessful</button>
-        <button class="review-btn" onclick="recordOutcome(\${lead.id},'requires_review')">Requires Review</button>
+      \${!isFinisher ? \`<div class="outcome-section">
+        <button class="win-btn" onclick="recordOutcome(\${lead.id},'successful_call')">\${ICONS.check || ''} Successful Call</button>
+        <div class="outcome-grid">
+          <button onclick="recordOutcome(\${lead.id},'voicemail')">Voicemail</button>
+          <button onclick="recordOutcome(\${lead.id},'no_answer')">No Answer</button>
+          <button onclick="recordOutcome(\${lead.id},'busy')">Busy</button>
+          <button onclick="recordOutcome(\${lead.id},'hung_up')">Hung Up</button>
+          <button onclick="recordOutcome(\${lead.id},'cancelled')">Cancel</button>
+          <button onclick="recordOutcome(\${lead.id},'chopped_previously')">Chopped Previously</button>
+        </div>
+        <button class="review-btn" onclick="recordOutcome(\${lead.id},'callback_requested')">Callback Requested</button>
+        <div class="outcome-grid" style="grid-template-columns:1fr 1fr;">
+          <button class="fail-btn" onclick="recordOutcome(\${lead.id},'failed')">Unsuccessful</button>
+          <button class="review-btn" onclick="recordOutcome(\${lead.id},'requires_review')">Requires Review</button>
+        </div>
       </div>\` : ''}
-      \${isFinisher ? \`<div class="outcome-grid">
-        <button class="win-btn" style="grid-column:1/-1;" onclick="finisherOutcome(\${lead.id},'completed')">Mark Completed</button>
-        <button class="review-btn" onclick="finisherOutcome(\${lead.id},'requires_review')">Requires Review</button>
-        <button class="fail-btn" style="grid-column:2/4;" onclick="finisherOutcome(\${lead.id},'failed')">Unsuccessful</button>
+      \${isFinisher ? \`<div class="outcome-section">
+        <button class="win-btn" onclick="finisherOutcome(\${lead.id},'completed')">\${ICONS.check || ''} Mark Completed</button>
+        <div class="outcome-grid" style="grid-template-columns:1fr 1fr;">
+          <button class="review-btn" onclick="finisherOutcome(\${lead.id},'requires_review')">Requires Review</button>
+          <button class="fail-btn" onclick="finisherOutcome(\${lead.id},'failed')">Unsuccessful</button>
+        </div>
       </div>\` : ''}
     </div>\`;
   if (!callStart) callStart = Date.now();
