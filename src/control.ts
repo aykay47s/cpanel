@@ -107,10 +107,14 @@ async function enter() {
 }
 async function loadTenants() {
   const content = document.getElementById('content');
-  const [tenantsRes, liveRes] = await Promise.all([api('/api/master/tenants'), api('/api/master/live-stats')]);
+  const [tenantsRes, liveRes, checkoutRes, keysRes] = await Promise.all([
+    api('/api/master/tenants'), api('/api/master/live-stats'), api('/api/master/store-checkout-url'), api('/api/master/license-keys'),
+  ]);
   if (tenantsRes.status === 403) { logout(); return; }
   const tenants = (await tenantsRes.json()).data;
   const live = (await liveRes.json()).data;
+  const checkoutUrl = (await checkoutRes.json()).data.url;
+  const keys = (await keysRes.json()).data;
   const liveById = {};
   live.forEach(l => liveById[l.id] = l);
 
@@ -128,7 +132,38 @@ async function loadTenants() {
       <div class="panel stat-box"><div class="num">\${totalLeads}</div><div class="lbl">Total Leads</div></div>
     </div>
     <div class="panel">
+      <h2>Store Checkout Link</h2>
+      <p style="font-size:12px;color:var(--text-dim);margin:0 0 12px;">Where the "Get Started" buttons on /store actually send people to pay — a Stripe Payment Link, Gumroad, Whop, whatever you're using.</p>
+      <div class="field"><input id="checkoutUrl" placeholder="https://buy.stripe.com/..." value="\${esc(checkoutUrl || '')}" /></div>
+      <button onclick="saveCheckoutUrl()">Save</button>
+      <div class="err" id="checkoutErr"></div>
+    </div>
+    <div class="panel">
+      <h2>Generate License Key</h2>
+      <p style="font-size:12px;color:var(--text-dim);margin:0 0 12px;">Make one after someone's actually paid - send them the code plus the link to /redeem.</p>
+      <div class="field"><label>Plan</label>
+        <select id="keyPlan" style="width:100%;padding:12px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);color:var(--text);font-size:14px;">
+          <option value="3day">3 Day - £99</option><option value="7day">7 Day - £180</option><option value="monthly">1 Month - £750</option>
+        </select>
+      </div>
+      <button onclick="generateKey()">Generate Key</button>
+      <div class="err" id="keyErr"></div>
+      <div id="newKeyBanner"></div>
+    </div>
+    <div class="panel">
+      <h2>License Keys</h2>
+      <table><thead><tr><th>Code</th><th>Plan</th><th>Status</th><th>Redeemed By</th><th></th></tr></thead>
+      <tbody>\${keys.map(k => \`<tr>
+        <td class="mono" style="font-size:11px;">\${esc(k.key_code)}</td>
+        <td>\${esc(k.plan)}</td>
+        <td>\${k.redeemed ? '<span class="badge on">Redeemed</span>' : '<span class="badge off">Unused</span>'}</td>
+        <td>\${esc(k.tenant_name || '—')}</td>
+        <td>\${!k.redeemed ? '<button class="danger" onclick="deleteKey(' + k.id + ')">Delete</button>' : ''}</td>
+      </tr>\`).join('') || '<tr><td colspan="5" style="color:var(--text-faint);">No keys generated yet.</td></tr>'}</tbody></table>
+    </div>
+    <div class="panel">
       <h2>Add Tenant</h2>
+      <p style="font-size:12px;color:var(--text-dim);margin:0 0 12px;">For manually tracking a separately-hosted deployment. Most of the time you want Generate License Key above instead - that's what actually provisions someone their own panel on this same deployment.</p>
       <div class="row">
         <div class="field"><label>Customer Name</label><input id="tName" placeholder="e.g. Acme Recovery Ltd" /></div>
         <div class="field"><label>Instance URL</label><input id="tUrl" placeholder="https://acme.up.railway.app" /></div>
@@ -162,6 +197,38 @@ async function loadTenants() {
         </tr>\`;
       }).join('')}</tbody></table>
     </div>\`;
+  if (lastGeneratedKey) {
+    const banner = document.getElementById('newKeyBanner');
+    if (banner) banner.innerHTML = '<p style="margin-top:12px;font-size:13px;color:#22c55e;">Key generated: <span class="mono" style="font-weight:700;">' + esc(lastGeneratedKey) + '</span> — send this plus the /redeem link to the customer.</p>';
+  }
+}
+async function saveCheckoutUrl() {
+  const url = document.getElementById('checkoutUrl').value.trim();
+  const err = document.getElementById('checkoutErr');
+  if (!url) { err.textContent = 'Enter a URL first.'; return; }
+  const res = await api('/api/master/store-checkout-url', { method: 'POST', body: JSON.stringify({ url }) });
+  if (!res.ok) { err.textContent = 'Failed to save.'; return; }
+  err.textContent = 'Saved.'; err.style.color = '#22c55e';
+  setTimeout(() => loadTenants(), 800);
+}
+let lastGeneratedKey = null;
+async function generateKey() {
+  const plan = document.getElementById('keyPlan').value;
+  const err = document.getElementById('keyErr');
+  const res = await api('/api/master/license-keys', { method: 'POST', body: JSON.stringify({ plan }) });
+  const data = await res.json();
+  if (!res.ok) { err.textContent = data.error || 'Failed to generate.'; return; }
+  err.textContent = '';
+  // loadTenants() re-renders the whole page including this banner's container, so
+  // the message has to survive that refresh rather than being set on the
+  // about-to-be-destroyed element directly.
+  lastGeneratedKey = data.data.key_code;
+  await loadTenants();
+}
+async function deleteKey(id) {
+  if (!confirm('Delete this unused key?')) return;
+  await api('/api/master/license-keys/' + id, { method: 'DELETE' });
+  loadTenants();
 }
 async function addTenant() {
   const name = document.getElementById('tName').value.trim();

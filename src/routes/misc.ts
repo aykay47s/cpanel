@@ -343,6 +343,10 @@ misc.post('/api/admin/branding', requireRole('admin'), async (c) => {
   return c.json({ ok: true });
 });
 
+misc.get('/api/master/store-checkout-url', requireSuperAdmin(), async (c) => {
+  const [row] = await sql`SELECT value FROM settings WHERE key = 'store_checkout_url'`;
+  return c.json({ data: { url: row?.value || '' } });
+});
 misc.post('/api/master/store-checkout-url', requireSuperAdmin(), async (c) => {
   const { url } = await c.req.json().catch(() => ({}));
   if (!url) return c.json({ error: 'URL required' }, 400);

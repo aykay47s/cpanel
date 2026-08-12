@@ -119,6 +119,23 @@ export async function ensureDb() {
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`;
 
+  // A store someone else can be handed and configure independently - their own
+  // pricing, branding, and checkout link, without touching Master Control or the
+  // operator's own store. Access is a separate management PIN, not tied to any
+  // tenant's admin login.
+  await sql`CREATE TABLE IF NOT EXISTS stores (
+    id SERIAL PRIMARY KEY,
+    slug TEXT UNIQUE NOT NULL,
+    owner_name TEXT,
+    manage_pin TEXT NOT NULL,
+    store_name TEXT NOT NULL DEFAULT 'Get Access',
+    tagline TEXT DEFAULT '',
+    checkout_url TEXT DEFAULT '',
+    logo_url TEXT,
+    tiers JSONB NOT NULL DEFAULT '[]',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`;
+
   await sql`CREATE TABLE IF NOT EXISTS duplicate_flags (
     id SERIAL PRIMARY KEY,
     lead_id_a INTEGER REFERENCES leads(id) ON DELETE CASCADE,
