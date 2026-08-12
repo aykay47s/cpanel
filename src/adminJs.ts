@@ -151,12 +151,6 @@ function filterLeadsByOutcome() {
 }
 let callerListCache = [];
 let categoryCache = [];
-const BANK_DOMAINS = {
-  'lloyds': 'lloydsbank.com', 'barclays': 'barclays.co.uk', 'hsbc': 'hsbc.co.uk',
-  'natwest': 'natwest.com', 'santander': 'santander.co.uk', 'halifax': 'halifax.co.uk',
-  'tsb': 'tsb.co.uk', 'nationwide': 'nationwide.co.uk', 'rbs': 'rbs.co.uk',
-  'metro bank': 'metrobankonline.co.uk', 'monzo': 'monzo.com', 'starling': 'starlingbank.com',
-};
 function categoryBadge(leadType) {
   if (!leadType) return '<span style="color:var(--text-faint);">—</span>';
   const cat = categoryCache.find(c => c.name.toLowerCase() === String(leadType).toLowerCase());
