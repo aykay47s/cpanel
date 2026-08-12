@@ -43,7 +43,7 @@ chat.post('/api/chat/messages', async (c) => {
   const [row] = await sql`INSERT INTO chat_messages (sender_id, content, reply_to_id, expires_at, tenant_id) VALUES (${user.id}, ${content.trim()}, ${replyToId || null}, ${expiresAt}, ${user.tenant_id}) RETURNING *`;
   const full = { ...row, sender_name: user.name, sender_avatar: user.avatar, sender_pfp_data: user.pfp_data, sender_role: user.role };
   broadcast('chat_message', full);
-  await notifyRole('all', 'chat', `${user.name}: ${content.trim().slice(0, 80)}`, undefined, user.id);
+  await notifyRole('all', 'chat', `${user.name}: ${content.trim().slice(0, 80)}`, undefined, user.id, user.tenant_id);
   return c.json({ data: full });
 });
 

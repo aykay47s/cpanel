@@ -27,7 +27,7 @@ announcements.post('/api/admin/announcements', requireRole('admin'), async (c) =
   if (!content) return bad(c, 'Content required');
   const [row] = await sql`INSERT INTO announcements (content, important, target_role, created_by, tenant_id) VALUES (${content}, ${!!important}, ${target_role || 'all'}, ${user.id}, ${user.tenant_id}) RETURNING *`;
   broadcast('announcement', row);
-  await notifyRole(target_role || 'all', 'announcement', content.slice(0, 100), undefined, user.id);
+  await notifyRole(target_role || 'all', 'announcement', content.slice(0, 100), undefined, user.id, user.tenant_id);
   return c.json({ data: row });
 });
 

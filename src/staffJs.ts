@@ -179,7 +179,14 @@ async function renderStaffQueue() {
     const mine = (await mineRes.json()).data;
     if (mine) { onActiveCallScreen = true; return renderActiveCall(body, mine, 'caller'); }
     onActiveCallScreen = false;
-    if (!me.clocked_in) { body.innerHTML = offlineHtml(); return; }
+    if (!me.clocked_in) {
+      const centerRes = await api('/api/center-status');
+      const center = (await centerRes.json()).data;
+      window._centerClosed = !center.open;
+      window._centerClosedReason = center.reason;
+      body.innerHTML = offlineHtml();
+      return;
+    }
     const qRes = await api('/api/caller/queue');
     let rows = (await qRes.json()).data;
     rows = rows.filter(o => !skippedLeadIds.has(o.id) && !recentlyClaimedIds.has(o.id));
@@ -198,7 +205,12 @@ async function renderStaffQueue() {
     body.innerHTML = rows.length ? \`<div class="section-title" style="margin-top:0;">Assigned to You (\${rows.length})</div>\` + rows.map(o => finisherCardHtml(o)).join('') : \`<div class="empty-state panel fade-up">\${ICONS.flag}<div style="font-weight:700;margin:8px 0 4px;">No leads waiting</div><div style="font-size:12.5px;">Admin will assign leads here when ready.</div></div>\`;
   }
 }
-function offlineHtml() { return \`<div class="empty-state panel fade-up"><div class="ic" style="width:32px;height:32px;margin:0 auto 14px;color:var(--text-faint);"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></div><div style="font-weight:700;margin-bottom:4px;">You're offline</div><div style="font-size:13px;">Clock in from the top bar to start receiving leads</div></div>\`; }
+function offlineHtml() {
+  if (window._centerClosed) {
+    return \`<div class="empty-state panel fade-up"><div class="ic" style="width:32px;height:32px;margin:0 auto 14px;color:var(--danger);"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg></div><div style="font-weight:700;margin-bottom:4px;">Call Center Closed</div><div style="font-size:13px;">\${esc(window._centerClosedReason || 'Check back soon.')}</div></div>\`;
+  }
+  return \`<div class="empty-state panel fade-up"><div class="ic" style="width:32px;height:32px;margin:0 auto 14px;color:var(--text-faint);"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke="currentColor"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg></div><div style="font-weight:700;margin-bottom:4px;">You're offline</div><div style="font-size:13px;">Clock in from the top bar to start receiving leads</div></div>\`;
+}
 function skippedOnlyHtml() { return \`<div class="empty-state panel fade-up"><div class="ic" style="width:32px;height:32px;margin:0 auto 14px;color:var(--text-faint);"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5" stroke="currentColor"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg></div><div style="font-weight:700;margin-bottom:4px;">Nothing left to show</div><div style="font-size:13px;margin-bottom:14px;">Every waiting lead is skipped for this session.</div><button class="btn btn-gold btn-sm" onclick="unskipAll()">Show skipped leads again</button></div>\`; }
 let skippedLeadIds = new Set();
 function skipLead(id) { skippedLeadIds.add(id); renderStaffQueue(); }

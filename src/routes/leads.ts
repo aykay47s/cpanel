@@ -75,7 +75,7 @@ leads.post('/api/admin/leads/import/confirm', requireRole('admin'), async (c) =>
   }
   if (inserted > 0 && !to_vault) {
     const name = inserted === 1 ? (rows[0] as ParsedLead).first_name || 'A lead' : `${inserted} leads`;
-    await sendPushToRole('caller', 'New lead available', `${name} just came in — first to claim it wins.`, '/');
+    await sendPushToRole('caller', 'New lead available', `${name} just came in — first to claim it wins.`, '/', user.tenant_id);
   }
   return c.json({ inserted, flagged });
 });
@@ -170,7 +170,7 @@ leads.post('/api/admin/vault/release', requireRole('admin'), async (c) => {
   }
   if (released.length) {
     const name = released.length === 1 ? (released[0].first_name || 'A lead') : `${released.length} leads`;
-    await sendPushToRole('caller', 'New lead available', `${name} just came in — first to claim it wins.`, '/');
+    await sendPushToRole('caller', 'New lead available', `${name} just came in — first to claim it wins.`, '/', user.tenant_id);
   }
   return c.json({ released: released.length });
 });
@@ -433,9 +433,15 @@ leads.post('/api/caller/leads/:id/outcome', requireRole('caller'), async (c) => 
   await logEvent(updated.id, 'outcome_recorded', user, lead.status, outcome, { notes: notes || null });
   if (outcome === 'successful_call') {
     await logEvent(updated.id, 'queued_for_finishing', user, outcome, 'ready_for_finishing', {});
-    await notifyRole('admin', 'successful_call', `${user.name} logged a successful call: ${updated.first_name || 'Unknown'} ${updated.last_name || ''}`.trim(), updated.id);
+    await notifyRole('admin', 'successful_call', `${user.name} logged a successful call: ${updated.first_name || 'Unknown'} ${updated.last_name || ''}`.trim(), updated.id, undefined, user.tenant_id);
   }
-  if (REQUEUE_OUTCOMES.includes(outcome)) broadcast('new_lead', updated);
+  if (REQUEUE_OUTCOMES.includes(outcome)) {
+    broadcast('new_lead', updated);
+    // A requeued lead is genuinely available to claim again - same real push as a
+    // fresh import, since from a caller's perspective it's the same "something to
+    // claim right now" moment, whatever put it back in the pool.
+    await sendPushToRole('caller', 'Lead available', `${updated.first_name || 'A lead'} is back in the queue.`, '/', user.tenant_id);
+  }
   await sql`UPDATE users SET xp = xp + ${XP_MAP[outcome] || 0} WHERE id = ${user.id}`;
   broadcast('lead_updated', updated);
   return c.json({ data: updated });

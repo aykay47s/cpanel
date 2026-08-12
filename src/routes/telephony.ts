@@ -193,3 +193,117 @@ telephony.get('/api/admin/inbound-calls', requireRole('admin'), async (c) => {
   const rows = await sql`SELECT * FROM inbound_calls ORDER BY created_at DESC LIMIT 100`;
   return c.json({ data: rows });
 });
+
+// Configured inside 3CX's own admin console (Integrations > Webhooks, or via the
+// Call Flow Designer's HTTP action) to point at this URL — 3CX pushes call events
+// here rather than us polling or receiving TwiML-style instructions back. Payload
+// shape is based on 3CX's documented webhook format; field names can vary slightly
+// by 3CX version, so this reads defensively rather than assuming one exact schema.
+telephony.post('/api/telephony/3cx-webhook', async (c) => {
+  const body = await c.req.json().catch(() => ({} as any));
+  const callId = String(body.call_id || body.callid || body.id || '');
+  const eventType = String(body.event_type || body.event || body.status || '').toLowerCase();
+  const from = String(body.from || body.caller_id || body.caller || '');
+
+  if (!callId) return c.json({ ok: true }); // nothing usable to log, don't error out 3CX's webhook
+
+  if (['ringing', 'incoming', 'new', 'start'].some(k => eventType.includes(k))) {
+    await sql`INSERT INTO inbound_calls (twilio_call_sid, from_number, status, provider) VALUES (${callId}, ${from}, 'ringing', '3cx') ON CONFLICT (twilio_call_sid) DO NOTHING`;
+    broadcast('inbound_call', { callSid: callId, from });
+  } else {
+    await sql`UPDATE inbound_calls SET status = ${eventType || 'unknown'}, ended_at = CASE WHEN ${eventType} IN ('ended','completed','hangup','missed') THEN now() ELSE ended_at END WHERE twilio_call_sid = ${callId} AND provider = '3cx'`;
+    broadcast('inbound_call_update', { callSid: callId, status: eventType });
+  }
+  return c.json({ ok: true });
+});
+
+// ================= VONAGE (full parity with Twilio — real menu, hold music,
+// routing, and bridging, all controlled dynamically from this server) =================
+// Vonage's answer_url can be called as GET or POST depending on how the application
+// is configured — read from both query and body to handle either.
+async function vonageParams(c: any) {
+  const query = c.req.query();
+  const body = await c.req.json().catch(() => ({}));
+  return { ...query, ...body };
+}
+
+telephony.all('/api/telephony/vonage/answer', async (c) => {
+  const params = await vonageParams(c);
+  const callUuid = String(params.conversation_uuid || params.uuid || '');
+  const from = String(params.from || '');
+
+  if (callUuid) {
+    await sql`INSERT INTO inbound_calls (twilio_call_sid, from_number, status, provider) VALUES (${callUuid}, ${from}, 'ringing', 'vonage') ON CONFLICT (twilio_call_sid) DO NOTHING`;
+    broadcast('inbound_call', { callSid: callUuid, from });
+  }
+
+  const cfg = await getTelephonyConfig();
+  const greetingName = cfg.greeting_name || await getPanelName();
+  const options = cfg.menu_options || [];
+  const promptParts = options.map((o: any) => `Press ${o.digit} for ${o.label}.`).join(' ');
+  const text = options.length
+    ? `Thanks for calling ${greetingName}. ${promptParts}`
+    : `Thanks for calling ${greetingName}. Please hold while we connect you.`;
+
+  const ncco = options.length
+    ? [
+        { action: 'talk', text, voiceName: 'Amy' },
+        { action: 'input', type: ['dtmf'], dtmf: { maxDigits: 1, timeOut: 8 }, eventUrl: [`${new URL(c.req.url).origin}/api/telephony/vonage/dtmf`] },
+      ]
+    : [{ action: 'talk', text, voiceName: 'Amy' }, ...(await vonageRouteNcco(c, '', callUuid))];
+
+  return c.json(ncco);
+});
+
+telephony.all('/api/telephony/vonage/dtmf', async (c) => {
+  const params = await vonageParams(c);
+  const callUuid = String(params.conversation_uuid || params.uuid || '');
+  const digit = String(params.dtmf || (params.digits && params.digits[0]) || '');
+  const ncco = await vonageRouteNcco(c, digit, callUuid);
+  return c.json(ncco);
+});
+
+async function vonageRouteNcco(c: any, digit: string, callUuid: string) {
+  const cfg = await getTelephonyConfig();
+  const option = (cfg.menu_options || []).find((o: any) => o.digit === digit);
+  const label = option ? option.label : 'General';
+  if (callUuid) await sql`UPDATE inbound_calls SET menu_selection = ${label} WHERE twilio_call_sid = ${callUuid}`;
+
+  const callers = await getEligibleCallers(cfg);
+  if (!callers.length) {
+    return [{ action: 'talk', text: 'Sorry, nobody is available to take your call right now. Please try again shortly.', voiceName: 'Amy' }];
+  }
+
+  const position = callUuid ? await getQueuePosition(callUuid) : 1;
+  const ncco: any[] = [];
+  if (position > 1) ncco.push({ action: 'talk', text: `You are number ${position} in the queue.`, voiceName: 'Amy' });
+  ncco.push(
+    cfg.hold_music_url
+      ? { action: 'stream', streamUrl: [cfg.hold_music_url] }
+      : { action: 'talk', text: 'Please hold while we connect you.', voiceName: 'Amy' }
+  );
+  // Vonage's "connect" action rings a list of endpoints - unlike Twilio's sequential
+  // dial-result retry chain, multiple endpoints here ring simultaneously by default,
+  // which actually gets closer to genuine "keep ringing until someone picks up"
+  // across the whole team at once, not one at a time.
+  ncco.push({
+    action: 'connect',
+    from: cfg.vonage_number || undefined,
+    endpoint: callers.map((cl: any) => ({ type: 'phone', number: cl.call_phone })),
+    eventUrl: [`${new URL(c.req.url).origin}/api/telephony/vonage/event`],
+  });
+  return ncco;
+}
+
+telephony.post('/api/telephony/vonage/event', async (c) => {
+  const body = await c.req.json().catch(() => ({} as any));
+  const callUuid = String(body.conversation_uuid || body.uuid || '');
+  const status = String(body.status || '');
+  if (callUuid) {
+    const isEnded = ['completed', 'failed', 'busy', 'timeout', 'cancelled', 'rejected'].includes(status);
+    await sql`UPDATE inbound_calls SET status = ${status || 'unknown'}, duration_seconds = ${body.duration ? parseInt(body.duration, 10) : null}, ended_at = CASE WHEN ${isEnded} THEN now() ELSE ended_at END WHERE twilio_call_sid = ${callUuid}`.catch(() => {});
+    broadcast('inbound_call_update', { callSid: callUuid, status });
+  }
+  return c.text('', 200);
+});
+

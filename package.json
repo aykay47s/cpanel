@@ -7,7 +7,9 @@
     "dev": "bun --watch run index.ts"
   },
   "dependencies": {
+    "@types/jsonwebtoken": "^9.0.10",
     "hono": "^4",
+    "jsonwebtoken": "^9.0.3",
     "libphonenumber-js": "^1.13.10",
     "postgres": "^3",
     "web-push": "^3.6.7"

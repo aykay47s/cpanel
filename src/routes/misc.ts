@@ -3,8 +3,19 @@ import { sql } from '../db';
 import { requireRole, authenticate, requireSuperAdmin } from '../auth';
 import { registerClient, unregisterClient } from '../realtime';
 import { VAPID_PUBLIC_KEY, saveSubscription, removeSubscription } from '../push';
+import jwt from 'jsonwebtoken';
 
 export const misc = new Hono();
+
+// Vonage's Voice API auth: a short-lived JWT signed with the application's private
+// key (RS256), not a simple API key/secret header like Twilio's Basic Auth.
+export function signVonageJwt(applicationId: string, privateKey: string): string {
+  return jwt.sign(
+    { application_id: applicationId, iat: Math.floor(Date.now() / 1000), jti: crypto.randomUUID() },
+    privateKey,
+    { algorithm: 'RS256', expiresIn: '15m' }
+  );
+}
 
 // Public but deliberately minimal - just aggregate counts, never any lead/customer
 // data. This is what lets a super-admin's control panel pull live numbers from a
@@ -145,6 +156,139 @@ misc.post('/api/admin/telephony-config/disconnect-twilio', requireRole('admin'),
   cfg.twilio_phone_number = null;
   await sql`INSERT INTO settings (key, value) VALUES ('telephony_config', ${JSON.stringify(cfg)}) ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(cfg)}`;
   await sql`DELETE FROM settings WHERE key = 'twilio_auth_token'`;
+  return c.json({ ok: true });
+});
+
+// 3CX is architecturally different from Twilio - there's no TwiML-style "return
+// instructions" webhook model. 3CX authenticates via OAuth2 client-credentials
+// against its own server (self-hosted or 3CX-hosted), and its actual IVR/call-flow
+// logic is configured within 3CX's own Call Flow Designer, not here. What this DOES
+// give: a verified connection to 3CX's Call Control API, and a webhook endpoint
+// (configured inside 3CX's admin console) that logs inbound call activity into the
+// same call log the Twilio path uses, so admin visibility is consistent either way.
+misc.post('/api/admin/telephony-config/connect-3cx', requireRole('admin'), async (c) => {
+  const { fqdn, client_id, client_secret } = await c.req.json().catch(() => ({}));
+  if (!fqdn || !client_id || !client_secret) {
+    return c.json({ error: 'Server address, Client ID, and Client Secret are all required' }, 400);
+  }
+  const cleanFqdn = String(fqdn).replace(/\/$/, '').replace(/^https?:\/\//, '');
+  try {
+    const tokenRes = await fetch(`https://${cleanFqdn}/connect/token`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ client_id, client_secret, grant_type: 'client_credentials' }),
+    });
+    if (!tokenRes.ok) {
+      if (tokenRes.status === 401 || tokenRes.status === 400) return c.json({ error: '3CX rejected those credentials — check the Client ID and Client Secret' }, 400);
+      return c.json({ error: 'Could not reach that 3CX server (status ' + tokenRes.status + ') — check the server address' }, 400);
+    }
+    const tokenData: any = await tokenRes.json();
+    if (!tokenData.access_token) return c.json({ error: '3CX responded but did not return an access token' }, 400);
+
+    const [row] = await sql`SELECT value FROM settings WHERE key = 'telephony_config'`;
+    const cfg = row ? JSON.parse(row.value) : {};
+    cfg.provider = '3cx';
+    cfg.threecx_fqdn = cleanFqdn;
+    cfg.threecx_client_id = client_id;
+    cfg.threecx_connected = true;
+    await sql`INSERT INTO settings (key, value) VALUES ('telephony_config', ${JSON.stringify(cfg)}) ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(cfg)}`;
+    await sql`INSERT INTO settings (key, value) VALUES ('threecx_client_secret', ${client_secret}) ON CONFLICT (key) DO UPDATE SET value = ${client_secret}`;
+    return c.json({ ok: true });
+  } catch (err: any) {
+    return c.json({ error: 'Network error reaching that 3CX server: ' + (err?.message || 'unknown') }, 502);
+  }
+});
+misc.post('/api/admin/telephony-config/disconnect-3cx', requireRole('admin'), async (c) => {
+  const [row] = await sql`SELECT value FROM settings WHERE key = 'telephony_config'`;
+  const cfg = row ? JSON.parse(row.value) : {};
+  cfg.threecx_connected = false;
+  cfg.threecx_fqdn = null;
+  cfg.threecx_client_id = null;
+  await sql`INSERT INTO settings (key, value) VALUES ('telephony_config', ${JSON.stringify(cfg)}) ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(cfg)}`;
+  await sql`DELETE FROM settings WHERE key = 'threecx_client_secret'`;
+  return c.json({ ok: true });
+});
+
+// Vonage's Voice API works like Twilio's - our server dynamically returns the next
+// call instructions (their format is called an NCCO, JSON instead of TwiML's XML) -
+// so this gets the same real menu/hold-music/routing/bridging as Twilio, not just a
+// call log. Auth is different though: a short-lived JWT signed with a private key
+// tied to an "application", separate from the account-level api_key/api_secret used
+// to actually buy/manage numbers.
+misc.post('/api/admin/telephony-config/connect-vonage', requireRole('admin'), async (c) => {
+  const { api_key, api_secret, application_id, private_key, phone_number } = await c.req.json().catch(() => ({}));
+  if (!api_key || !api_secret || !application_id || !private_key || !phone_number) {
+    return c.json({ error: 'API Key, API Secret, Application ID, Private Key, and phone number are all required' }, 400);
+  }
+  try {
+    // Verify the account-level credentials first (simple Basic Auth check).
+    const acctRes = await fetch('https://rest.nexmo.com/account/get-balance', {
+      headers: { Authorization: 'Basic ' + Buffer.from(`${api_key}:${api_secret}`).toString('base64') },
+    });
+    if (!acctRes.ok) return c.json({ error: 'Vonage rejected the API Key/Secret' }, 400);
+
+    // Verify the application_id + private_key actually produce a valid signed JWT
+    // Vonage accepts, by using it to fetch the application itself.
+    const jwt = signVonageJwt(application_id, private_key);
+    const appRes = await fetch(`https://api.nexmo.com/v1/applications/${application_id}`, {
+      headers: { Authorization: `Bearer ${jwt}` },
+    });
+    if (!appRes.ok) return c.json({ error: 'The Application ID or Private Key is invalid for that application' }, 400);
+
+    const origin = new URL(c.req.url).origin;
+    // Point the application's voice webhooks at our server.
+    const updateAppRes = await fetch(`https://api.nexmo.com/v1/applications/${application_id}`, {
+      method: 'PUT',
+      headers: { Authorization: 'Basic ' + Buffer.from(`${api_key}:${api_secret}`).toString('base64'), 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Frap Ties Call Routing',
+        capabilities: {
+          voice: {
+            webhooks: {
+              answer_url: { address: `${origin}/api/telephony/vonage/answer`, http_method: 'POST' },
+              event_url: { address: `${origin}/api/telephony/vonage/event`, http_method: 'POST' },
+            },
+          },
+        },
+      }),
+    });
+    if (!updateAppRes.ok) return c.json({ error: 'Verified the credentials, but Vonage rejected the webhook update' }, 400);
+
+    // Link the number to this application.
+    const numberRes = await fetch('https://rest.nexmo.com/number/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ api_key, api_secret, country: phone_number.slice(0, 2), msisdn: phone_number, app_id: application_id }),
+    });
+    // Don't hard-fail on this one - number linking can fail for reasons unrelated to
+    // credential validity (e.g. country code guess wrong), and the number can be
+    // linked manually in the Vonage dashboard if needed.
+    const numberLinked = numberRes.ok;
+
+    const [row] = await sql`SELECT value FROM settings WHERE key = 'telephony_config'`;
+    const cfg = row ? JSON.parse(row.value) : {};
+    cfg.provider = 'vonage';
+    cfg.vonage_api_key = api_key;
+    cfg.vonage_application_id = application_id;
+    cfg.vonage_number = phone_number;
+    cfg.vonage_connected = true;
+    await sql`INSERT INTO settings (key, value) VALUES ('telephony_config', ${JSON.stringify(cfg)}) ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(cfg)}`;
+    await sql`INSERT INTO settings (key, value) VALUES ('vonage_api_secret', ${api_secret}) ON CONFLICT (key) DO UPDATE SET value = ${api_secret}`;
+    await sql`INSERT INTO settings (key, value) VALUES ('vonage_private_key', ${private_key}) ON CONFLICT (key) DO UPDATE SET value = ${private_key}`;
+    return c.json({ ok: true, number_linked: numberLinked });
+  } catch (err: any) {
+    return c.json({ error: 'Network error reaching Vonage: ' + (err?.message || 'unknown') }, 502);
+  }
+});
+misc.post('/api/admin/telephony-config/disconnect-vonage', requireRole('admin'), async (c) => {
+  const [row] = await sql`SELECT value FROM settings WHERE key = 'telephony_config'`;
+  const cfg = row ? JSON.parse(row.value) : {};
+  cfg.vonage_connected = false;
+  cfg.vonage_api_key = null;
+  cfg.vonage_application_id = null;
+  cfg.vonage_number = null;
+  await sql`INSERT INTO settings (key, value) VALUES ('telephony_config', ${JSON.stringify(cfg)}) ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(cfg)}`;
+  await sql`DELETE FROM settings WHERE key IN ('vonage_api_secret', 'vonage_private_key')`;
   return c.json({ ok: true });
 });
 

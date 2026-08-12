@@ -75,7 +75,9 @@ async function toggleCenterStatus(currentlyOpen) {
   if (currentlyOpen) {
     const reason = prompt('Message callers will see when they try to clock in (e.g. "Back at 9am tomorrow"):', 'The call center is closed right now. Check back soon.');
     if (reason === null) return;
-    await api('/api/admin/center-status', { method: 'POST', body: JSON.stringify({ open: false, reason }) });
+    const res = await api('/api/admin/center-status', { method: 'POST', body: JSON.stringify({ open: false, reason }) });
+    const data = await res.json();
+    if (data.autoEnded > 0) alert('Closed for the day. Automatically clocked out ' + data.autoEnded + ' still-active session(s).');
   } else {
     await api('/api/admin/center-status', { method: 'POST', body: JSON.stringify({ open: true }) });
   }
@@ -722,6 +724,12 @@ function renderTelephonyLocal() {
       </p>
     </div>
 
+    <div class="panel p fade-up" style="padding:6px;display:flex;gap:4px;">
+      <button class="btn \${(cfg.provider || 'twilio') === 'twilio' ? 'btn-gold' : 'btn-ghost'}" style="flex:1;" onclick="switchTelephonyProvider('twilio')">Twilio</button>
+      <button class="btn \${cfg.provider === '3cx' ? 'btn-gold' : 'btn-ghost'}" style="flex:1;" onclick="switchTelephonyProvider('3cx')">3CX</button>
+    </div>
+
+    \${(cfg.provider || 'twilio') === 'twilio' ? \`
     <div class="panel p fade-up">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
         <div class="section-title" style="margin:0;">Twilio Connection</div>
@@ -739,7 +747,26 @@ function renderTelephonyLocal() {
         <button class="btn btn-gold btn-block" onclick="connectTwilio()">Connect &amp; Auto-Configure</button>
         <div id="twilioConnectStatus" style="font-size:12px;margin-top:8px;"></div>
       \`}
-    </div>
+    </div>\` : \`
+    <div class="panel p fade-up">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+        <div class="section-title" style="margin:0;">3CX Connection</div>
+        \${cfg.threecx_connected ? '<span class="badge successful_call">Connected</span>' : '<span class="badge not_called">Not Connected</span>'}
+      </div>
+      <p style="font-size:12px;color:var(--text-dim);margin-bottom:10px;line-height:1.6;">3CX works differently to Twilio — its IVR and call routing are configured inside 3CX's own Call Flow Designer, not here. What connecting does: verifies your 3CX server credentials, and gives you a webhook URL to paste into 3CX's admin console so inbound call activity shows up in the log below.</p>
+      \${cfg.threecx_connected ? \`
+        <div class="info-row"><span class="k">Server</span><span class="v mono">\${esc(cfg.threecx_fqdn || '')}</span></div>
+        <div class="info-row"><span class="k">Client ID</span><span class="v mono">\${esc(cfg.threecx_client_id || '')}</span></div>
+        <div class="field" style="margin-top:12px;"><label>Webhook URL (paste into 3CX)</label><input readonly value="\${window.location.origin}/api/telephony/3cx-webhook" onclick="this.select()" /></div>
+        <button class="btn btn-danger btn-sm" style="margin-top:10px;" onclick="disconnect3cx()">Disconnect</button>
+      \` : \`
+        <div class="field"><label>Server Address</label><input id="threecxFqdn" placeholder="yourcompany.3cx.eu or your own domain" /></div>
+        <div class="field"><label>Client ID</label><input id="threecxClientId" placeholder="From 3CX Admin Console > Integrations > API" /></div>
+        <div class="field"><label>Client Secret</label><input id="threecxClientSecret" type="password" placeholder="Your 3CX API Client Secret" /></div>
+        <button class="btn btn-gold btn-block" onclick="connect3cx()">Verify &amp; Connect</button>
+        <div id="threecxConnectStatus" style="font-size:12px;margin-top:8px;"></div>
+      \`}
+    </div>\`}
 
     \${connected ? \`<div class="panel p fade-up">
       <div class="section-title" style="margin-top:0;">Send Test Call</div>
@@ -866,6 +893,27 @@ async function sendTestCall() {
 async function disconnectTwilio() {
   if (!confirm('Disconnect this Twilio number? Inbound calls will stop routing here.')) return;
   await api('/api/admin/telephony-config/disconnect-twilio', { method: 'POST' });
+  renderAdminTab('telephony');
+}
+function switchTelephonyProvider(provider) {
+  window._telephonyConfig.provider = provider;
+  renderTelephonyLocal();
+}
+async function connect3cx() {
+  const fqdn = document.getElementById('threecxFqdn').value.trim();
+  const client_id = document.getElementById('threecxClientId').value.trim();
+  const client_secret = document.getElementById('threecxClientSecret').value.trim();
+  const status = document.getElementById('threecxConnectStatus');
+  if (!fqdn || !client_id || !client_secret) { status.textContent = 'All three fields are required.'; status.style.color = 'var(--danger)'; return; }
+  status.textContent = 'Verifying…'; status.style.color = 'var(--text-dim)';
+  const res = await api('/api/admin/telephony-config/connect-3cx', { method: 'POST', body: JSON.stringify({ fqdn, client_id, client_secret }) });
+  const data = await res.json();
+  if (!res.ok) { status.textContent = data.error || 'Connection failed.'; status.style.color = 'var(--danger)'; return; }
+  renderAdminTab('telephony');
+}
+async function disconnect3cx() {
+  if (!confirm('Disconnect this 3CX server?')) return;
+  await api('/api/admin/telephony-config/disconnect-3cx', { method: 'POST' });
   renderAdminTab('telephony');
 }
 function addMenuOption() {

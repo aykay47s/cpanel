@@ -558,6 +558,16 @@ function connectEvents() {
   if (es) es.close();
   es = new EventSource('/api/events?uid=' + me.id + '&pin=' + me.pin);
   es.addEventListener('new_lead', () => { if (staffTab === 'queue' && !onActiveCallScreen) smoothRerender(renderStaffQueue); pingNav('queue'); if (me.role==='admin') maybeRefreshAdmin('leads'); });
+  es.addEventListener('center_closed', (e) => {
+    if (me.role === 'admin') return; // admins are exempt from the gate, nothing changes for them
+    const d = JSON.parse(e.data);
+    me.clocked_in = false;
+    localStorage.setItem('dispatch_me', JSON.stringify(me));
+    window._centerClosed = true;
+    window._centerClosedReason = d.reason || 'The call center is closed right now.';
+    updateClockBtn();
+    if (staffTab === 'queue') renderStaffQueue();
+  });
   es.addEventListener('lead_claimed', (e) => {
     const d = JSON.parse(e.data);
     const card = document.querySelector('[data-lead-id="' + d.id + '"]');
@@ -669,8 +679,18 @@ async function updateClockBtn() {
   }
 }
 async function toggleClock() {
-  me.clocked_in = !me.clocked_in;
-  await api('/api/clock', { method: 'POST', body: JSON.stringify({ clockedIn: me.clocked_in }) });
+  const wantClockedIn = !me.clocked_in;
+  const res = await api('/api/clock', { method: 'POST', body: JSON.stringify({ clockedIn: wantClockedIn }) });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    if (wantClockedIn) {
+      window._centerClosed = true;
+      window._centerClosedReason = data.error || 'The call center is closed right now.';
+    }
+    if (staffTab === 'queue') renderStaffQueue();
+    return;
+  }
+  me.clocked_in = wantClockedIn;
   localStorage.setItem('dispatch_me', JSON.stringify(me));
   updateClockBtn();
   if (staffTab === 'queue') renderStaffQueue();

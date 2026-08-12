@@ -35,7 +35,9 @@ export async function sendPush(userId: number, title: string, body: string, url 
   }
 }
 
-export async function sendPushToRole(role: 'caller' | 'finisher' | 'admin' | 'all', title: string, body: string, url = '/') {
-  const users = role === 'all' ? await sql`SELECT id FROM users` : await sql`SELECT id FROM users WHERE role = ${role} AND clocked_in = true`;
+export async function sendPushToRole(role: 'caller' | 'finisher' | 'admin' | 'all', title: string, body: string, url = '/', tenantId?: number) {
+  const users = role === 'all'
+    ? (tenantId ? await sql`SELECT id FROM users WHERE tenant_id = ${tenantId}` : await sql`SELECT id FROM users`)
+    : (tenantId ? await sql`SELECT id FROM users WHERE role = ${role} AND clocked_in = true AND tenant_id = ${tenantId}` : await sql`SELECT id FROM users WHERE role = ${role} AND clocked_in = true`);
   for (const u of users) await sendPush(u.id, title, body, url);
 }

@@ -233,6 +233,7 @@ export async function ensureDb() {
     `ALTER TABLE announcements ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id)`,
     `ALTER TABLE scripts ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id)`,
     `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ`,
+    `ALTER TABLE inbound_calls ADD COLUMN IF NOT EXISTS provider TEXT NOT NULL DEFAULT 'twilio'`,
   ];
   for (const stmt of alters) {
     await sql.unsafe(`DO $$ BEGIN ${stmt}; EXCEPTION WHEN OTHERS THEN NULL; END $$;`);
@@ -260,9 +261,17 @@ export async function ensureDb() {
       hold_music_url: null,
       ring_behavior: 'keep_ringing',
       inbound_mode: 'everyone',
+      provider: 'twilio',
       twilio_account_sid: null,
       twilio_phone_number: null,
       twilio_connected: false,
+      threecx_fqdn: null,
+      threecx_client_id: null,
+      threecx_connected: false,
+      vonage_api_key: null,
+      vonage_application_id: null,
+      vonage_number: null,
+      vonage_connected: false,
     });
     await sql`INSERT INTO settings (key, value) VALUES ('telephony_config', ${defaultTelephony}) ON CONFLICT (key) DO NOTHING`;
   }

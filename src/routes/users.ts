@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { sql } from '../db';
 import { requireRole, authenticate, requireAnyStaff } from '../auth';
+import { broadcast } from '../realtime';
 
 export const users = new Hono();
 function bad(c: any, msg: string, code = 400) { return c.json({ error: msg }, code); }
@@ -99,10 +100,26 @@ users.get('/api/center-status', async (c) => {
   return c.json({ data: { open: map.center_open !== 'false', reason: map.center_offline_reason || 'The call center is closed right now. Check back soon.' } });
 });
 users.post('/api/admin/center-status', requireRole('admin'), async (c) => {
+  const user = c.get('user');
   const { open, reason } = await c.req.json().catch(() => ({}));
   if (open !== undefined) await sql`INSERT INTO settings (key, value) VALUES ('center_open', ${String(!!open)}) ON CONFLICT (key) DO UPDATE SET value = ${String(!!open)}`;
   if (reason !== undefined) await sql`INSERT INTO settings (key, value) VALUES ('center_offline_reason', ${reason}) ON CONFLICT (key) DO UPDATE SET value = ${reason}`;
-  return c.json({ ok: true });
+
+  let autoEnded = 0;
+  if (open === false) {
+    // Closing the day should actually end everyone's shift, not just block new
+    // clock-ins - nobody should stay clocked in against a center that's now closed.
+    const clockedRows = await sql`SELECT id FROM users WHERE clocked_in = true AND tenant_id = ${user.tenant_id} AND role != 'admin'`;
+    const ids = clockedRows.map((r: any) => r.id);
+    if (ids.length) {
+      await sql`UPDATE users SET clocked_in = false, status = 'offline' WHERE id = ANY(${ids})`;
+      await sql`UPDATE clock_sessions SET clocked_out_at = now(), duration_seconds = EXTRACT(EPOCH FROM (now() - clocked_in_at))::int
+        WHERE user_id = ANY(${ids}) AND clocked_out_at IS NULL`;
+      autoEnded = ids.length;
+      broadcast('center_closed', { reason: reason || null }, ids);
+    }
+  }
+  return c.json({ ok: true, autoEnded });
 });
 
 users.post('/api/clock', async (c) => {
