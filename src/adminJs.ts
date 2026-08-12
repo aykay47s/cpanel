@@ -853,7 +853,7 @@ function renderTelephonyLocal() {
 
     <div class="panel p fade-up">
       <div class="section-title" style="margin-top:0;">3CX</div>
-      <p style="font-size:12px;color:var(--text-dim);line-height:1.6;">3CX is a different kind of system (a PBX you self-host or run through their cloud, not a simple API like Twilio) — connecting it needs a separate integration built specifically for it. Not available yet. If you want this instead of or alongside Twilio, flag it and it can be scoped properly.</p>
+      <p style=\"font-size:12px;color:var(--text-dim);line-height:1.6;\">Live. Switch the provider to 3CX above to connect your PBX and route inbound calls through the panel. Needs a Route Point in 3CX with your inbound rule pointed at it.</p>
     </div>
 
     <div class="panel p fade-up">
