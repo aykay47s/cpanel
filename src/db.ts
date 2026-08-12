@@ -252,6 +252,18 @@ export async function ensureDb() {
     `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ`,
     `ALTER TABLE inbound_calls ADD COLUMN IF NOT EXISTS provider TEXT NOT NULL DEFAULT 'twilio'`,
     `ALTER TABLE inbound_calls ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id)`,
+    // --- 3CX Call Control API ---
+    // Where 3CX should actually ring this person. Preferred over call_phone for
+    // 3CX routing: routing to an internal extension stays on the PBX, while an
+    // external number needs an outbound rule and burns a trunk channel.
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS threecx_extension TEXT`,
+    // Which lead the inbound number matched, so the call log links to the record
+    // instead of re-running the phone match every time the log is opened.
+    `ALTER TABLE inbound_calls ADD COLUMN IF NOT EXISTS lead_id INTEGER REFERENCES leads(id)`,
+    `ALTER TABLE inbound_calls ADD COLUMN IF NOT EXISTS answered_at TIMESTAMPTZ`,
+    // How many callers were rung before someone took it — the number that tells
+    // an admin whether their call order is actually working.
+    `ALTER TABLE inbound_calls ADD COLUMN IF NOT EXISTS route_attempts INTEGER DEFAULT 0`,
   ];
   for (const stmt of alters) {
     await sql.unsafe(`DO $$ BEGIN ${stmt}; EXCEPTION WHEN OTHERS THEN NULL; END $$;`);

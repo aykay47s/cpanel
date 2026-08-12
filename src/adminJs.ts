@@ -710,6 +710,25 @@ async function renderAdminTelephony(el) {
   window._telephonyEl = el;
   window._telephonyCallers = (await callersRes.json()).data.filter(u => u.role === 'caller');
   renderTelephonyLocal();
+  // 3CX health and DN list load after the first paint - they hit the PBX over the
+  // network and shouldn't hold the whole tab hostage if the server is slow or down.
+  if (cfg.provider === '3cx' && cfg.threecx_connected) refresh3cxStatus();
+}
+async function refresh3cxStatus() {
+  try {
+    const [statusRes, dnsRes] = await Promise.all([
+      api('/api/admin/telephony/3cx/status'),
+      api('/api/admin/telephony/3cx/dns'),
+    ]);
+    window._threecxStatus = (await statusRes.json()).data || null;
+    const dnsBody = await dnsRes.json();
+    window._threecxDns = dnsRes.ok ? (dnsBody.data || []) : [];
+    window._threecxDnsError = dnsRes.ok ? null : (dnsBody.error || 'Could not read DNs');
+  } catch (err) {
+    window._threecxStatus = null;
+    window._threecxDnsError = 'Could not reach the panel server';
+  }
+  if (window._telephonyEl && currentAdminTab === 'telephony') renderTelephonyLocal();
 }
 function renderTelephonyLocal() {
   const el = window._telephonyEl;
@@ -758,18 +777,37 @@ function renderTelephonyLocal() {
         <div class="section-title" style="margin:0;">3CX Connection</div>
         \${cfg.threecx_connected ? '<span class="badge successful_call">Connected</span>' : '<span class="badge not_called">Not Connected</span>'}
       </div>
-      <div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.28);border-radius:12px;padding:12px 14px;margin-bottom:14px;">
-        <p style="font-size:12.5px;color:#f0958a;line-height:1.6;margin:0;font-weight:600;">Everything about the menu itself — the greeting, "press 1 for X", hold music, and call routing — is configured entirely inside 3CX's own Call Flow Designer. Nothing on this page can create, edit, or control that. This connection only gives you two things:</p>
-        <ul style="margin:8px 0 0;padding-left:18px;font-size:12px;color:var(--text-dim);line-height:1.7;">
-          <li>A live call log below, same as Twilio's</li>
-          <li>Caller ID matching — if the number calling in matches an existing lead, that lead's info pops up here instantly, and any caller set up for inbound gets alerted</li>
-        </ul>
-      </div>
+      <p style="font-size:12px;color:var(--text-dim);margin-bottom:14px;line-height:1.6;">Connects to your PBX's Call Control API and routes inbound calls itself: the caller ID is matched against your leads, then the call is offered to your clocked-in callers in priority order until one answers. Requires a <b style="color:var(--text);">Route Point</b> in 3CX with your inbound rule pointed at it, and this API client granted access to it (Admin Console &gt; Integrations &gt; API).</p>
       \${cfg.threecx_connected ? \`
         <div class="info-row"><span class="k">Server</span><span class="v mono">\${esc(cfg.threecx_fqdn || '')}</span></div>
         <div class="info-row"><span class="k">Client ID</span><span class="v mono">\${esc(cfg.threecx_client_id || '')}</span></div>
-        <div class="field" style="margin-top:12px;"><label>Webhook URL (paste into 3CX)</label><input readonly value="\${window.location.origin}/api/telephony/3cx-webhook" onclick="this.select()" /></div>
-        <button class="btn btn-danger btn-sm" style="margin-top:10px;" onclick="disconnect3cx()">Disconnect</button>
+        <div class="info-row"><span class="k">Call control link</span><span class="v">\${threecxLinkBadge()}</span></div>
+        \${window._threecxStatus && window._threecxStatus.lastError ? '<div style="font-size:11.5px;color:var(--danger);margin:6px 0 0;">' + esc(window._threecxStatus.lastError) + '</div>' : ''}
+        \${window._threecxDnsError ? '<div style="font-size:11.5px;color:var(--danger);margin:6px 0 0;">' + esc(window._threecxDnsError) + '</div>' : ''}
+
+        <div class="field" style="margin-top:14px;"><label>Route Point (where your inbound rule sends calls)</label>
+          <select id="threecxRoutePoint">
+            <option value="">— select —</option>
+            \${(window._threecxDns || []).map(d => '<option value="' + esc(d.dn) + '"' + (cfg.threecx_route_point === d.dn ? ' selected' : '') + '>' + esc(d.dn) + ' · ' + esc(d.type || '') + '</option>').join('')}
+            \${cfg.threecx_route_point && !(window._threecxDns || []).some(d => d.dn === cfg.threecx_route_point) ? '<option value="' + esc(cfg.threecx_route_point) + '" selected>' + esc(cfg.threecx_route_point) + ' (saved)</option>' : ''}
+          </select>
+        </div>
+        <div class="row-flex" style="gap:8px;">
+          <div class="field" style="flex:1;"><label>Ring each caller for</label><input id="threecxRingSeconds" type="number" min="5" max="120" value="\${cfg.threecx_ring_seconds || 20}" /></div>
+          <div class="field" style="flex:1;"><label>If nobody answers, send to</label><input id="threecxFallback" placeholder="e.g. 800 (voicemail/queue)" value="\${esc(cfg.threecx_fallback || '')}" /></div>
+        </div>
+        <div class="row-flex" style="gap:8px;">
+          <button class="btn btn-gold" style="flex:1;" onclick="save3cxRouting()">Save Routing</button>
+          <button class="btn btn-ghost" onclick="reconnect3cx()">Reconnect</button>
+        </div>
+        <div id="threecxRoutingStatus" style="font-size:12px;margin-top:8px;"></div>
+
+        <details style="margin-top:14px;">
+          <summary style="font-size:12px;color:var(--text-dim);cursor:pointer;">Webhook fallback (only if your PBX can't give this client a Route Point)</summary>
+          <div class="field" style="margin-top:10px;"><label>Webhook URL (paste into 3CX)</label><input readonly value="\${window.location.origin}/api/telephony/3cx-webhook" onclick="this.select()" /></div>
+          <p style="font-size:11.5px;color:var(--text-dim);line-height:1.6;">With the webhook alone, calls are logged and the lead pops up, but nothing is routed - the PBX decides where the call goes.</p>
+        </details>
+        <button class="btn btn-danger btn-sm" style="margin-top:12px;" onclick="disconnect3cx()">Disconnect</button>
       \` : \`
         <div class="field"><label>Server Address</label><input id="threecxFqdn" placeholder="yourcompany.3cx.eu or your own domain" /></div>
         <div class="field"><label>Client ID</label><input id="threecxClientId" placeholder="From 3CX Admin Console > Integrations > API" /></div>
@@ -802,7 +840,8 @@ function renderTelephonyLocal() {
       \${window._telephonyCallers.map(u => \`<div class="row-flex" style="align-items:center;margin-bottom:8px;">
         \${cfg.inbound_mode === 'selected' ? '<input type="checkbox" class="toggle-switch" ' + (u.inbound_eligible !== false ? 'checked' : '') + ' onchange="updateCallerInbound(' + u.id + ', this.checked, null)" style="margin-right:8px;" />' : ''}
         \${avatarHtml(u, 26)}
-        <span style="flex:1;margin-left:8px;font-size:13px;">\${esc(u.name)}\${!u.call_phone ? ' <span style="color:var(--danger);font-size:11px;">(no call-from number set)</span>' : ''}</span>
+        <span style="flex:1;margin-left:8px;font-size:13px;">\${esc(u.name)}\${!u.call_phone && !u.threecx_extension ? ' <span style="color:var(--danger);font-size:11px;">(nowhere to ring)</span>' : ''}</span>
+        \${cfg.provider === '3cx' ? '<input placeholder="ext" value="' + esc(u.threecx_extension || '') + '" style="width:70px;margin-right:6px;" onchange="updateCallerExtension(' + u.id + ', this.value)" />' : ''}
         <input type="number" value="\${u.inbound_priority ?? 100}" style="width:70px;" onchange="updateCallerInbound(\${u.id}, null, this.value)" />
       </div>\`).join('') || '<div style="color:var(--text-dim);font-size:12.5px;">No callers yet.</div>'}
     </div>
@@ -920,12 +959,49 @@ async function connect3cx() {
   const res = await api('/api/admin/telephony-config/connect-3cx', { method: 'POST', body: JSON.stringify({ fqdn, client_id, client_secret }) });
   const data = await res.json();
   if (!res.ok) { status.textContent = data.error || 'Connection failed.'; status.style.color = 'var(--danger)'; return; }
+  if (data.warning) alert(data.warning);
   renderAdminTab('telephony');
 }
 async function disconnect3cx() {
-  if (!confirm('Disconnect this 3CX server?')) return;
+  if (!confirm('Disconnect this 3CX server? Inbound calls will stop being routed by the panel.')) return;
   await api('/api/admin/telephony-config/disconnect-3cx', { method: 'POST' });
+  window._threecxStatus = null; window._threecxDns = [];
   renderAdminTab('telephony');
+}
+// Colour-coded so a dead socket is obvious at a glance - "connected" in the config
+// only means credentials were accepted once, which is not the same as calls
+// actually being routed right now.
+function threecxLinkBadge() {
+  const st = window._threecxStatus;
+  if (!st) return '<span class="badge not_called">Checking…</span>';
+  if (st.connected) return '<span class="badge successful_call">Live</span>' + (st.routePoint ? '' : ' <span style="font-size:11px;color:var(--danger);">no route point set</span>');
+  return '<span class="badge important">Reconnecting…</span>';
+}
+async function save3cxRouting() {
+  const status = document.getElementById('threecxRoutingStatus');
+  const body = {
+    route_point: document.getElementById('threecxRoutePoint').value,
+    ring_seconds: document.getElementById('threecxRingSeconds').value,
+    fallback: document.getElementById('threecxFallback').value.trim(),
+  };
+  status.textContent = 'Saving…'; status.style.color = 'var(--text-dim)';
+  const res = await api('/api/admin/telephony/3cx/routing', { method: 'POST', body: JSON.stringify(body) });
+  const data = await res.json();
+  if (!res.ok) { status.textContent = data.error || 'Could not save.'; status.style.color = 'var(--danger)'; return; }
+  window._telephonyConfig = Object.assign(window._telephonyConfig, data.data || {});
+  status.textContent = 'Saved - live now ✓'; status.style.color = 'var(--success)';
+  refresh3cxStatus();
+}
+async function reconnect3cx() {
+  const status = document.getElementById('threecxRoutingStatus');
+  status.textContent = 'Reconnecting…'; status.style.color = 'var(--text-dim)';
+  await api('/api/admin/telephony/3cx/reconnect', { method: 'POST' });
+  await refresh3cxStatus();
+}
+async function updateCallerExtension(userId, ext) {
+  await api('/api/admin/users/' + userId + '/inbound-settings', { method: 'PATCH', body: JSON.stringify({ threecx_extension: ext }) });
+  const u = window._telephonyCallers.find(c => c.id === userId);
+  if (u) u.threecx_extension = ext.trim();
 }
 function addMenuOption() {
   window._telephonyConfig.menu_options.push({ digit: String(window._telephonyConfig.menu_options.length + 1), label: '' });

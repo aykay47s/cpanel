@@ -3,6 +3,7 @@ import { sql } from '../db';
 import { requireRole, authenticate, requireSuperAdmin } from '../auth';
 import { registerClient, unregisterClient } from '../realtime';
 import { VAPID_PUBLIC_KEY, saveSubscription, removeSubscription } from '../push';
+import * as threecx from '../threecx';
 import jwt from 'jsonwebtoken';
 
 export const misc = new Hono();
@@ -160,43 +161,54 @@ misc.post('/api/admin/telephony-config/disconnect-twilio', requireRole('admin'),
 });
 
 // 3CX is architecturally different from Twilio - there's no TwiML-style "return
-// instructions" webhook model. 3CX authenticates via OAuth2 client-credentials
-// against its own server (self-hosted or 3CX-hosted), and its actual IVR/call-flow
-// logic is configured within 3CX's own Call Flow Designer, not here. What this DOES
-// give: a verified connection to 3CX's Call Control API, and a webhook endpoint
-// (configured inside 3CX's admin console) that logs inbound call activity into the
-// same call log the Twilio path uses, so admin visibility is consistent either way.
+// instructions" webhook model. 3CX authenticates via OAuth2 client-credentials and
+// then exposes a live Call Control socket, which is what actually routes calls now
+// (src/threecx.ts). Connecting does three things: proves the credentials work,
+// reads back every DN the API client can see so the admin can pick their Route
+// Point, and starts the socket immediately - no redeploy, no second setup step.
 misc.post('/api/admin/telephony-config/connect-3cx', requireRole('admin'), async (c) => {
   const { fqdn, client_id, client_secret } = await c.req.json().catch(() => ({}));
   if (!fqdn || !client_id || !client_secret) {
     return c.json({ error: 'Server address, Client ID, and Client Secret are all required' }, 400);
   }
   const cleanFqdn = String(fqdn).replace(/\/$/, '').replace(/^https?:\/\//, '');
+  let discovered: { dns: any[]; routePoints: string[] };
   try {
-    const tokenRes = await fetch(`https://${cleanFqdn}/connect/token`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ client_id, client_secret, grant_type: 'client_credentials' }),
-    });
-    if (!tokenRes.ok) {
-      if (tokenRes.status === 401 || tokenRes.status === 400) return c.json({ error: '3CX rejected those credentials — check the Client ID and Client Secret' }, 400);
-      return c.json({ error: 'Could not reach that 3CX server (status ' + tokenRes.status + ') — check the server address' }, 400);
-    }
-    const tokenData: any = await tokenRes.json();
-    if (!tokenData.access_token) return c.json({ error: '3CX responded but did not return an access token' }, 400);
-
-    const [row] = await sql`SELECT value FROM settings WHERE key = 'telephony_config'`;
-    const cfg = row ? JSON.parse(row.value) : {};
-    cfg.provider = '3cx';
-    cfg.threecx_fqdn = cleanFqdn;
-    cfg.threecx_client_id = client_id;
-    cfg.threecx_connected = true;
-    await sql`INSERT INTO settings (key, value) VALUES ('telephony_config', ${JSON.stringify(cfg)}) ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(cfg)}`;
-    await sql`INSERT INTO settings (key, value) VALUES ('threecx_client_secret', ${client_secret}) ON CONFLICT (key) DO UPDATE SET value = ${client_secret}`;
-    return c.json({ ok: true });
+    discovered = await threecx.verify(cleanFqdn, client_id, client_secret);
   } catch (err: any) {
-    return c.json({ error: 'Network error reaching that 3CX server: ' + (err?.message || 'unknown') }, 502);
+    const msg = String(err?.message || '');
+    if (msg.includes('token request failed (401)') || msg.includes('token request failed (400)')) {
+      return c.json({ error: '3CX rejected those credentials — check the Client ID and Client Secret' }, 400);
+    }
+    if (msg.includes('/callcontrol → 403')) {
+      return c.json({ error: 'Credentials work, but this API client has no permissions on the Call Control API. In 3CX: Admin Console > Integrations > API, open this client and grant it access.' }, 400);
+    }
+    return c.json({ error: 'Could not reach that 3CX server: ' + (msg || 'unknown error') }, 502);
   }
+
+  const [row] = await sql`SELECT value FROM settings WHERE key = 'telephony_config'`;
+  const cfg = row ? JSON.parse(row.value) : {};
+  cfg.provider = '3cx';
+  cfg.threecx_fqdn = cleanFqdn;
+  cfg.threecx_client_id = client_id;
+  cfg.threecx_connected = true;
+  // Auto-select the route point when there's exactly one - the overwhelmingly
+  // common case, and the one place this setup usually stalls.
+  if (!cfg.threecx_route_point && discovered.routePoints.length === 1) {
+    cfg.threecx_route_point = discovered.routePoints[0];
+  }
+  if (!cfg.threecx_ring_seconds) cfg.threecx_ring_seconds = 20;
+  await sql`INSERT INTO settings (key, value) VALUES ('telephony_config', ${JSON.stringify(cfg)}) ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(cfg)}`;
+  await sql`INSERT INTO settings (key, value) VALUES ('threecx_client_secret', ${client_secret}) ON CONFLICT (key) DO UPDATE SET value = ${client_secret}`;
+
+  await threecx.restart().catch(() => {});
+  return c.json({
+    ok: true,
+    dns: discovered.dns,
+    route_points: discovered.routePoints,
+    route_point: cfg.threecx_route_point || null,
+    warning: discovered.routePoints.length ? null : 'No Route Point is assigned to this API client, so calls can be logged but not routed. Create a Route Point in 3CX, point your inbound rule at it, and give this API client access to it.',
+  });
 });
 misc.post('/api/admin/telephony-config/disconnect-3cx', requireRole('admin'), async (c) => {
   const [row] = await sql`SELECT value FROM settings WHERE key = 'telephony_config'`;
@@ -205,7 +217,10 @@ misc.post('/api/admin/telephony-config/disconnect-3cx', requireRole('admin'), as
   cfg.threecx_fqdn = null;
   cfg.threecx_client_id = null;
   await sql`INSERT INTO settings (key, value) VALUES ('telephony_config', ${JSON.stringify(cfg)}) ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(cfg)}`;
+  cfg.threecx_route_point = null;
+  await sql`INSERT INTO settings (key, value) VALUES ('telephony_config', ${JSON.stringify(cfg)}) ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(cfg)}`;
   await sql`DELETE FROM settings WHERE key = 'threecx_client_secret'`;
+  threecx.stop();
   return c.json({ ok: true });
 });
 

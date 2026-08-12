@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { sql } from '../db';
 import { requireRole } from '../auth';
 import { broadcast, notify } from '../realtime';
+import * as threecx from '../threecx';
 
 export const telephony = new Hono();
 
@@ -201,12 +202,68 @@ telephony.post('/api/telephony/status', async (c) => {
   return c.text('', 200);
 });
 
+// ================= 3CX CALL CONTROL (live socket) =================
+// Live health of the PBX connection. The panel polls this on the telephony tab so
+// a dead socket or expired API client is visible immediately rather than being
+// discovered from a week of missed calls.
+telephony.get('/api/admin/telephony/3cx/status', requireRole('admin'), async (c) => {
+  return c.json({ data: threecx.status });
+});
+
+// Every DN the API client is allowed to see — the admin picks their Route Point
+// from this rather than typing a number blind.
+telephony.get('/api/admin/telephony/3cx/dns', requireRole('admin'), async (c) => {
+  try {
+    return c.json({ data: await threecx.listDns() });
+  } catch (err: any) {
+    return c.json({ error: err?.message || 'Could not read DNs from 3CX' }, 502);
+  }
+});
+
+telephony.post('/api/admin/telephony/3cx/reconnect', requireRole('admin'), async (c) => {
+  await threecx.restart();
+  return c.json({ data: threecx.status });
+});
+
+// Routing settings that only apply to the call control engine.
+telephony.post('/api/admin/telephony/3cx/routing', requireRole('admin'), async (c) => {
+  const { route_point, ring_seconds, fallback } = await c.req.json().catch(() => ({} as any));
+  const [row] = await sql`SELECT value FROM settings WHERE key = 'telephony_config'`;
+  const cfg = row ? JSON.parse(row.value) : {};
+  if (route_point !== undefined) cfg.threecx_route_point = route_point || null;
+  if (ring_seconds !== undefined) cfg.threecx_ring_seconds = Math.max(5, Math.min(120, parseInt(ring_seconds, 10) || 20));
+  if (fallback !== undefined) cfg.threecx_fallback = fallback || null;
+  await sql`INSERT INTO settings (key, value) VALUES ('telephony_config', ${JSON.stringify(cfg)}) ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(cfg)}`;
+  await threecx.restart(); // route point changes decide what the socket listens to
+  return c.json({ data: cfg });
+});
+
+// Click-to-call through the PBX: rings the logged-in user's own extension first,
+// then dials the lead — the only order V20 allows.
+telephony.post('/api/telephony/3cx/call', async (c) => {
+  const user = c.get('user');
+  if (!user) return c.json({ error: 'Not authenticated' }, 401);
+  const { destination } = await c.req.json().catch(() => ({} as any));
+  const [row] = await sql`SELECT threecx_extension FROM users WHERE id = ${user.id}`;
+  if (!row?.threecx_extension) return c.json({ error: 'No 3CX extension is mapped to your account' }, 400);
+  if (!destination) return c.json({ error: 'No destination number' }, 400);
+  try {
+    return c.json({ data: await threecx.makeCall(row.threecx_extension, destination) });
+  } catch (err: any) {
+    return c.json({ error: err?.message || '3CX rejected the call' }, 502);
+  }
+});
+
 telephony.get('/api/admin/inbound-calls', requireRole('admin'), async (c) => {
   const user = c.get('user');
   const rows = await sql`SELECT * FROM inbound_calls WHERE tenant_id = ${user.tenant_id} ORDER BY created_at DESC LIMIT 100`;
   return c.json({ data: rows });
 });
 
+// FALLBACK PATH ONLY. Live routing now runs over the Call Control API socket in
+// src/threecx.ts — this webhook remains for PBXs where the API client can't be
+// given a Route Point (Basic/Free editions, or a locked-down hosted instance), in
+// which case it still logs the call and pops the lead, it just can't route.
 // Configured inside 3CX's own admin console (Integrations > Webhooks, or via the
 // Call Flow Designer's HTTP action) to point at this URL — 3CX pushes call events
 // here rather than us polling or receiving TwiML-style instructions back. Payload

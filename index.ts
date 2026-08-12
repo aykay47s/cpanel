@@ -13,6 +13,7 @@ import { tenancy } from './src/routes/tenancy';
 import { STORE_PAGE } from './src/store';
 import { REDEEM_PAGE } from './src/redeem';
 import { page } from './src/frontend';
+import * as threecx from './src/threecx';
 
 const app = new Hono();
 const ADMIN_PIN = process.env.ADMIN_PIN || '9247';
@@ -125,6 +126,15 @@ app.get('/:slug', async (c) => {
     .replace('<script>', `<script>const TENANT_SLUG = ${JSON.stringify(slug)};`);
   return c.html(html);
 });
+
+// The 3CX Call Control connection is a long-lived socket, not a request handler,
+// so it starts with the process rather than lazily on first request — otherwise
+// nothing would route inbound calls until an admin happened to open the panel.
+// Failure here is deliberately non-fatal: a PBX being unreachable must never stop
+// the panel itself from serving.
+ensureDb()
+  .then(() => threecx.start())
+  .catch((err) => console.error('[3cx] startup skipped:', err?.message));
 
 export default {
   port: Number(process.env.PORT) || 8080,

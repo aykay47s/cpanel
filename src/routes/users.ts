@@ -210,7 +210,7 @@ users.get('/api/admin/users', requireRole('admin'), async (c) => {
   const user = c.get('user');
   const rows = await sql`
     SELECT users.id, users.name, users.pin, users.role, users.avatar, users.pfp_data, users.xp, users.clocked_in, users.status,
-      users.call_phone, users.inbound_eligible, users.inbound_priority, users.created_at, users.last_seen_at,
+      users.call_phone, users.inbound_eligible, users.inbound_priority, users.threecx_extension, users.created_at, users.last_seen_at,
       active_lead.first_name as active_lead_first_name, active_lead.last_name as active_lead_last_name, active_lead.status as active_lead_status
     FROM users
     LEFT JOIN LATERAL (
@@ -224,11 +224,17 @@ users.get('/api/admin/users', requireRole('admin'), async (c) => {
 
 users.patch('/api/admin/users/:id/inbound-settings', requireRole('admin'), async (c) => {
   const user = c.get('user');
-  const { inbound_eligible, inbound_priority } = await c.req.json().catch(() => ({}));
+  const { inbound_eligible, inbound_priority, threecx_extension } = await c.req.json().catch(() => ({}));
   const id = c.req.param('id');
   if (inbound_eligible !== undefined) await sql`UPDATE users SET inbound_eligible = ${inbound_eligible} WHERE id = ${id} AND tenant_id = ${user.tenant_id}`;
   if (inbound_priority !== undefined) await sql`UPDATE users SET inbound_priority = ${inbound_priority} WHERE id = ${id} AND tenant_id = ${user.tenant_id}`;
-  const [row] = await sql`SELECT id, name, inbound_eligible, inbound_priority FROM users WHERE id = ${id} AND tenant_id = ${user.tenant_id}`;
+  // Blank clears the mapping, so 3CX falls back to ringing their external
+  // call-from number instead of a stale extension nobody sits at anymore.
+  if (threecx_extension !== undefined) {
+    const ext = String(threecx_extension || '').trim() || null;
+    await sql`UPDATE users SET threecx_extension = ${ext} WHERE id = ${id} AND tenant_id = ${user.tenant_id}`;
+  }
+  const [row] = await sql`SELECT id, name, inbound_eligible, inbound_priority, threecx_extension FROM users WHERE id = ${id} AND tenant_id = ${user.tenant_id}`;
   return c.json({ data: row });
 });
 
