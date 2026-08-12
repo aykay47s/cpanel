@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { sql } from '../db';
 import { requireRole } from '../auth';
-import { broadcast } from '../realtime';
+import { broadcast, notify } from '../realtime';
 
 export const telephony = new Hono();
 
@@ -199,6 +199,31 @@ telephony.get('/api/admin/inbound-calls', requireRole('admin'), async (c) => {
 // here rather than us polling or receiving TwiML-style instructions back. Payload
 // shape is based on 3CX's documented webhook format; field names can vary slightly
 // by 3CX version, so this reads defensively rather than assuming one exact schema.
+// Matches an inbound caller's number against existing leads so admins get a live
+// "screen pop" of who's calling, and alerts whichever callers are actually set up
+// to handle inbound calls (same inbound_eligible/priority list used for Twilio/
+// Vonage routing) that a known lead is calling in right now - since 3CX itself has
+// no way to know who's free in our system, this is what "someone intercept" means
+// in practice for 3CX specifically: a heads-up, not an automatic transfer.
+async function identifyAndAlertForInboundCall(from: string, tenantId: number, provider: string) {
+  if (!from) return;
+  const digitsOnly = from.replace(/[^\d]/g, '');
+  if (digitsOnly.length < 7) return;
+  const [lead] = await sql`SELECT * FROM leads WHERE tenant_id = ${tenantId} AND regexp_replace(phone, '[^0-9]', '', 'g') LIKE ${'%' + digitsOnly.slice(-9)} ORDER BY updated_at DESC LIMIT 1`;
+  if (!lead) return;
+
+  broadcast('caller_identified', { lead, from, provider });
+
+  const cfg = await getTelephonyConfig();
+  const eligible = cfg.inbound_mode === 'selected'
+    ? await sql`SELECT id FROM users WHERE tenant_id = ${tenantId} AND role = 'caller' AND clocked_in = true AND inbound_eligible = true ORDER BY inbound_priority ASC`
+    : await sql`SELECT id FROM users WHERE tenant_id = ${tenantId} AND role = 'caller' AND clocked_in = true ORDER BY inbound_priority ASC`;
+  const name = [lead.first_name, lead.last_name].filter(Boolean).join(' ') || 'A known lead';
+  for (const u of eligible) {
+    await notify(u.id, 'inbound_call', `${name} is calling in now (${from}) — heads up.`, lead.id);
+  }
+}
+
 telephony.post('/api/telephony/3cx-webhook', async (c) => {
   const body = await c.req.json().catch(() => ({} as any));
   const callId = String(body.call_id || body.callid || body.id || '');
@@ -208,8 +233,20 @@ telephony.post('/api/telephony/3cx-webhook', async (c) => {
   if (!callId) return c.json({ ok: true }); // nothing usable to log, don't error out 3CX's webhook
 
   if (['ringing', 'incoming', 'new', 'start'].some(k => eventType.includes(k))) {
+    const [existingConfig] = await sql`SELECT 1 FROM inbound_calls WHERE twilio_call_sid = ${callId}`;
     await sql`INSERT INTO inbound_calls (twilio_call_sid, from_number, status, provider) VALUES (${callId}, ${from}, 'ringing', '3cx') ON CONFLICT (twilio_call_sid) DO NOTHING`;
     broadcast('inbound_call', { callSid: callId, from });
+    if (!existingConfig) {
+      // Only look up + alert once per call, not on every duplicate ringing event
+      // some 3CX configurations send.
+      // NOTE: 3CX webhook payloads carry no tenant identifier, and this single URL
+      // would be shared across any resold tenant's 3CX connection - this currently
+      // only correctly resolves the operator's own (self) tenant. Properly
+      // supporting multiple tenants each connecting their own 3CX server would need
+      // a per-tenant webhook path (e.g. /api/telephony/3cx-webhook/:tenantSlug).
+      const [tenantRow] = await sql`SELECT id FROM tenants WHERE is_self = true`;
+      if (tenantRow) await identifyAndAlertForInboundCall(from, tenantRow.id, '3cx').catch(() => {});
+    }
   } else {
     await sql`UPDATE inbound_calls SET status = ${eventType || 'unknown'}, ended_at = CASE WHEN ${eventType} IN ('ended','completed','hangup','missed') THEN now() ELSE ended_at END WHERE twilio_call_sid = ${callId} AND provider = '3cx'`;
     broadcast('inbound_call_update', { callSid: callId, status: eventType });

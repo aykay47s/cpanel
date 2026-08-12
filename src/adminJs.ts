@@ -38,6 +38,7 @@ async function renderAdminDashboard(el) {
   const d = (await res.json()).data;
   const center = (await statusRes.json()).data;
   el.innerHTML = \`
+    <div id="callerIdPopZone"></div>
     <div class="panel p fade-up" style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;\${center.open ? '' : 'border-color:var(--gold-glow);'}">
       <div>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
@@ -753,7 +754,13 @@ function renderTelephonyLocal() {
         <div class="section-title" style="margin:0;">3CX Connection</div>
         \${cfg.threecx_connected ? '<span class="badge successful_call">Connected</span>' : '<span class="badge not_called">Not Connected</span>'}
       </div>
-      <p style="font-size:12px;color:var(--text-dim);margin-bottom:10px;line-height:1.6;">3CX works differently to Twilio — its IVR and call routing are configured inside 3CX's own Call Flow Designer, not here. What connecting does: verifies your 3CX server credentials, and gives you a webhook URL to paste into 3CX's admin console so inbound call activity shows up in the log below.</p>
+      <div style="background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.28);border-radius:12px;padding:12px 14px;margin-bottom:14px;">
+        <p style="font-size:12.5px;color:#f0958a;line-height:1.6;margin:0;font-weight:600;">Everything about the menu itself — the greeting, "press 1 for X", hold music, and call routing — is configured entirely inside 3CX's own Call Flow Designer. Nothing on this page can create, edit, or control that. This connection only gives you two things:</p>
+        <ul style="margin:8px 0 0;padding-left:18px;font-size:12px;color:var(--text-dim);line-height:1.7;">
+          <li>A live call log below, same as Twilio's</li>
+          <li>Caller ID matching — if the number calling in matches an existing lead, that lead's info pops up here instantly, and any caller set up for inbound gets alerted</li>
+        </ul>
+      </div>
       \${cfg.threecx_connected ? \`
         <div class="info-row"><span class="k">Server</span><span class="v mono">\${esc(cfg.threecx_fqdn || '')}</span></div>
         <div class="info-row"><span class="k">Client ID</span><span class="v mono">\${esc(cfg.threecx_client_id || '')}</span></div>

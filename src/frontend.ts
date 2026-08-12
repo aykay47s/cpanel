@@ -252,6 +252,11 @@ tr.clickable:active{background:rgba(255,255,255,.05);}
 .offer-meta{color:var(--text-dim);font-size:12.5px;margin-bottom:18px;}
 .offer-actions{display:flex;gap:10px;}
 .live-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--success);margin-left:6px;position:relative;top:-2px;box-shadow:0 0 0 0 rgba(34,197,94,.6);animation:liveDotPulse 1.8s ease-out infinite;}
+.caller-id-pop{background:linear-gradient(180deg,rgba(79,140,255,.16),rgba(79,140,255,.06));border:1px solid var(--gold-glow);border-radius:20px;padding:20px 22px;margin-bottom:14px;box-shadow:0 0 0 1px var(--gold-glow), 0 12px 32px rgba(79,140,255,.25);transition:opacity .4s ease, max-height .4s ease, margin .4s ease, padding .4s ease;overflow:hidden;}
+.caller-id-pop .pop-badge{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.6px;color:var(--gold-bright);text-transform:uppercase;margin-bottom:8px;}
+.caller-id-pop .pop-name{font-size:19px;font-weight:700;font-family:'Space Grotesk',sans-serif;margin-bottom:4px;}
+.caller-id-pop .pop-meta{font-size:13px;color:var(--text-dim);margin-bottom:10px;}
+.caller-id-pop .pop-notes{font-size:12.5px;color:var(--text-dim);background:rgba(255,255,255,.04);border-radius:10px;padding:8px 10px;margin-bottom:12px;}
 @keyframes liveDotPulse{0%{box-shadow:0 0 0 0 rgba(34,197,94,.55);}70%{box-shadow:0 0 0 8px rgba(34,197,94,0);}100%{box-shadow:0 0 0 0 rgba(34,197,94,0);}}
 .pulse-dot::after{content:'';position:absolute;inset:0;border-radius:50%;background:inherit;animation:pulseRing 1.6s cubic-bezier(0,0,.2,1) infinite;}
 @keyframes pulseRing{0%{transform:scale(1);opacity:.7;}100%{transform:scale(3);opacity:0;}}
@@ -567,6 +572,23 @@ function connectEvents() {
     window._centerClosedReason = d.reason || 'The call center is closed right now.';
     updateClockBtn();
     if (staffTab === 'queue') renderStaffQueue();
+  });
+  es.addEventListener('caller_identified', (e) => {
+    if (me.role !== 'admin') return;
+    const zone = document.getElementById('callerIdPopZone');
+    if (!zone) return; // not currently on the dashboard, no pop to show
+    const d = JSON.parse(e.data);
+    const lead = d.lead;
+    const name = [lead.first_name, lead.last_name].filter(Boolean).join(' ') || 'Unknown';
+    const card = document.createElement('div');
+    card.className = 'caller-id-pop fade-up';
+    card.innerHTML = '<div class="pop-badge">' + (d.provider || '').toUpperCase() + ' · Inbound Now</div>' +
+      '<div class="pop-name">' + esc(name) + '</div>' +
+      '<div class="pop-meta mono">' + esc(d.from || lead.phone || '') + (lead.lead_type ? ' · ' + esc(lead.lead_type) : '') + '</div>' +
+      (lead.notes ? '<div class="pop-notes">' + esc(lead.notes) + '</div>' : '') +
+      '<button class="btn btn-ghost btn-sm" onclick="this.closest(\\'.caller-id-pop\\').remove()">Dismiss</button>';
+    zone.prepend(card);
+    setTimeout(() => { if (card.parentNode) card.style.opacity = '0.001'; }, 45000);
   });
   es.addEventListener('lead_claimed', (e) => {
     const d = JSON.parse(e.data);
