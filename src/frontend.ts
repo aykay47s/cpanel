@@ -236,12 +236,14 @@ tr.clickable:active{background:rgba(255,255,255,.05);}
 .offer-label{font-size:10.5px;color:var(--text-faint);text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:10px;}
 .offer-name{font-size:20px;font-weight:700;font-family:'Space Grotesk',sans-serif;letter-spacing:-.01em;margin-bottom:4px;}
 .offer-meta{color:var(--text-dim);font-size:12.5px;margin-bottom:18px;}
-.offer-actions{display:flex;gap:9px;}
+.offer-actions{display:flex;gap:10px;}
 .live-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--success);margin-left:6px;position:relative;top:-2px;box-shadow:0 0 0 0 rgba(34,197,94,.6);animation:liveDotPulse 1.8s ease-out infinite;}
 @keyframes liveDotPulse{0%{box-shadow:0 0 0 0 rgba(34,197,94,.55);}70%{box-shadow:0 0 0 8px rgba(34,197,94,0);}100%{box-shadow:0 0 0 0 rgba(34,197,94,0);}}
 .pulse-dot::after{content:'';position:absolute;inset:0;border-radius:50%;background:inherit;animation:pulseRing 1.6s cubic-bezier(0,0,.2,1) infinite;}
 @keyframes pulseRing{0%{transform:scale(1);opacity:.7;}100%{transform:scale(3);opacity:0;}}
-.offer-actions .btn{flex:1;padding:13px;font-size:13.5px;}
+.offer-actions .btn{flex:1;padding:14px;font-size:14px;}
+.offer-actions .btn-gold{flex:2;font-weight:700;}
+.offer-actions .btn-ghost{background:rgba(255,255,255,.03);}
 
 .call-card{padding:22px;}
 .call-status-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;}

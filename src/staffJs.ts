@@ -26,11 +26,15 @@ async function switchStaffTab(tab) {
 let queuePollInterval = null;
 function startQueuePolling() {
   stopQueuePolling();
-  queuePollInterval = setInterval(() => { if (staffTab === 'queue') smoothRerender(renderStaffQueue); }, 4000);
+  // Never refresh while actively on a call - this exact bug used to tear down and
+  // rebuild the whole active-call screen every 4 seconds, wiping typed notes and
+  // losing focus. The poll is only for the "browsing available leads" view.
+  queuePollInterval = setInterval(() => { if (staffTab === 'queue' && !onActiveCallScreen) smoothRerender(renderStaffQueue); }, 4000);
 }
 function stopQueuePolling() {
   if (queuePollInterval) { clearInterval(queuePollInterval); queuePollInterval = null; }
 }
+let onActiveCallScreen = false;
 
 async function renderStaffHome() {
   const body = document.getElementById('staffBody');
@@ -77,24 +81,15 @@ async function renderStaffHome() {
     </div>
     <div class="section-title">Announcements</div>
     \${anns.length ? anns.map(a => \`<div class="announcement panel \${a.important ? 'important' : ''} fade-up"><div><div class="txt">\${esc(a.content)}</div><div class="meta">\${a.author_name || 'Admin'} · \${timeAgo(a.created_at)}</div></div></div>\`).join('') : '<div style="color:var(--text-faint);font-size:13px;padding:10px 2px;">Nothing from admin yet.</div>'}
-    <div class="section-title">Call Log</div>
-    <div class="panel p fade-up">
-      \${callLog.length ? callLog.map(e => \`<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">
-        \${avatarHtml({ name: e.caller_name, pfp_data: e.caller_pfp_data }, 28)}
-        <div style="flex:1;min-width:0;font-size:12.5px;line-height:1.5;">
-          <span style="font-weight:700;">\${esc(fullName({ first_name: e.first_name, last_name: e.last_name }))}</span>
-          <span style="color:var(--text-dim);"> — called by </span>
-          <span style="font-weight:600;">\${esc(e.caller_name || 'Unknown')}</span>
-          <span style="color:var(--text-dim);"> at \${new Date(e.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span>
-        </div>
-        \${statusBadge(e.outcome)}
-      </div>\`).join('') : '<div style="color:var(--text-dim);font-size:12.5px;">No calls logged yet.</div>'}
-    </div>
     <div class="section-title">Script Manager</div>
     <div class="panel p fade-up">
       <p style="font-size:11.5px;color:var(--text-dim);margin-bottom:12px;line-height:1.4;">Every script admin has approved, browsable anytime — not just during a call.</p>
       <input id="scriptSearchInput" placeholder="Search scripts…" oninput="filterScriptManager()" style="margin-bottom:10px;" />
       <div id="scriptManagerList"></div>
+    </div>
+    <div class="section-title" style="display:flex;justify-content:space-between;align-items:baseline;">Call Log \${callLog.length > 6 ? '<span id="callLogToggle" style="text-transform:none;letter-spacing:0;font-weight:600;font-size:12px;color:var(--gold-bright);cursor:pointer;" onclick="toggleCallLogExpanded()">Show all ' + callLog.length + '</span>' : ''}</div>
+    <div class="panel p fade-up">
+      <div id="callLogRows">\${callLog.length ? callLog.slice(0, 6).map(callLogRowHtml).join('') : '<div style="color:var(--text-dim);font-size:12.5px;">No calls logged yet.</div>'}</div>
     </div>
     <div class="section-title">Suggest a Script</div>
     <div class="panel p fade-up">
@@ -107,7 +102,30 @@ async function renderStaffHome() {
   \`;
   animateCountUps(body);
   window._allScripts = allScripts;
+  window._allCallLog = callLog;
+  callLogExpanded = false;
   renderScriptManagerList(allScripts);
+}
+function callLogRowHtml(e) {
+  return \`<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">
+    \${avatarHtml({ name: e.caller_name, pfp_data: e.caller_pfp_data }, 28)}
+    <div style="flex:1;min-width:0;font-size:12.5px;line-height:1.5;">
+      <span style="font-weight:700;">\${esc(fullName({ first_name: e.first_name, last_name: e.last_name }))}</span>
+      <span style="color:var(--text-dim);"> — called by </span>
+      <span style="font-weight:600;">\${esc(e.caller_name || 'Unknown')}</span>
+      <span style="color:var(--text-dim);"> at \${new Date(e.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</span>
+    </div>
+    \${statusBadge(e.outcome)}
+  </div>\`;
+}
+let callLogExpanded = false;
+function toggleCallLogExpanded() {
+  callLogExpanded = !callLogExpanded;
+  const rows = document.getElementById('callLogRows');
+  const toggle = document.getElementById('callLogToggle');
+  if (!rows || !window._allCallLog) return;
+  rows.innerHTML = (callLogExpanded ? window._allCallLog : window._allCallLog.slice(0, 6)).map(callLogRowHtml).join('');
+  if (toggle) toggle.textContent = callLogExpanded ? 'Show less' : 'Show all ' + window._allCallLog.length;
 }
 function renderScriptManagerList(scripts) {
   const list = document.getElementById('scriptManagerList');
@@ -140,7 +158,8 @@ async function renderStaffQueue() {
   if (me.role === 'caller') {
     const mineRes = await api('/api/caller/mine');
     const mine = (await mineRes.json()).data;
-    if (mine) return renderActiveCall(body, mine, 'caller');
+    if (mine) { onActiveCallScreen = true; return renderActiveCall(body, mine, 'caller'); }
+    onActiveCallScreen = false;
     if (!me.clocked_in) { body.innerHTML = offlineHtml(); return; }
     const qRes = await api('/api/caller/queue');
     let rows = (await qRes.json()).data;
@@ -176,7 +195,7 @@ function offerCardHtml(o) {
     <div class="offer-name">\${fullName(o)} \${categoryBadgeHtml(o.lead_type)}</div>
     <div class="offer-meta mono">\${o.phone}\${o.source ? ' · ' + esc(o.source) : ''}</div>
     \${isRetry ? '<div style="font-size:11.5px;color:var(--text-faint);margin:-10px 0 14px;">Nobody\\'s reached them yet — no answer/voicemail last time, not a mistake.</div>' : ''}
-    <div class="offer-actions"><button class="btn btn-gold" onclick="claimLead(\${o.id})">Take Call</button><button class="btn btn-ghost" onclick="skipLead(\${o.id})">Skip</button></div>
+    <div class="offer-actions"><button class="btn btn-gold" onclick="claimLead(\${o.id})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" style="width:15px;height:15px;vertical-align:-2px;margin-right:5px;"><path d="M6.6 10.8a15 15 0 006.6 6.6l2.2-2.2a1 1 0 011.1-.2 11 11 0 003.4.6 1 1 0 011 1V20a1 1 0 01-1 1A17 17 0 013 5a1 1 0 011-1h3.5a1 1 0 011 1 11 11 0 00.6 3.4 1 1 0 01-.2 1.1z"/></svg>Take Call</button><button class="btn btn-ghost" onclick="skipLead(\${o.id})">Skip</button></div>
   </div>\`;
 }
 function finisherCardHtml(o) {
@@ -197,6 +216,7 @@ async function claimLead(id) {
   if (data.claimed && data.data) {
     // Already have the claimed lead's data from the claim response itself — jump
     // straight to the active call screen instead of a redundant re-fetch.
+    onActiveCallScreen = true;
     renderActiveCall(document.getElementById('staffBody'), data.data, me.role);
   } else {
     renderStaffQueue();
