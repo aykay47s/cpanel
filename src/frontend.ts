@@ -156,25 +156,29 @@ input.toggle-switch:checked::after{transform:translateX(18px);}
 input:focus,select:focus,textarea:focus{border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-glow);}
 label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.7px;display:block;margin-bottom:7px;font-weight:600;}
 .field{margin-bottom:15px;}
-.badge{position:relative;padding:5px 11px 5px 15px;font-size:10.5px;font-weight:700;letter-spacing:.1px;text-transform:uppercase;display:inline-flex;align-items:center;border-radius:var(--r-sm);line-height:1.4;background:rgba(255,255,255,.05)!important;isolation:isolate;}
-.badge::before{content:'';position:absolute;left:0;top:0;bottom:0;width:4px;border-radius:var(--r-sm) 0 0 var(--r-sm);background:currentColor;}
+.badge{position:relative;padding:5px 11px 5px 9px;font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;display:inline-flex;align-items:center;gap:6px;border-radius:100px;line-height:1.3;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);backdrop-filter:blur(6px);transition:transform .18s var(--ease-spring), box-shadow .18s ease;}
+.badge:hover{transform:translateY(-1px);}
+.badge::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0;box-shadow:0 0 7px currentColor, 0 0 1px currentColor;}
 .badge-ic{display:none;}
-.badge.not_called{background:#3a3a44;color:#d4d4dc;}
-.badge.calling,.badge.active_call{background:#4f8cff;color:#fff;}
-.badge.call_ended{background:#a78bfa;color:#1a1025;}
-.badge.successful_call,.badge.completed{background:#22c55e;color:#062611;}
-.badge.ready_for_finishing,.badge.assigned_to_finisher{background:#2dd4bf;color:#042e29;}
-.badge.failed{background:#ef4444;color:#2b0605;}
-.badge.cancelled,.badge.chopped_previously{background:#71717a;color:#fff;}
-.badge.requires_review{background:#f59e0b;color:#2e1a02;}
-.badge.admin{background:#ef4444;color:#fff;}
-.badge.caller{background:#4f8cff;color:#fff;}
-.badge.finisher{background:#2dd4bf;color:#042e29;}
-.badge.important{background:#4f8cff;color:#fff;}
-.badge.voicemail,.badge.no_answer,.badge.hung_up,.badge.busy{background:#3a3a44;color:#d4d4dc;}
-.badge.callback_requested{background:#a78bfa;color:#1a1025;}
-.badge.ringing,.badge.in-progress{background:#4f8cff;color:#fff;}
-.badge.missed,.badge.no-answer{background:#ef4444;color:#fff;}
+/* One recipe, applied consistently: translucent tint + full-saturation dot/text, not a
+   solid alert-colored slab. "Live" states get a genuine pulsing dot — the only ones
+   that move, so motion still means something when you see it. */
+.badge.not_called{background:rgba(190,190,200,.09);color:#c6c6d2;border-color:rgba(190,190,200,.16);}
+.badge.calling,.badge.active_call,.badge.ringing,.badge.in-progress{background:rgba(79,140,255,.14);color:var(--gold-bright);border-color:rgba(79,140,255,.3);}
+.badge.calling::before,.badge.active_call::before,.badge.ringing::before,.badge.in-progress::before{animation:badgeDotPulse 1.6s ease-in-out infinite;}
+@keyframes badgeDotPulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(.72);}}
+.badge.call_ended{background:rgba(167,139,250,.13);color:var(--violet-bright);border-color:rgba(167,139,250,.28);}
+.badge.successful_call,.badge.completed{background:rgba(34,197,94,.14);color:#5eeaa0;border-color:rgba(34,197,94,.3);}
+.badge.ready_for_finishing,.badge.assigned_to_finisher{background:rgba(45,212,191,.14);color:#5eeadb;border-color:rgba(45,212,191,.3);}
+.badge.failed,.badge.missed,.badge.no-answer{background:rgba(239,68,68,.14);color:#ff8f8a;border-color:rgba(239,68,68,.3);}
+.badge.cancelled,.badge.chopped_previously{background:rgba(160,160,168,.09);color:#a6a6b0;border-color:rgba(160,160,168,.16);}
+.badge.requires_review{background:rgba(245,158,11,.15);color:#ffc266;border-color:rgba(245,158,11,.32);}
+.badge.admin{background:rgba(239,68,68,.14);color:#ff8f8a;border-color:rgba(239,68,68,.3);}
+.badge.caller{background:rgba(79,140,255,.14);color:var(--gold-bright);border-color:rgba(79,140,255,.3);}
+.badge.finisher{background:rgba(45,212,191,.14);color:#5eeadb;border-color:rgba(45,212,191,.3);}
+.badge.important{background:rgba(79,140,255,.14);color:var(--gold-bright);border-color:rgba(79,140,255,.3);}
+.badge.voicemail,.badge.no_answer,.badge.hung_up,.badge.busy{background:rgba(190,190,200,.09);color:#c6c6d2;border-color:rgba(190,190,200,.16);}
+.badge.callback_requested{background:rgba(167,139,250,.13);color:var(--violet-bright);border-color:rgba(167,139,250,.28);}
 
 /* icons (inline SVG line-icon set) */
 .ic{width:17px;height:17px;display:inline-block;vertical-align:-3px;stroke:currentColor;stroke-width:1.7;fill:none;stroke-linecap:round;stroke-linejoin:round;}
@@ -481,7 +485,7 @@ tr.clickable:active{background:rgba(255,255,255,.05);}
     </div>
     <div class="admin-main">
       <div class="topbar">
-        <div class="brand"><div class="brand-mark"></div>Frap Ties <span style="color:var(--text-faint);font-size:12px;font-family:Inter;font-weight:600;margin-left:4px;">Control Room</span></div>
+        <div class="brand"><div class="brand-mark"></div>Frap Ties <span class="mono" style="color:var(--text-faint);font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;margin-left:6px;display:inline-flex;align-items:center;gap:5px;"><span style="width:5px;height:5px;border-radius:50%;background:var(--success);box-shadow:0 0 0 0 rgba(34,197,94,.55);animation:liveDotPulse 2.2s ease-out infinite;"></span>Control Room</span></div>
         <div class="topbar-actions">
           <div class="icon-btn" onclick="toggleNotifPanel()" id="notifBtn">${ICONS_SVG.bell}</div>
         </div>
@@ -895,7 +899,7 @@ function categoryBadgeHtml(leadType) {
   const color = cat ? cat.color : '#8b8b93';
   const domain = BANK_DOMAINS[String(leadType).toLowerCase()];
   const logoImg = domain
-    ? '<img src="https://logo.clearbit.com/' + domain + '?size=32" alt="" style="width:14px;height:14px;border-radius:3px;object-fit:contain;background:#fff;flex-shrink:0;" onerror="this.remove()" />'
+    ? '<img src="https://www.google.com/s2/favicons?domain=' + domain + '&sz=64" alt="" style="width:15px;height:15px;border-radius:4px;object-fit:contain;flex-shrink:0;" onerror="this.remove()" />'
     : '';
   return '<span class="badge" style="background:' + color + '22;color:' + color + ';border:1px solid ' + color + '44;gap:5px;">' + logoImg + esc(leadType) + '</span>';
 }

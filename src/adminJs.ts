@@ -157,7 +157,7 @@ function categoryBadge(leadType) {
   const color = cat ? cat.color : 'var(--text-dim)';
   const domain = BANK_DOMAINS[String(leadType).toLowerCase()];
   const logoImg = domain
-    ? '<img src="https://logo.clearbit.com/' + domain + '?size=32" alt="" style="width:14px;height:14px;border-radius:3px;object-fit:contain;background:#fff;flex-shrink:0;" onerror="this.remove()" />'
+    ? '<img src="https://www.google.com/s2/favicons?domain=' + domain + '&sz=64" alt="" style="width:15px;height:15px;border-radius:4px;object-fit:contain;flex-shrink:0;" onerror="this.remove()" />'
     : '';
   return '<span class="badge" style="background:' + color + '22;color:' + color + ';border:1px solid ' + color + '44;gap:5px;">' + logoImg + esc(leadType) + '</span>';
 }
