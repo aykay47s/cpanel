@@ -34,33 +34,43 @@ export const page = `<!DOCTYPE html>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#08080a; --bg-2:#0f0f13; --s1:#18181f; --s2:#212129; --s3:#2b2b35;
-  --border:rgba(255,255,255,0.08); --border-2:rgba(255,255,255,0.14);
-  --gold:#4f8cff; --gold-bright:#7aabff; --gold-glow:rgba(79,140,255,.2);
-  --teal:#2dd4bf; --teal-glow:rgba(45,212,191,.2);
-  --crimson:#ef4444; --crimson-glow:rgba(239,68,68,.2);
+  /* ---- Surfaces: near-black base, restrained separation between layers ---- */
+  --bg:#07070a; --bg-2:#0c0c10; --s1:#151519; --s2:#1c1c22; --s3:#25252c;
+  --border:rgba(255,255,255,0.06); --border-2:rgba(255,255,255,0.11);
+  /* ---- Accent (single primary accent, used sparingly) ---- */
+  --gold:#4f8cff; --gold-bright:#7aabff; --gold-glow:rgba(79,140,255,.18);
+  --teal:#2dd4bf; --teal-glow:rgba(45,212,191,.16);
+  --crimson:#ef4444; --crimson-glow:rgba(239,68,68,.16);
   --violet:#a78bfa;
-  --text:#e8e8ea; --text-dim:#8b8b93; --text-faint:#55555c;
+  --text:#eaeaec; --text-dim:#8f8f98; --text-faint:#57575f;
   --success:#22c55e; --danger:#ef4444; --warn:#eab308;
+  /* ---- Spacing scale ---- */
+  --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px; --sp-5:20px; --sp-6:24px; --sp-7:32px; --sp-8:40px;
+  /* ---- Radius scale ---- */
+  --r-sm:8px; --r-md:12px; --r-lg:16px; --r-xl:20px; --r-full:100px;
+  /* ---- Glass recipe (one shared definition, not per-component tuning) ---- */
+  --glass-bg:rgba(255,255,255,.035); --glass-bg-elevated:rgba(255,255,255,.05);
+  --glass-blur:20px; --glass-sat:1.3;
 }
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
 html,body{height:100%;overscroll-behavior-y:contain;}
 body{
   font-family:'Inter',-apple-system,sans-serif;color:var(--text);min-height:100vh;min-height:100dvh;overflow-x:hidden;
   -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
+  /* Restrained wash — near-black dominates, colour is a hint at the edges, not a
+     backdrop. This is what separates "premium ops tool" from "gradient demo". */
   background:
-    radial-gradient(ellipse 90% 60% at 15% -10%, rgba(124,92,255,.35), transparent 55%),
-    radial-gradient(ellipse 80% 60% at 100% 0%, rgba(79,140,255,.3), transparent 55%),
-    radial-gradient(ellipse 70% 50% at 50% 110%, rgba(45,212,191,.18), transparent 60%),
-    #0e0a1a;
+    radial-gradient(ellipse 90% 60% at 15% -10%, rgba(124,92,255,.07), transparent 55%),
+    radial-gradient(ellipse 80% 60% at 100% 0%, rgba(79,140,255,.06), transparent 55%),
+    radial-gradient(ellipse 70% 50% at 50% 110%, rgba(45,212,191,.04), transparent 60%),
+    var(--bg);
   font-size:14px;line-height:1.5;letter-spacing:-.006em;
 }
 .app-shell{
-  margin:18px; border-radius:26px; overflow:hidden;
+  margin:18px; border-radius:var(--r-xl); overflow:hidden;
   background:
-    radial-gradient(ellipse 70% 50% at 10% 0%, rgba(124,92,255,.16), transparent 55%),
-    radial-gradient(ellipse 60% 45% at 100% 15%, rgba(79,140,255,.13), transparent 55%),
-    radial-gradient(ellipse 55% 50% at 30% 100%, rgba(45,212,191,.09), transparent 60%),
+    radial-gradient(ellipse 70% 50% at 10% 0%, rgba(124,92,255,.04), transparent 55%),
+    radial-gradient(ellipse 60% 45% at 100% 15%, rgba(79,140,255,.035), transparent 55%),
     var(--bg);
   box-shadow:0 2px 8px rgba(0,0,0,.3), 0 24px 64px rgba(0,0,0,.5);
   min-height:calc(100vh - 36px); min-height:calc(100dvh - 36px);
@@ -86,11 +96,11 @@ a{color:inherit;text-decoration:none;}
 
 button{font-family:'Inter',sans-serif;cursor:pointer;border:none;outline:none;transition:all .12s ease;}
 .panel{
-  background:rgba(255,255,255,.045);
-  backdrop-filter:blur(24px) saturate(1.4);
-  -webkit-backdrop-filter:blur(24px) saturate(1.4);
-  border:1px solid rgba(255,255,255,.09); border-radius:20px;
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.07), 0 2px 4px rgba(0,0,0,.3), 0 12px 28px rgba(0,0,0,.34), 0 24px 56px rgba(0,0,0,.22);
+  background:var(--glass-bg);
+  backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-sat));
+  -webkit-backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-sat));
+  border:1px solid var(--border-2); border-radius:var(--r-xl);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.05), 0 2px 4px rgba(0,0,0,.3), 0 12px 28px rgba(0,0,0,.3);
   transition:border-color .15s ease, box-shadow .15s ease, transform .15s ease;
 }
 .panel-inset{background:var(--bg-2);border:1px solid var(--border);border-radius:14px;}
@@ -205,6 +215,29 @@ label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spa
 
 table{width:100%;border-collapse:collapse;font-size:13px;}
 .table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;}
+/* ---- Lead Vault: a genuine two-pane workspace, not a stack of generic panels ---- */
+.vault-workspace{display:flex;gap:0;align-items:flex-start;background:var(--glass-bg);backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-sat));-webkit-backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-sat));border:1px solid var(--border-2);border-radius:var(--r-xl);box-shadow:inset 0 1px 0 rgba(255,255,255,.05), 0 2px 4px rgba(0,0,0,.3), 0 12px 28px rgba(0,0,0,.3);overflow:hidden;min-height:520px;}
+.vault-rail{width:240px;flex-shrink:0;border-right:1px solid var(--border);padding:var(--sp-5);display:flex;flex-direction:column;gap:var(--sp-5);background:rgba(0,0,0,.12);}
+.vault-rail-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:15px;letter-spacing:-.01em;}
+.vault-rail-sub{font-size:11.5px;color:var(--text-dim);line-height:1.6;margin-top:6px;}
+.vault-nav{display:flex;flex-direction:column;gap:2px;}
+.vault-nav-item{display:flex;justify-content:space-between;align-items:center;width:100%;text-align:left;padding:9px 10px;border-radius:var(--r-md);background:transparent;color:var(--text-dim);font-size:12.5px;font-weight:600;transition:background .12s ease, color .12s ease;}
+.vault-nav-item:hover{background:rgba(255,255,255,.04);color:var(--text);}
+.vault-nav-item.active{background:var(--gold);color:#fff;box-shadow:0 2px 8px rgba(79,140,255,.3);}
+.vault-nav-count{font-family:'JetBrains Mono',monospace;font-size:11px;opacity:.85;}
+.vault-rail-actions{padding-top:var(--sp-4);border-top:1px solid var(--border);}
+.vault-field-label{font-size:10px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.5px;font-weight:700;display:block;margin-bottom:8px;}
+.vault-main{flex:1;min-width:0;padding:var(--sp-5) var(--sp-6);}
+.vault-main-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:var(--sp-4);}
+.vault-main-title{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:17px;letter-spacing:-.01em;}
+.vault-main-count{font-size:11.5px;color:var(--text-dim);margin-top:2px;}
+.vault-empty{padding:40px 20px;text-align:center;color:var(--text-dim);font-size:13px;}
+@media (max-width:860px){
+  .vault-workspace{flex-direction:column;}
+  .vault-rail{width:100%;border-right:none;border-bottom:1px solid var(--border);}
+  .vault-nav{flex-direction:row;flex-wrap:wrap;}
+  .vault-nav-item{width:auto;}
+}
 .table-scroll table{min-width:640px;}
 @media (max-width:640px){
   .table-scroll::after{content:'← swipe to see more →';display:block;text-align:center;font-size:10px;color:var(--text-faint);padding:6px 0 0;}

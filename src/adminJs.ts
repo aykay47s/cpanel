@@ -1068,23 +1068,40 @@ async function renderAdminVault(el) {
   const rows = data.data;
   const stats = data.ageStats || {};
   const groups = ['18-25', '26-35', '36-45', '46-55', '56-65', '65+'];
+  const totalCount = (stats['18-25']||0)+(stats['26-35']||0)+(stats['36-45']||0)+(stats['46-55']||0)+(stats['56-65']||0)+(stats['65+']||0)+(stats.unknown||0);
+  const groupLabel = window._vaultAgeGroup === 'all' ? 'All Leads' : window._vaultAgeGroup === 'unknown' ? 'No DOB on File' : window._vaultAgeGroup + ' years';
   el.innerHTML = \`
-    <div class="panel p fade-up">
-      <div class="section-title" style="margin-top:0;">Lead Vault</div>
-      <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:16px;line-height:1.6;">Leads imported to the vault aren't visible to callers until you release them - one at a time, in batches, or filtered by age group. Import leads here via "Send to Vault" on the Import page instead of straight to the live queue.</p>
-      <div class="row-flex" style="flex-wrap:wrap;gap:6px;margin-bottom:16px;">
-        <button class="btn btn-sm \${window._vaultAgeGroup === 'all' ? 'btn-gold' : 'btn-ghost'}" onclick="setVaultAgeGroup('all')">All (\${(stats['18-25']||0)+(stats['26-35']||0)+(stats['36-45']||0)+(stats['46-55']||0)+(stats['56-65']||0)+(stats['65+']||0)+(stats.unknown||0)})</button>
-        \${groups.map(g => \`<button class="btn btn-sm \${window._vaultAgeGroup === g ? 'btn-gold' : 'btn-ghost'}" onclick="setVaultAgeGroup('\${g}')">\${g} (\${stats[g] || 0})</button>\`).join('')}
-        <button class="btn btn-sm \${window._vaultAgeGroup === 'unknown' ? 'btn-gold' : 'btn-ghost'}" onclick="setVaultAgeGroup('unknown')" style="opacity:.7;">No DOB (\${stats.unknown || 0})</button>
+    <div class="vault-workspace fade-up">
+      <aside class="vault-rail">
+        <div class="vault-rail-head">
+          <div class="vault-rail-title">Lead Vault</div>
+          <p class="vault-rail-sub">Held back from the live queue until released — one at a time, in batches, or filtered by age.</p>
+        </div>
+        <nav class="vault-nav">
+          <button class="vault-nav-item \${window._vaultAgeGroup === 'all' ? 'active' : ''}" onclick="setVaultAgeGroup('all')"><span>All Leads</span><span class="vault-nav-count">\${totalCount}</span></button>
+          \${groups.map(g => \`<button class="vault-nav-item \${window._vaultAgeGroup === g ? 'active' : ''}" onclick="setVaultAgeGroup('\${g}')"><span>\${g}</span><span class="vault-nav-count">\${stats[g] || 0}</span></button>\`).join('')}
+          <button class="vault-nav-item \${window._vaultAgeGroup === 'unknown' ? 'active' : ''}" onclick="setVaultAgeGroup('unknown')" style="opacity:.75;"><span>No DOB</span><span class="vault-nav-count">\${stats.unknown || 0}</span></button>
+        </nav>
+        <div class="vault-rail-actions">
+          <label class="vault-field-label">Release Oldest N</label>
+          <div class="row-flex" style="gap:8px;">
+            <input id="releaseCount" type="number" placeholder="e.g. 10" />
+            <button class="btn btn-teal btn-sm" onclick="releaseFromVault()">Go</button>
+          </div>
+          <button class="btn btn-gold btn-block" style="margin-top:12px;" onclick="releaseAllShown()">Release All Shown (\${rows.length})</button>
+        </div>
+      </aside>
+      <div class="vault-main">
+        <div class="vault-main-head">
+          <div>
+            <div class="vault-main-title">\${groupLabel}</div>
+            <div class="vault-main-count">\${rows.length} lead\${rows.length === 1 ? '' : 's'} waiting</div>
+          </div>
+        </div>
+        <div class="table-scroll"><table><thead><tr><th>Lead</th><th>Phone</th><th>Age</th><th>Category</th><th>Imported</th><th></th></tr></thead>
+        <tbody>\${rows.map(r => \`<tr><td>\${esc(fullName(r))}</td><td class="mono">\${r.phone}</td><td>\${r.age != null ? r.age : '—'}</td><td>\${categoryBadge(r.lead_type)}</td><td>\${timeAgo(r.created_at)}</td><td><button class="btn btn-teal btn-sm" onclick="releaseOne(\${r.id})">Release</button></td></tr>\`).join('') || '<tr><td colspan="6"><div class="vault-empty">Nothing here right now. Import leads with "Send to Vault" checked to hold them back from the live queue.</div></td></tr>'}</tbody></table></div>
       </div>
-      <div class="row-flex">
-        <input id="releaseCount" type="number" placeholder="How many to release" style="max-width:200px;" />
-        <button class="btn btn-teal" onclick="releaseFromVault()">Release Oldest N</button>
-        <button class="btn btn-gold" onclick="releaseAllShown()">Release All Shown (\${rows.length})</button>
-      </div>
-    </div>
-    <div class="panel p fade-up"><div class="table-scroll"><table><thead><tr><th>Lead</th><th>Phone</th><th>Age</th><th>Category</th><th>Imported</th><th></th></tr></thead>
-    <tbody>\${rows.map(r => \`<tr><td>\${esc(fullName(r))}</td><td class="mono">\${r.phone}</td><td>\${r.age != null ? r.age : '—'}</td><td>\${categoryBadge(r.lead_type)}</td><td>\${timeAgo(r.created_at)}</td><td><button class="btn btn-teal btn-sm" onclick="releaseOne(\${r.id})">Release</button></td></tr>\`).join('') || '<tr><td colspan="6" style="color:var(--text-dim);">Nothing in the vault right now.</td></tr>'}</tbody></table></div></div>\`;
+    </div>\`;
 }
 function setVaultAgeGroup(g) { window._vaultAgeGroup = g; renderAdminTab('vault'); }
 async function releaseOne(id) {
