@@ -59,7 +59,7 @@ async function renderStaffHome() {
       <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px;">
         <div style="width:56px;height:56px;flex-shrink:0;">\${avatarHtml(me, 56)}</div>
         <div style="flex:1;min-width:0;">
-          <div style="font-size:20px;font-weight:700;font-family:'Archivo',sans-serif;letter-spacing:-.01em;">\${esc(me.name)}</div>
+          <div style="font-size:20px;font-weight:700;font-family:'Bricolage Grotesque',sans-serif;letter-spacing:-.01em;">\${esc(me.name)}</div>
           <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
             \${statusBadge(me.role)}
             <span class="badge" style="background:#8b6fc9;color:#fff;">Lvl \${level}</span>
@@ -194,7 +194,7 @@ async function renderStaffQueue() {
     const freshCount = rows.filter(o => !(o.call_attempts || 0)).length;
     const retryCount = rows.length - freshCount;
     body.innerHTML = \`<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px;padding:0 2px;">
-      <div style="font-size:15px;font-weight:700;font-family:'Archivo',sans-serif;">\${rows.length} Waiting</div>
+      <div style="font-size:15px;font-weight:700;font-family:'Bricolage Grotesque',sans-serif;">\${rows.length} Waiting</div>
       <div style="font-size:11.5px;color:var(--text-dim);">\${freshCount} new\${retryCount ? ' · ' + retryCount + ' retry' : ''}</div>
     </div>\` + rows.map(o => offerCardHtml(o)).join('');
   } else if (me.role === 'finisher') {
