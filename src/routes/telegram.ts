@@ -57,7 +57,7 @@ function isMasterSessionValid(token: string | undefined | null): boolean {
   }
   return true;
 }
-async function requireMaster(c: Context, next: Next) {
+export async function requireMaster(c: Context, next: Next) {
   const token = c.req.header('x-master-token') || c.req.query('mt');
   if (!isMasterSessionValid(token)) return c.json({ error: 'Unauthorized' }, 401);
   await next();

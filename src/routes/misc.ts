@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { sql } from '../db';
 import { requireRole, authenticate, requireSuperAdmin, requireManager, requireAdmin, requireAnyStaff } from '../auth';
+import { requireMaster } from './telegram';
 import { registerClient, unregisterClient } from '../realtime';
 import { VAPID_PUBLIC_KEY, saveSubscription, removeSubscription } from '../push';
 import * as threecx from '../threecx';
@@ -49,17 +50,17 @@ misc.get('/api/tenant-stats', async (c) => {
   });
 });
 
-misc.get('/api/master/tenants', requireSuperAdmin(), async (c) => {
+misc.get('/api/master/tenants', requireMaster, async (c) => {
   const rows = await sql`SELECT * FROM tenants ORDER BY is_self DESC, created_at ASC`;
   return c.json({ data: rows });
 });
-misc.post('/api/master/tenants', requireSuperAdmin(), async (c) => {
+misc.post('/api/master/tenants', requireMaster, async (c) => {
   const { name, url, plan, price_paid, notes } = await c.req.json().catch(() => ({}));
   if (!name || !url) return c.json({ error: 'Name and URL required' }, 400);
   const [row] = await sql`INSERT INTO tenants (name, url, plan, price_paid, notes) VALUES (${name}, ${url}, ${plan || 'trial'}, ${price_paid || 0}, ${notes || null}) RETURNING *`;
   return c.json({ data: row });
 });
-misc.patch('/api/master/tenants/:id', requireSuperAdmin(), async (c) => {
+misc.patch('/api/master/tenants/:id', requireMaster, async (c) => {
   const id = c.req.param('id');
   const { name, url, plan, price_paid, status, notes } = await c.req.json().catch(() => ({}));
   const [row] = await sql`UPDATE tenants SET
@@ -68,13 +69,13 @@ misc.patch('/api/master/tenants/:id', requireSuperAdmin(), async (c) => {
     WHERE id = ${id} RETURNING *`;
   return c.json({ data: row });
 });
-misc.delete('/api/master/tenants/:id', requireSuperAdmin(), async (c) => {
+misc.delete('/api/master/tenants/:id', requireMaster, async (c) => {
   await sql`DELETE FROM tenants WHERE id = ${c.req.param('id')} AND is_self = false`;
   return c.json({ ok: true });
 });
 // Pulls live stats from every tenant's own /api/tenant-stats endpoint. Best-effort -
 // a tenant that's down or unreachable just shows as unavailable, doesn't break the rest.
-misc.get('/api/master/live-stats', requireSuperAdmin(), async (c) => {
+misc.get('/api/master/live-stats', requireMaster, async (c) => {
   const tenants = await sql`SELECT id, name, url, is_self FROM tenants WHERE status = 'active'`;
   const results = await Promise.all(tenants.map(async (t: any) => {
     try {
@@ -437,11 +438,11 @@ misc.post('/api/admin/branding', requireManager, async (c) => {
   return c.json({ ok: true });
 });
 
-misc.get('/api/master/store-checkout-url', requireSuperAdmin(), async (c) => {
+misc.get('/api/master/store-checkout-url', requireMaster, async (c) => {
   const [row] = await sql`SELECT value FROM settings WHERE key = 'store_checkout_url'`;
   return c.json({ data: { url: row?.value || '' } });
 });
-misc.post('/api/master/store-checkout-url', requireSuperAdmin(), async (c) => {
+misc.post('/api/master/store-checkout-url', requireMaster, async (c) => {
   const { url } = await c.req.json().catch(() => ({}));
   if (!url) return c.json({ error: 'URL required' }, 400);
   await sql`INSERT INTO settings (key, value) VALUES ('store_checkout_url', ${url}) ON CONFLICT (key) DO UPDATE SET value = ${url}`;

@@ -1202,12 +1202,38 @@ label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spa
 .admin-content{max-width:1180px;margin:0 auto;padding:32px 32px 72px;}
 
 /* Caller/Finisher: bottom nav */
-.staff-body{max-width:600px;margin:0 auto;padding:20px 16px 108px;}
-.bottom-nav{position:fixed;bottom:14px;left:14px;right:14px;z-index:70;display:flex;gap:2px;background:rgba(255,255,255,.055);backdrop-filter:blur(14px) saturate(1.4);-webkit-backdrop-filter:blur(14px) saturate(1.4);border:1px solid rgba(255,255,255,.1);border-radius:22px;padding:6px;box-shadow:0 2px 4px rgba(0,0,0,.3), 0 16px 36px rgba(0,0,0,.4);padding-bottom:calc(6px + env(safe-area-inset-bottom));}
-.nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:9px 4px;border-radius:16px;background:transparent;color:var(--text-faint);font-size:9.5px;font-weight:600;position:relative;transition:background .15s ease, color .15s ease;}
-.nav-btn.active{color:#fff;background:var(--gold);box-shadow:0 4px 12px rgba(79,140,255,.35);}
-.nav-btn:active{transform:scale(.94);}
-.nav-badge{position:absolute;top:2px;right:24%;width:7px;height:7px;border-radius:50%;background:var(--crimson);}
+.staff-body{max-width:600px;margin:0 auto;padding:20px 16px calc(96px + env(safe-area-inset-bottom));}
+/* Anchored bottom nav — edge-to-edge, connected to the screen bottom like a
+   real app tab bar, not a floating pill. Glass surface with a hairline top
+   border that ties it to the content above; safe-area inset handled inline. */
+.bottom-nav{
+  position:fixed;bottom:0;left:0;right:0;z-index:70;
+  display:flex;align-items:stretch;
+  background:linear-gradient(180deg, rgba(20,18,30,.72), rgba(12,12,18,.86));
+  backdrop-filter:blur(24px) saturate(1.7);-webkit-backdrop-filter:blur(24px) saturate(1.7);
+  border-top:1px solid rgba(255,255,255,.10);
+  box-shadow:0 -1px 0 rgba(255,255,255,.04), 0 -12px 32px rgba(0,0,0,.36);
+  padding:8px 8px calc(8px + env(safe-area-inset-bottom));
+}
+.nav-btn{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;
+  padding:6px 2px;border-radius:14px;background:transparent;
+  color:var(--text-faint);font-size:10px;font-weight:600;letter-spacing:-.01em;
+  position:relative;transition:color .2s var(--ease-smooth), transform .2s var(--ease-spring);
+  -webkit-tap-highlight-color:transparent;
+}
+.nav-btn .ic{width:22px;height:22px;transition:transform .28s var(--ease-spring);}
+/* Active: icon lifts and glows, label brightens, a small dot indicator sits
+   under it — the modern iOS/Android tab treatment, no chunky filled button. */
+.nav-btn.active{color:var(--gold-bright);}
+.nav-btn.active .ic{transform:translateY(-1px) scale(1.08);filter:drop-shadow(0 3px 8px var(--gold-glow));}
+.nav-btn.active::after{
+  content:'';position:absolute;bottom:-2px;left:50%;transform:translateX(-50%);
+  width:5px;height:5px;border-radius:50%;background:var(--gold-bright);
+  box-shadow:0 0 8px var(--gold-glow);
+}
+.nav-btn:active{transform:scale(.92);}
+.nav-badge{position:absolute;top:0;right:22%;width:8px;height:8px;border-radius:50%;background:var(--crimson);box-shadow:0 0 0 2px rgba(12,12,18,.9);}
 
 .stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:24px;}
 .stat-box{padding:18px 20px;border-radius:var(--r-lg);transition:transform .3s var(--ease-spring), border-color .2s ease, box-shadow .3s var(--ease-smooth);}

@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { sql } from '../db';
-import { requireSuperAdmin } from '../auth';
+import { requireMaster } from './telegram';
 
 export const tenancy = new Hono();
 
@@ -24,7 +24,7 @@ function slugify(name: string): string {
 // they like for their own tracking - the label is display-only, "days" is what
 // actually determines the access window when it's redeemed. count generates several
 // identical keys (same days/price/label) in one call, for batch-selling ahead of time.
-tenancy.post('/api/master/license-keys', requireSuperAdmin(), async (c) => {
+tenancy.post('/api/master/license-keys', requireMaster, async (c) => {
   const { label, days, price, count } = await c.req.json().catch(() => ({}));
   const numDays = parseInt(days, 10);
   if (!numDays || numDays < 1 || numDays > 3650) return c.json({ error: 'Enter a valid number of days (1-3650)' }, 400);
@@ -46,12 +46,12 @@ tenancy.post('/api/master/license-keys', requireSuperAdmin(), async (c) => {
   return c.json({ data: numCount === 1 ? created[0] : created, keys: created });
 });
 
-tenancy.get('/api/master/license-keys', requireSuperAdmin(), async (c) => {
+tenancy.get('/api/master/license-keys', requireMaster, async (c) => {
   const rows = await sql`SELECT license_keys.*, tenants.name as tenant_name FROM license_keys LEFT JOIN tenants ON tenants.id = license_keys.redeemed_by_tenant_id ORDER BY created_at DESC LIMIT 100`;
   return c.json({ data: rows });
 });
 
-tenancy.delete('/api/master/license-keys/:id', requireSuperAdmin(), async (c) => {
+tenancy.delete('/api/master/license-keys/:id', requireMaster, async (c) => {
   await sql`DELETE FROM license_keys WHERE id = ${c.req.param('id')} AND redeemed = false`;
   return c.json({ ok: true });
 });
@@ -140,7 +140,7 @@ tenancy.post('/api/redeem', async (c) => {
 // ============================================================================
 // Kill a tenant's access immediately and record why. Sets status='terminated'
 // so every login and /:slug load is refused (the auth + slug routes check status).
-tenancy.post('/api/master/tenants/:id/terminate', requireSuperAdmin(), async (c) => {
+tenancy.post('/api/master/tenants/:id/terminate', requireMaster, async (c) => {
   const id = parseInt(c.req.param('id'), 10);
   const { reason } = await c.req.json().catch(() => ({}));
   const [t] = await sql`SELECT id, is_self FROM tenants WHERE id = ${id}`;
@@ -151,7 +151,7 @@ tenancy.post('/api/master/tenants/:id/terminate', requireSuperAdmin(), async (c)
 });
 
 // Reactivate a terminated (or expired) tenant. Optionally extend the window.
-tenancy.post('/api/master/tenants/:id/reactivate', requireSuperAdmin(), async (c) => {
+tenancy.post('/api/master/tenants/:id/reactivate', requireMaster, async (c) => {
   const id = parseInt(c.req.param('id'), 10);
   const { extend_days } = await c.req.json().catch(() => ({}));
   const days = parseInt(extend_days, 10);
@@ -167,7 +167,7 @@ tenancy.post('/api/master/tenants/:id/reactivate', requireSuperAdmin(), async (c
 // ============================================================================
 // MASTER: Full platform stats
 // ============================================================================
-tenancy.get('/api/master/stats', requireSuperAdmin(), async (c) => {
+tenancy.get('/api/master/stats', requireMaster, async (c) => {
   const [tenantCounts] = await sql`
     SELECT
       COUNT(*) FILTER (WHERE is_self = false) AS total_tenants,
@@ -208,7 +208,7 @@ tenancy.get('/api/master/stats', requireSuperAdmin(), async (c) => {
 });
 
 // Every tenant with full detail for the master roster
-tenancy.get('/api/master/tenants-full', requireSuperAdmin(), async (c) => {
+tenancy.get('/api/master/tenants-full', requireMaster, async (c) => {
   const rows = await sql`
     SELECT t.*,
       (SELECT COUNT(*) FROM users u WHERE u.tenant_id = t.id) AS user_count,
@@ -227,7 +227,7 @@ function genAffCode(name: string): string {
   return `${base}${suffix}`;
 }
 
-tenancy.get('/api/master/affiliates', requireSuperAdmin(), async (c) => {
+tenancy.get('/api/master/affiliates', requireMaster, async (c) => {
   const rows = await sql`
     SELECT a.*,
       (SELECT COUNT(*) FROM affiliate_referrals r WHERE r.affiliate_id = a.id) AS referral_count,
@@ -237,7 +237,7 @@ tenancy.get('/api/master/affiliates', requireSuperAdmin(), async (c) => {
   return c.json({ data: rows });
 });
 
-tenancy.post('/api/master/affiliates', requireSuperAdmin(), async (c) => {
+tenancy.post('/api/master/affiliates', requireMaster, async (c) => {
   const { name, telegram_username, commission_pct, code } = await c.req.json().catch(() => ({}));
   if (!name || !String(name).trim()) return c.json({ error: 'Affiliate name is required' }, 400);
   let affCode = String(code || '').trim().toUpperCase() || genAffCode(name);
@@ -254,20 +254,20 @@ tenancy.post('/api/master/affiliates', requireSuperAdmin(), async (c) => {
   return c.json({ data: row });
 });
 
-tenancy.delete('/api/master/affiliates/:id', requireSuperAdmin(), async (c) => {
+tenancy.delete('/api/master/affiliates/:id', requireMaster, async (c) => {
   await sql`DELETE FROM affiliates WHERE id = ${parseInt(c.req.param('id'), 10)}`;
   return c.json({ ok: true });
 });
 
 // Mark an affiliate's outstanding commission as paid out
-tenancy.post('/api/master/affiliates/:id/mark-paid', requireSuperAdmin(), async (c) => {
+tenancy.post('/api/master/affiliates/:id/mark-paid', requireMaster, async (c) => {
   const id = parseInt(c.req.param('id'), 10);
   await sql`UPDATE affiliate_referrals SET paid_out = true, paid_out_at = now() WHERE affiliate_id = ${id} AND paid_out = false`;
   return c.json({ ok: true });
 });
 
 // Referrals for one affiliate (master view)
-tenancy.get('/api/master/affiliates/:id/referrals', requireSuperAdmin(), async (c) => {
+tenancy.get('/api/master/affiliates/:id/referrals', requireMaster, async (c) => {
   const id = parseInt(c.req.param('id'), 10);
   const rows = await sql`SELECT * FROM affiliate_referrals WHERE affiliate_id = ${id} ORDER BY created_at DESC`;
   return c.json({ data: rows });
@@ -315,14 +315,14 @@ const STORE_SETTING_KEYS = [
   'buy_url_3day', 'buy_url_7day', 'buy_url_14day', 'buy_url_30day',
 ];
 
-tenancy.get('/api/master/store-config', requireSuperAdmin(), async (c) => {
+tenancy.get('/api/master/store-config', requireMaster, async (c) => {
   const rows = await sql`SELECT key, value FROM settings WHERE key = ANY(${STORE_SETTING_KEYS})`;
   const out: Record<string, string> = {};
   for (const r of rows) out[r.key] = r.value;
   return c.json({ data: out });
 });
 
-tenancy.post('/api/master/store-config', requireSuperAdmin(), async (c) => {
+tenancy.post('/api/master/store-config', requireMaster, async (c) => {
   const body = await c.req.json().catch(() => ({}));
   for (const key of STORE_SETTING_KEYS) {
     if (body[key] === undefined) continue;
