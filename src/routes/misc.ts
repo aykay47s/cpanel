@@ -372,36 +372,47 @@ misc.post('/api/admin/telephony-config/test-call', requireRole('admin'), async (
 });
 
 misc.get('/api/branding', async (c) => {
-  // Try to resolve the tenant from: 1) authenticated user, 2) slug header/query, 3) global default
+  // Resolve tenant from: 1) authenticated user, 2) slug query. Only fall back to
+  // the global (self-tenant) name when NO specific tenant was resolved — otherwise
+  // a resold panel whose panel_name is NULL would inherit the operator's brand.
   let tenantName: string | null = null;
   let tenantLogo: string | null = null;
-  // Check auth header for logged-in user
+  let resolvedTenant = false;  // true once we've matched a specific tenant by user or slug
+
   const userId = c.req.header('x-user-id');
   const userPin = c.req.header('x-user-pin');
   if (userId && userPin) {
     const [u] = await sql`SELECT tenant_id FROM users WHERE id = ${userId} AND pin = ${userPin} LIMIT 1`;
     if (u?.tenant_id) {
-      const [t] = await sql`SELECT panel_name, panel_logo FROM tenants WHERE id = ${u.tenant_id}`;
-      tenantName = t?.panel_name || null;
-      tenantLogo = t?.panel_logo || null;
+      const [t] = await sql`SELECT panel_name, panel_logo, name FROM tenants WHERE id = ${u.tenant_id}`;
+      if (t) {
+        resolvedTenant = true;
+        tenantName = t.panel_name || t.name || null;
+        tenantLogo = t.panel_logo || null;
+      }
     }
   }
-  // Also check slug from query param (used on login screen before auth)
+
   const slug = c.req.query('slug');
-  if (!tenantName && slug) {
-    const [t] = await sql`SELECT panel_name, panel_logo FROM tenants WHERE slug = ${slug} LIMIT 1`;
-    tenantName = t?.panel_name || null;
-    tenantLogo = t?.panel_logo || null;
+  if (!resolvedTenant && slug) {
+    const [t] = await sql`SELECT panel_name, panel_logo, name FROM tenants WHERE slug = ${slug} AND status = 'active' LIMIT 1`;
+    if (t) {
+      resolvedTenant = true;
+      // panel_name is the tenant's chosen brand; name is their center's name.
+      // Never fall through to the operator's global settings for a real resold tenant.
+      tenantName = t.panel_name || t.name || 'ClearPanel';
+      tenantLogo = t.panel_logo || null;
+    }
   }
-  // Fall back to global setting
-  if (!tenantName) {
+
+  // Only reach global settings for the self-tenant / bare domain (no slug, no user match).
+  if (!resolvedTenant) {
     const [row] = await sql`SELECT value FROM settings WHERE key = 'panel_name'`;
     tenantName = row?.value || 'ClearPanel';
+    const [logoRow] = await sql`SELECT value FROM settings WHERE key = 'panel_logo'`;
+    tenantLogo = logoRow?.value || null;
   }
-  if (!tenantLogo) {
-    const [row] = await sql`SELECT value FROM settings WHERE key = 'panel_logo'`;
-    tenantLogo = row?.value || null;
-  }
+
   return c.json({ data: { name: tenantName, logo: tenantLogo } });
 });
 const BLOCKED_PANEL_NAMES = new Set(['niggers', 'nigger', 'nigga', 'niggas']);

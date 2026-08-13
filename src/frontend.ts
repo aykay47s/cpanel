@@ -309,14 +309,14 @@ function showTelegramGate(status) {
     +   '<div id="tgErrA" style="color:var(--danger);font-size:12px;min-height:16px;margin-top:8px;"></div>'
     + '</div>'
     + '<div id="tgStepOpen" style="display:none;">'
-    +   '<div style="font-size:48px;margin-bottom:10px;">✈️</div>'
+    +   '<div style="width:56px;height:56px;margin:0 auto 12px;color:#29a9eb;display:flex;align-items:center;justify-content:center;">' + ICONS_SVG.telegram + '</div>'
     +   '<p style="font-size:13.5px;font-weight:600;margin-bottom:6px;">Open Telegram first</p>'
     +   '<p style="font-size:12.5px;color:var(--text-dim);line-height:1.55;margin-bottom:18px;">Message <b>/start</b> to the bot below — just once, to let it reach you. Then come straight back here.</p>'
     +   '<a id="tgStartLink" class="btn btn-gold btn-block" target="_blank" rel="noopener" style="text-decoration:none;display:block;margin-bottom:14px;">Open @clearpanelotpbot</a>'
     +   '<div style="font-size:11.5px;color:var(--violet-bright);" id="tgWaiting">Waiting for you to start the bot…</div>'
     + '</div>'
     + '<div id="tgStepB" style="display:none;">'
-    +   '<div style="font-size:48px;margin-bottom:10px;">📨</div>'
+    +   '<div style="width:52px;height:52px;margin:0 auto 12px;color:var(--violet-bright);display:flex;align-items:center;justify-content:center;">' + ICONS_SVG.mail + '</div>'
     +   '<p style="font-size:13.5px;font-weight:600;margin-bottom:6px;">Check your Telegram</p>'
     +   '<p style="font-size:12.5px;color:var(--text-dim);line-height:1.55;margin-bottom:16px;">Check your Telegram — a 6-digit code has been sent. Enter it below. Expires in <span id="tgCd">5:00</span>.</p>'
     +   '<input id="tgOtp" placeholder="Enter OTP" class="mono" maxlength="7" data-otp-input="1" style="text-align:center;font-size:22px;font-weight:700;letter-spacing:.2em;" />'
@@ -325,10 +325,10 @@ function showTelegramGate(status) {
     +   '<div id="tgErrB" style="color:var(--danger);font-size:12px;min-height:16px;margin-top:8px;"></div>'
     + '</div>'
     + '<div id="tgStepC" style="display:none;">'
-    +   '<div style="font-size:56px;margin-bottom:14px;">🎉</div>'
+    +   '<div style="width:60px;height:60px;margin:0 auto 14px;color:var(--success);display:flex;align-items:center;justify-content:center;">' + ICONS_SVG.check + '</div>'
     +   '<h3 style="font-size:20px;margin-bottom:8px;" id="tgWelcomeName"></h3>'
     +   '<p style="font-size:13px;color:var(--text-dim);line-height:1.55;margin-bottom:20px;">Your Telegram is now linked. A welcome message has been sent. Loading ClearPanel now.</p>'
-    +   '<a href="https://t.me/+M-aK0jz4wDI5Nzdh" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:8px;padding:10px 20px;border-radius:100px;background:rgba(124,92,255,.15);border:1px solid rgba(167,139,250,.35);color:var(--violet-bright);font-size:13px;font-weight:600;text-decoration:none;margin-bottom:18px;">📣 Join the ClearPanel updates channel</a>'
+    +   '<a href="https://t.me/+M-aK0jz4wDI5Nzdh" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:8px;padding:10px 20px;border-radius:100px;background:rgba(124,92,255,.15);border:1px solid rgba(167,139,250,.35);color:var(--violet-bright);font-size:13px;font-weight:600;text-decoration:none;margin-bottom:18px;"><span style="width:15px;height:15px;display:inline-flex;">' + ICONS_SVG.telegram + '</span> Join the ClearPanel updates channel</a>'
     +   '<div class="xp-bar"><i id="tgWelcomeBar" style="width:0%;transition:width 1.2s var(--ease-smooth);"></i></div>'
     + '</div>'
     + '</div>';
@@ -942,7 +942,37 @@ export const ICONS_SVG: Record<string, string> = {
   exit: '<svg class="ic" viewBox="0 0 24 24"><path d="M9 3H5a1 1 0 00-1 1v16a1 1 0 001 1h4M16 17l5-5-5-5M21 12H9"/></svg>',
   bell: '<svg class="ic" viewBox="0 0 24 24"><path d="M6 10a6 6 0 1112 0c0 5 2 6 2 6H4s2-1 2-6z"/><path d="M10 20a2 2 0 004 0"/></svg>',
   gear: '<svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>',
+  // --- expanded set ---
+  phone: '<svg class="ic" viewBox="0 0 24 24"><path d="M4 4h4l2 5-2.5 1.5a11 11 0 005 5L14 13l5 2v4a1 1 0 01-1 1A15 15 0 013 5a1 1 0 011-1z"/></svg>',
+  bolt: '<svg class="ic" viewBox="0 0 24 24"><path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z"/></svg>',
+  crown: '<svg class="ic" viewBox="0 0 24 24"><path d="M3 7l4 4 5-6 5 6 4-4v11H3V7z"/><path d="M3 20h18"/></svg>',
+  fire: '<svg class="ic" viewBox="0 0 24 24"><path d="M12 2c1 4-2 5-2 8a2 2 0 004 0c0-1 1-2 1-2 2 2 3 4 3 6a6 6 0 01-12 0c0-4 4-6 6-12z"/></svg>',
+  diamond: '<svg class="ic" viewBox="0 0 24 24"><path d="M6 3h12l4 6-10 12L2 9l4-6z"/><path d="M2 9h20M9 3l3 6 3-6M12 21l-3-12M12 21l3-12"/></svg>',
+  briefcase: '<svg class="ic" viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 012-2h4a2 2 0 012 2v2M3 12h18"/></svg>',
+  edit: '<svg class="ic" viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>',
+  check: '<svg class="ic" viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg>',
+  x: '<svg class="ic" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  arrowRight: '<svg class="ic" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
+  arrowLeft: '<svg class="ic" viewBox="0 0 24 24"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>',
+  key: '<svg class="ic" viewBox="0 0 24 24"><circle cx="8" cy="8" r="4"/><path d="M11 11l9 9M17 17l2-2M14 14l2-2"/></svg>',
+  clipboard: '<svg class="ic" viewBox="0 0 24 24"><rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4V3a1 1 0 011-1h4a1 1 0 011 1v1M9 11h6M9 15h4"/></svg>',
+  sparkle: '<svg class="ic" viewBox="0 0 24 24"><path d="M12 3l2 6 6 2-6 2-2 6-2-6-6-2 6-2 2-6z"/></svg>',
+  mail: '<svg class="ic" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>',
+  mailbox: '<svg class="ic" viewBox="0 0 24 24"><path d="M4 10a4 4 0 018 0v8H4v-8z"/><path d="M12 10h6a3 3 0 013 3v5h-9M8 10V6"/></svg>',
+  pin: '<svg class="ic" viewBox="0 0 24 24"><path d="M12 21s-7-6-7-11a7 7 0 0114 0c0 5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>',
+  mute: '<svg class="ic" viewBox="0 0 24 24"><path d="M11 5L6 9H2v6h4l5 4V5z"/><path d="M22 9l-6 6M16 9l6 6"/></svg>',
+  calendar: '<svg class="ic" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>',
+  search: '<svg class="ic" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>',
+  lightbulb: '<svg class="ic" viewBox="0 0 24 24"><path d="M9 18h6M10 21h4M12 3a6 6 0 013 11c-.6.5-1 1.2-1 2h-4c0-.8-.4-1.5-1-2a6 6 0 013-11z"/></svg>',
+  dot: '<svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5" fill="currentColor" stroke="none"/></svg>',
+  party: '<svg class="ic" viewBox="0 0 24 24"><path d="M3 21l6-14 8 8-14 6z"/><path d="M14 3a3 3 0 003 3M20 8a2 2 0 00-2-2M18 13c2 0 3-1 3-3"/></svg>',
+  folder: '<svg class="ic" viewBox="0 0 24 24"><path d="M3 6a2 2 0 012-2h4l2 2h8a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V6z"/></svg>',
+  robot: '<svg class="ic" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="10" rx="2"/><path d="M12 8V4M9 13h.01M15 13h.01M2 12v3M22 12v3"/></svg>',
+  robotHead: '<svg class="ic" viewBox="0 0 24 24"><rect x="5" y="8" width="14" height="10" rx="2"/><path d="M12 8V4M9 13h.01M15 13h.01M2 12v3M22 12v3"/></svg>',
+  // Real Telegram paper-plane logo (filled, brand-accurate silhouette)
+  telegram: '<svg class="ic" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M21.94 4.3a1.3 1.3 0 00-1.35-.2L3.3 10.98c-.86.34-.83 1.58.05 1.87l4.35 1.42 1.66 5.14a1 1 0 001.62.42l2.4-2.16 4.36 3.2a1.3 1.3 0 002.03-.82l3.2-14.5a1.3 1.3 0 00-.5-1.28zM9.5 14.13l8.1-5.9-6.6 6.9-.06 3.1-1.44-4.1z"/></svg>',
 };
+
 
 const _rawPage = `<!DOCTYPE html>
 <html lang="en">
@@ -977,8 +1007,8 @@ const _rawPage = `<!DOCTYPE html>
   /* ---- Radius scale ---- */
   --r-sm:8px; --r-md:12px; --r-lg:16px; --r-xl:20px; --r-full:100px;
   /* ---- Glass recipe (one shared definition, not per-component tuning) ---- */
-  --glass-bg:rgba(255,255,255,.045); --glass-bg-elevated:rgba(255,255,255,.065);
-  --glass-blur:14px; --glass-sat:1.35;
+  --glass-bg:rgba(255,255,255,.055); --glass-bg-elevated:rgba(255,255,255,.085);
+  --glass-blur:22px; --glass-sat:1.6;
   --ease-spring:cubic-bezier(.34,1.56,.64,1); --ease-smooth:cubic-bezier(.16,1,.3,1);
 }
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
@@ -1045,14 +1075,22 @@ a{color:inherit;text-decoration:none;}
 button{font-family:'Geist',sans-serif;cursor:pointer;border:none;outline:none;transition:transform .12s ease, background .12s ease, color .12s ease, border-color .12s ease, box-shadow .15s ease;}
 .panel{
   position:relative; transform:translateZ(0);
-  background:linear-gradient(155deg, var(--glass-bg-elevated), var(--glass-bg) 60%);
+  background:linear-gradient(155deg, var(--glass-bg-elevated), var(--glass-bg) 62%);
   backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-sat));
   -webkit-backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-sat));
   border:1px solid var(--border-2); border-radius:var(--r-xl);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.07), inset 0 0 40px rgba(147,112,255,.025), 0 2px 4px rgba(0,0,0,.3), 0 14px 32px rgba(0,0,0,.35);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.10), inset 0 0 48px rgba(147,112,255,.035), 0 2px 4px rgba(0,0,0,.3), 0 16px 40px rgba(0,0,0,.4);
   transition:border-color .2s var(--ease-smooth), box-shadow .2s var(--ease-smooth), transform .2s var(--ease-smooth);
 }
-.panel:hover{border-color:rgba(255,255,255,.16);}
+/* Specular sheen — a soft diagonal light streak across the glass top edge,
+   the signature glassmorphism highlight. Sits at z-index 0 behind content
+   (which is z-index auto/positive), so no child layout is touched. */
+.panel::after{
+  content:''; position:absolute; inset:0; z-index:0; pointer-events:none; border-radius:inherit;
+  background:linear-gradient(135deg, rgba(255,255,255,.09) 0%, rgba(255,255,255,.015) 20%, transparent 42%);
+  mix-blend-mode:screen; opacity:.75;
+}
+.panel:hover{border-color:rgba(255,255,255,.20); box-shadow:inset 0 1px 0 rgba(255,255,255,.12), inset 0 0 48px rgba(147,112,255,.045), 0 2px 4px rgba(0,0,0,.3), 0 18px 46px rgba(0,0,0,.45);}
 .panel-inset{background:var(--bg-2);border:1px solid var(--border);border-radius:14px;transition:border-color .18s var(--ease-smooth), background .18s var(--ease-smooth);}
 .panel-inset.clickable:hover{border-color:var(--border-2);background:var(--s1);}
 .script-manager-item{background:var(--bg-2);border:1px solid var(--border);border-radius:14px;transition:border-color .15s ease, background .15s ease;}
@@ -1475,8 +1513,8 @@ tr.clickable:active{background:rgba(255,255,255,.05);}
       <a href="javascript:void(0)" onclick="showFindPanel()" style="font-size:11.5px;color:var(--text-faint);text-decoration:underline;">Forgot which panel you're on?</a>
     </div>
     <div style="margin-top:18px;display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;">
-      <a href="https://t.me/+M-aK0jz4wDI5Nzdh" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--text-faint);text-decoration:none;padding:5px 12px;border-radius:100px;background:rgba(255,255,255,.04);border:1px solid var(--border);transition:color .15s;"><span>📣</span>Updates channel</a>
-      <a href="https://t.me/clearpanelotpbot" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--text-faint);text-decoration:none;padding:5px 12px;border-radius:100px;background:rgba(255,255,255,.04);border:1px solid var(--border);transition:color .15s;"><span>🤖</span>@clearpanelotpbot</a>
+      <a href="https://t.me/+M-aK0jz4wDI5Nzdh" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--text-faint);text-decoration:none;padding:5px 12px;border-radius:100px;background:rgba(255,255,255,.04);border:1px solid var(--border);transition:color .15s;"><span style="width:14px;height:14px;display:inline-flex;color:#29a9eb;">${ICONS_SVG.telegram}</span>Updates channel</a>
+      <a href="https://t.me/clearpanelotpbot" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--text-faint);text-decoration:none;padding:5px 12px;border-radius:100px;background:rgba(255,255,255,.04);border:1px solid var(--border);transition:color .15s;"><span style="width:14px;height:14px;display:inline-flex;color:#29a9eb;">${ICONS_SVG.robotHead}</span>@clearpanelotpbot</a>
     </div>
   </div>
 </div>

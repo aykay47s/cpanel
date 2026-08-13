@@ -209,9 +209,7 @@ app.get('/', async (c) => {
 // those are global settings that belong to the self tenant, not shared out.
 app.get('/:slug', async (c) => {
   const slug = c.req.param('slug');
-  console.log(`[/:slug] received slug="${slug}"`);
   const [tenant] = await sql`SELECT * FROM tenants WHERE slug = ${slug} AND status = 'active'`;
-  console.log(`[/:slug] lookup result: tenant=${tenant ? `id=${tenant.id}, name=${tenant.name}, panel_name=${tenant.panel_name}` : 'NOT FOUND'}`);
   if (!tenant) return c.notFound();
   if (tenant.expires_at && new Date(tenant.expires_at) < new Date()) {
     await sql`UPDATE tenants SET status = 'expired' WHERE id = ${tenant.id}`;
