@@ -140,12 +140,12 @@ async function loadTenants() {
     </div>
     <div class="panel">
       <h2>Generate License Key</h2>
-      <p style="font-size:12px;color:var(--text-dim);margin:0 0 12px;">Make one after someone's actually paid - send them the code plus the link to /redeem.</p>
-      <div class="field"><label>Plan</label>
-        <select id="keyPlan" style="width:100%;padding:12px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);color:var(--text);font-size:14px;">
-          <option value="3day">3 Day - £99</option><option value="7day">7 Day - £180</option><option value="monthly">1 Month - £750</option>
-        </select>
+      <p style="font-size:12px;color:var(--text-dim);margin:0 0 12px;">Set any number of days you want — you're selling keys your own way, this just controls how long the panel stays active once redeemed.</p>
+      <div class="row">
+        <div class="field"><label>Days of Access</label><input id="keyDays" type="number" min="1" max="3650" placeholder="e.g. 14" /></div>
+        <div class="field"><label>Price (£, for your own records)</label><input id="keyPrice" type="number" min="0" step="0.01" placeholder="e.g. 120" /></div>
       </div>
+      <div class="field"><label>Label (optional)</label><input id="keyLabel" placeholder="e.g. 14 Day Access — leave blank to auto-generate" /></div>
       <button onclick="generateKey()">Generate Key</button>
       <div class="err" id="keyErr"></div>
       <div id="newKeyBanner"></div>
@@ -155,7 +155,7 @@ async function loadTenants() {
       <table><thead><tr><th>Code</th><th>Plan</th><th>Status</th><th>Redeemed By</th><th></th></tr></thead>
       <tbody>\${keys.map(k => \`<tr>
         <td class="mono" style="font-size:11px;">\${esc(k.key_code)}</td>
-        <td>\${esc(k.plan)}</td>
+        <td>\${esc(k.plan)} <span style="color:var(--text-faint);">(\${k.days}d)</span></td>
         <td>\${k.redeemed ? '<span class="badge on">Redeemed</span>' : '<span class="badge off">Unused</span>'}</td>
         <td>\${esc(k.tenant_name || '—')}</td>
         <td>\${!k.redeemed ? '<button class="danger" onclick="deleteKey(' + k.id + ')">Delete</button>' : ''}</td>
@@ -213,9 +213,12 @@ async function saveCheckoutUrl() {
 }
 let lastGeneratedKey = null;
 async function generateKey() {
-  const plan = document.getElementById('keyPlan').value;
+  const days = document.getElementById('keyDays').value.trim();
+  const price = document.getElementById('keyPrice').value.trim();
+  const label = document.getElementById('keyLabel').value.trim();
   const err = document.getElementById('keyErr');
-  const res = await api('/api/master/license-keys', { method: 'POST', body: JSON.stringify({ plan }) });
+  if (!days || parseInt(days, 10) < 1) { err.textContent = 'Enter how many days this key should grant.'; return; }
+  const res = await api('/api/master/license-keys', { method: 'POST', body: JSON.stringify({ days, price, label }) });
   const data = await res.json();
   if (!res.ok) { err.textContent = data.error || 'Failed to generate.'; return; }
   err.textContent = '';

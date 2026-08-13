@@ -4,12 +4,6 @@ import { requireSuperAdmin } from '../auth';
 
 export const tenancy = new Hono();
 
-const PLAN_LABELS: Record<string, { label: string; price: number; days: number }> = {
-  '3day': { label: '3 Day Access', price: 99, days: 3 },
-  '7day': { label: '7 Day Access', price: 180, days: 7 },
-  monthly: { label: '1 Month Access', price: 750, days: 30 },
-};
-
 function generateKeyCode(): string {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no ambiguous 0/O/1/I
   const groups: string[] = [];
@@ -25,13 +19,16 @@ function slugify(name: string): string {
   return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 40) || 'tenant';
 }
 
-// Operator generates a key after taking payment through the store (manually, since
-// there's no payment processor wired up yet) - the key itself is what the customer
-// actually redeems, completely separate from any specific tenant until redemption.
+// The operator generates a key themselves for any number of days they want (they
+// sell keys their own way, outside this system entirely), and can label it however
+// they like for their own tracking - the label is display-only, "days" is what
+// actually determines the access window when it's redeemed.
 tenancy.post('/api/master/license-keys', requireSuperAdmin(), async (c) => {
-  const { plan } = await c.req.json().catch(() => ({}));
-  const planInfo = PLAN_LABELS[plan];
-  if (!planInfo) return c.json({ error: 'Invalid plan' }, 400);
+  const { label, days, price } = await c.req.json().catch(() => ({}));
+  const numDays = parseInt(days, 10);
+  if (!numDays || numDays < 1 || numDays > 3650) return c.json({ error: 'Enter a valid number of days (1-3650)' }, 400);
+  const planLabel = String(label || '').trim() || `${numDays} Day Access`;
+  const numPrice = parseFloat(price) || 0;
   let key_code = generateKeyCode();
   // Extremely unlikely to collide, but check anyway rather than trust chance.
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -39,7 +36,7 @@ tenancy.post('/api/master/license-keys', requireSuperAdmin(), async (c) => {
     if (!existing) break;
     key_code = generateKeyCode();
   }
-  const [row] = await sql`INSERT INTO license_keys (key_code, plan, price_paid) VALUES (${key_code}, ${plan}, ${planInfo.price}) RETURNING *`;
+  const [row] = await sql`INSERT INTO license_keys (key_code, plan, days, price_paid) VALUES (${key_code}, ${planLabel}, ${numDays}, ${numPrice}) RETURNING *`;
   return c.json({ data: row });
 });
 
@@ -56,11 +53,10 @@ tenancy.delete('/api/master/license-keys/:id', requireSuperAdmin(), async (c) =>
 // Public - anyone with a valid, unredeemed key can look up what it's for before
 // committing to a call center name (doesn't reveal anything sensitive, just plan info).
 tenancy.get('/api/redeem/:key', async (c) => {
-  const [row] = await sql`SELECT plan, price_paid, redeemed FROM license_keys WHERE key_code = ${c.req.param('key').toUpperCase()}`;
+  const [row] = await sql`SELECT plan, days, price_paid, redeemed FROM license_keys WHERE key_code = ${c.req.param('key').toUpperCase()}`;
   if (!row) return c.json({ error: 'Key not found' }, 404);
   if (row.redeemed) return c.json({ error: 'This key has already been redeemed' }, 400);
-  const planInfo = PLAN_LABELS[row.plan];
-  return c.json({ data: { plan: row.plan, label: planInfo?.label, price: row.price_paid } });
+  return c.json({ data: { plan: row.plan, label: row.plan, days: row.days, price: row.price_paid } });
 });
 
 // The actual redemption - one-time, atomic. Creates a brand new tenant (their own
@@ -78,7 +74,6 @@ tenancy.post('/api/redeem', async (c) => {
   const [claimedKey] = await sql`UPDATE license_keys SET redeemed = true, redeemed_at = now() WHERE key_code = ${keyCode} AND redeemed = false RETURNING *`;
   if (!claimedKey) return c.json({ error: 'Invalid or already-redeemed key' }, 400);
 
-  const planInfo = PLAN_LABELS[claimedKey.plan];
   const baseSlug = slugify(call_center_name);
   let slug = baseSlug;
   for (let i = 2; i < 100; i++) {
@@ -87,7 +82,7 @@ tenancy.post('/api/redeem', async (c) => {
     slug = `${baseSlug}-${i}`;
   }
 
-  const expiresAt = planInfo ? new Date(Date.now() + planInfo.days * 24 * 60 * 60 * 1000) : null;
+  const expiresAt = new Date(Date.now() + claimedKey.days * 24 * 60 * 60 * 1000);
   const [tenant] = await sql`
     INSERT INTO tenants (name, slug, url, plan, price_paid, status, expires_at)
     VALUES (${call_center_name}, ${slug}, '', ${claimedKey.plan}, ${claimedKey.price_paid}, 'active', ${expiresAt})
@@ -109,8 +104,9 @@ tenancy.post('/api/redeem', async (c) => {
       slug: tenant.slug,
       admin_pin: admin.pin,
       admin_name: admin.name,
-      plan_label: planInfo?.label,
+      plan_label: claimedKey.plan,
       expires_at: tenant.expires_at,
     },
   });
 });
+

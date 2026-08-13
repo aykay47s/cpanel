@@ -113,6 +113,18 @@ export const REDEEM_PAGE = `<!DOCTYPE html>
 let panelUrl = '';
 let keyCheckTimeout;
 
+// If arriving fresh from a successful Stripe payment, the key is already generated
+// and passed via ?key= - pre-fill it and validate immediately so the customer just
+// has to type their call center name and their own name, nothing else.
+(function prefillFromQuery() {
+  const params = new URLSearchParams(window.location.search);
+  const key = params.get('key');
+  if (key) {
+    document.getElementById('keyInput').value = key.toUpperCase();
+    checkKey(key);
+  }
+})();
+
 function onKeyInput() {
   clearTimeout(keyCheckTimeout);
   const key = document.getElementById('keyInput').value.trim();

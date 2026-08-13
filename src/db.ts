@@ -125,6 +125,7 @@ export async function ensureDb() {
     id SERIAL PRIMARY KEY,
     key_code TEXT UNIQUE NOT NULL,
     plan TEXT NOT NULL,
+    days INTEGER NOT NULL DEFAULT 7,
     price_paid NUMERIC DEFAULT 0,
     redeemed BOOLEAN NOT NULL DEFAULT false,
     redeemed_by_tenant_id INTEGER REFERENCES tenants(id),
@@ -132,22 +133,6 @@ export async function ensureDb() {
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`;
 
-  // A store someone else can be handed and configure independently - their own
-  // pricing, branding, and checkout link, without touching Master Control or the
-  // operator's own store. Access is a separate management PIN, not tied to any
-  // tenant's admin login.
-  await sql`CREATE TABLE IF NOT EXISTS stores (
-    id SERIAL PRIMARY KEY,
-    slug TEXT UNIQUE NOT NULL,
-    owner_name TEXT,
-    manage_pin TEXT NOT NULL,
-    store_name TEXT NOT NULL DEFAULT 'Get Access',
-    tagline TEXT DEFAULT '',
-    checkout_url TEXT DEFAULT '',
-    logo_url TEXT,
-    tiers JSONB NOT NULL DEFAULT '[]',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-  )`;
 
   await sql`CREATE TABLE IF NOT EXISTS duplicate_flags (
     id SERIAL PRIMARY KEY,
@@ -277,6 +262,7 @@ export async function ensureDb() {
     // How many callers were rung before someone took it — the number that tells
     // an admin whether their call order is actually working.
     `ALTER TABLE inbound_calls ADD COLUMN IF NOT EXISTS route_attempts INTEGER DEFAULT 0`,
+    `ALTER TABLE license_keys ADD COLUMN IF NOT EXISTS days INTEGER NOT NULL DEFAULT 7`,
   ];
   for (const stmt of alters) {
     await sql.unsafe(`DO $$ BEGIN ${stmt}; EXCEPTION WHEN OTHERS THEN NULL; END $$;`);
@@ -366,6 +352,11 @@ export async function ensureDb() {
   await sql`UPDATE announcements SET tenant_id = ${selfTenantId} WHERE tenant_id IS NULL`;
   await sql`UPDATE scripts SET tenant_id = ${selfTenantId} WHERE tenant_id IS NULL`;
   await sql`UPDATE inbound_calls SET tenant_id = ${selfTenantId} WHERE tenant_id IS NULL`;
+  // Backfill real durations for keys generated before "days" existed as its own
+  // column - correcting the blanket default of 7 the ALTER TABLE gave every
+  // pre-existing row, based on what their old fixed plan name actually meant.
+  await sql`UPDATE license_keys SET days = 3 WHERE plan = '3day' AND days = 7`;
+  await sql`UPDATE license_keys SET days = 30 WHERE plan = 'monthly' AND days = 7`;
   await sql`UPDATE tenants SET slug = '' WHERE is_self = true AND slug IS NULL`;
 
   // PINs only need to be unique WITHIN a tenant now, not globally - two different
