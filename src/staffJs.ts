@@ -80,7 +80,7 @@ async function renderStaffHome() {
           <div class="disp" style="font-size:19px;font-weight:800;letter-spacing:-.02em;line-height:1.15;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">\${esc(me.name)}</div>
           <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center;">
             \${statusBadge(me.role === 'manager' ? 'Manager' : me.role)}
-            <span class="rank-chip" style="color:\${rk.c1};border-color:\${rk.c1}44;background:\${rk.c1}14;">\${rk.icon} \${rk.label}</span>
+            \${rankChipHtml(rk)}
             <span class="lvl-chip">Lv \${li.level}</span>
           </div>
         </div>

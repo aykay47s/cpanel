@@ -631,27 +631,46 @@ function animateCountUps(container) {
 // ---- Ranks: caller-based progression. XP flows naturally from dialling work.
 // Rank up reflects how experienced and consistent a caller is — not gaming tiers.
 // Each rank has a colour, an icon, and a min level to reach it.
+// Rank tiers — [name, colour, darker shade, min level, svg-icon-key]. A longer
+// ladder (11 tiers to lvl 60) gives real long-term progression, and every mark
+// is a crisp SVG rather than an emoji so it reads as a designed rank system.
 const RANK_TIERS = [
-  // [name, colour, darker shade, min level, icon emoji]
-  ['New Dialer',     '#94a3b8', '#64748b',  1, '📞'],
-  ['Dialer',         '#60a5fa', '#2563eb',  3, '📲'],
-  ['Active Dialer',  '#34d399', '#059669',  6, '⚡'],
-  ['Consistent',     '#fbbf24', '#d97706',  10, '🔥'],
-  ['Senior Dialer',  '#f97316', '#c2410c',  15, '💼'],
-  ['Top Dialer',     '#e879f9', '#a21caf',  20, '🎯'],
-  ['Elite Caller',   '#818cf8', '#4f46e5',  27, '💎'],
-  ['Legend',         '#fcd34d', '#b45309',  35, '👑'],
+  ['Rookie',        '#94a3b8', '#64748b',  1,  'r_seed'],
+  ['Dialer',        '#60a5fa', '#2563eb',  4,  'r_phone'],
+  ['Closer',        '#34d399', '#059669',  8,  'r_bolt'],
+  ['Sharpshooter',  '#22d3ee', '#0891b2',  13, 'r_target'],
+  ['Rainmaker',     '#fbbf24', '#d97706',  19, 'r_flame'],
+  ['Heavy Hitter',  '#f97316', '#c2410c',  26, 'r_star'],
+  ['Ace',           '#e879f9', '#a21caf',  34, 'r_gem'],
+  ['Master',        '#818cf8', '#4f46e5',  43, 'r_shield'],
+  ['Grandmaster',   '#a78bfa', '#7c3aed',  50, 'r_medal'],
+  ['Legend',        '#fcd34d', '#b45309',  56, 'r_crown'],
+  ['Mythic',        '#f472b6', '#be185d',  60, 'r_trophy'],
 ];
+// SVG rank marks — inherit currentColor, sized by the emblem container.
+const RANK_ICONS = {
+  r_seed:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22V12M12 12C12 8 9 5 5 5c0 4 3 7 7 7zM12 12c0-4 3-7 7-7 0 4-3 7-7 7z"/></svg>',
+  r_phone: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 005 5L15 13l5 2v4a2 2 0 01-2 2A15 15 0 013 6a2 2 0 012-2z"/></svg>',
+  r_bolt:  '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z"/></svg>',
+  r_target:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1.5" fill="currentColor"/></svg>',
+  r_flame: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 2c1 4 5 5 5 10a5 5 0 01-10 0c0-2 1-3 1-3s0 2 2 2c1.5 0 1-3-1-5 2 0 3-2 3-4z"/></svg>',
+  r_star:  '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 2l2.9 6.3 6.9.8-5.1 4.7 1.4 6.8L12 17.8 5.9 21.4l1.4-6.8L2.2 9.9l6.9-.8L12 2z"/></svg>',
+  r_gem:   '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M6 3h12l3 6-9 12L3 9l3-6z" opacity="0.95"/></svg>',
+  r_shield:'<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 2l8 3v6c0 5-3.5 8.5-8 11-4.5-2.5-8-6-8-11V5l8-3z"/></svg>',
+  r_medal: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M8 2l2 6M16 2l-2 6"/><circle cx="12" cy="15" r="6" fill="currentColor" stroke="none"/></svg>',
+  r_crown: '<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M3 7l4 4 5-6 5 6 4-4v11H3V7z"/></svg>',
+  r_trophy:'<svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M7 4h10v3a5 5 0 01-10 0V4zM5 4v2a3 3 0 003 3M19 4v2a3 3 0 01-3 3M9 14h6l-1 4h-4l-1-4zM8 20h8v2H8z"/></svg>',
+};
 function rankInfo(xp) {
   const li = levelInfo(xp);
   let tier = RANK_TIERS[0];
   for (const t of RANK_TIERS) if (li.level >= t[3]) tier = t;
-  const isTop = tier[0] === 'Legend';
-  return { tier: tier[0], div: '', c1: tier[1], c2: tier[2], icon: tier[4], label: tier[0], level: li.level, li, isTop };
+  const isTop = tier[0] === 'Mythic';
+  return { tier: tier[0], div: '', c1: tier[1], c2: tier[2], icon: RANK_ICONS[tier[4]] || RANK_ICONS.r_phone, iconKey: tier[4], label: tier[0], level: li.level, li, isTop };
 }
 function rankEmblemHtml(rk, size) {
-  const fs = Math.round(size * 0.46);
-  return '<div class="rank-emblem" style="--rc1:' + rk.c1 + ';--rc2:' + rk.c2 + ';width:' + size + 'px;height:' + size + 'px;border-radius:50%;"><span class="div" style="font-size:' + fs + 'px;">' + (rk.icon || '📞') + '</span></div>';
+  const isz = Math.round(size * 0.52);
+  return '<div class="rank-emblem" style="--rc1:' + rk.c1 + ';--rc2:' + rk.c2 + ';width:' + size + 'px;height:' + size + 'px;border-radius:50%;"><span class="div" style="width:' + isz + 'px;height:' + isz + 'px;display:inline-flex;color:#fff;">' + (rk.icon || '') + '</span></div>';
 }
 function rankChipHtml(rk) {
   return '<span class="rank-chip" style="color:' + rk.c1 + ';border-color:' + rk.c1 + '55;">' + rankEmblemHtml(rk, 16) + rk.label + '</span>';
@@ -677,7 +696,7 @@ function bankLogoUrl(domain) { return 'https://www.google.com/s2/favicons?domain
 function levelInfo(xp) {
   let lvl = 1, rem = Math.max(0, xp || 0), cost = 100;
   while (rem >= cost) { rem -= cost; lvl++; cost = 100 + (lvl - 1) * 60; }
-  const bands = [[35,'Legend'],[27,'Elite Caller'],[20,'Top Dialer'],[15,'Senior Dialer'],[10,'Consistent'],[6,'Active Dialer'],[3,'Dialer'],[1,'New Dialer']];
+  const bands = [[60,'Mythic'],[56,'Legend'],[50,'Grandmaster'],[43,'Master'],[34,'Ace'],[26,'Heavy Hitter'],[19,'Rainmaker'],[13,'Sharpshooter'],[8,'Closer'],[4,'Dialer'],[1,'Rookie']];
   const title = bands.find(b => lvl >= b[0])[1];
   return { level: lvl, into: rem, need: cost, pct: Math.min(100, Math.round(rem / cost * 100)), title };
 }
@@ -846,10 +865,10 @@ function avatarHtml(person, size) {
 // right corner instead, same pattern as a platform status indicator.
 function avatarWithRankHtml(person, size, rk) {
   const badgeSize = Math.round(size * 0.46);
-  const badgeFont = Math.round(badgeSize * 0.52);
+  const iconSize = Math.round(badgeSize * 0.56);
   return '<div style="position:relative;width:' + size + 'px;height:' + size + 'px;flex-shrink:0;">'
     + avatarHtml(person, size)
-    + '<div style="position:absolute;right:-3px;bottom:-3px;width:' + badgeSize + 'px;height:' + badgeSize + 'px;border-radius:50%;background:linear-gradient(160deg,' + rk.c2 + ',' + rk.c1 + ' 60%);display:flex;align-items:center;justify-content:center;font-size:' + badgeFont + 'px;box-shadow:0 0 0 3px var(--bg-2),0 2px 6px rgba(0,0,0,.4);line-height:1;">' + (rk.icon || '📞') + '</div>'
+    + '<div style="position:absolute;right:-3px;bottom:-3px;width:' + badgeSize + 'px;height:' + badgeSize + 'px;border-radius:50%;background:linear-gradient(160deg,' + rk.c2 + ',' + rk.c1 + ' 60%);display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 3px var(--bg-2),0 2px 6px rgba(0,0,0,.4);line-height:1;"><span style="width:' + iconSize + 'px;height:' + iconSize + 'px;display:inline-flex;color:#fff;">' + (rk.icon || '') + '</span></div>'
     + '</div>';
 }
 
