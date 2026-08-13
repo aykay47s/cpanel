@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { sql } from '../db';
-import { requireRole } from '../auth';
+import { requireRole, authenticate } from '../auth';
 import { broadcast, notify } from '../realtime';
 import * as threecx from '../threecx';
 
@@ -252,7 +252,7 @@ telephony.post('/api/admin/telephony/3cx/routing', requireRole('admin'), async (
 // Click-to-call through the PBX: rings the logged-in user's own extension first,
 // then dials the lead — the only order V20 allows.
 telephony.post('/api/telephony/3cx/call', async (c) => {
-  const user = c.get('user');
+  const user = await authenticate(c);
   if (!user) return c.json({ error: 'Not authenticated' }, 401);
   const { destination } = await c.req.json().catch(() => ({} as any));
   const [row] = await sql`SELECT threecx_extension FROM users WHERE id = ${user.id}`;

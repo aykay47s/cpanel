@@ -31,7 +31,7 @@ users.post('/api/auth/login', async (c) => {
     const [selfTenant] = await sql`SELECT id FROM tenants WHERE is_self = true`;
     tenantId = selfTenant?.id ?? null;
   }
-  const [user] = await sql`SELECT id, name, pin, role, avatar, pfp_data, xp, clocked_in, is_super_admin FROM users WHERE pin = ${pin} AND tenant_id = ${tenantId}`;
+  const [user] = await sql`SELECT id, name, pin, role, avatar, pfp_data, xp, clocked_in, is_super_admin, tenant_id FROM users WHERE pin = ${pin} AND tenant_id = ${tenantId}`;
   if (!user) return bad(c, 'Invalid PIN', 401);
   return c.json({ data: user });
 });
@@ -39,7 +39,7 @@ users.post('/api/auth/login', async (c) => {
 users.get('/api/me', async (c) => {
   const user = await authenticate(c);
   if (!user) return bad(c, 'Unauthorized', 401);
-  const [fresh] = await sql`SELECT id, name, pin, role, avatar, pfp_data, xp, clocked_in, notif_prefs, is_super_admin, role_confirmed_at FROM users WHERE id = ${user.id}`;
+  const [fresh] = await sql`SELECT id, name, pin, role, avatar, pfp_data, xp, clocked_in, notif_prefs, is_super_admin, role_confirmed_at, tenant_id FROM users WHERE id = ${user.id}`;
   return c.json({ data: fresh });
 });
 
@@ -113,7 +113,8 @@ users.post('/api/admin/end-day', requireRole('admin'), async (c) => {
 });
 
 users.get('/api/center-status', async (c) => {
-  const user = c.get('user');
+  const user = await authenticate(c);
+  if (!user) return bad(c, 'Unauthorized', 401);
   const rows = await sql`SELECT key, value FROM settings WHERE key IN (${'center_open:' + user.tenant_id}, ${'center_offline_reason:' + user.tenant_id})`;
   const map = Object.fromEntries(rows.map((r: any) => [r.key.split(':')[0], r.value]));
   return c.json({ data: { open: map.center_open !== 'false', reason: map.center_offline_reason || 'The call center is closed right now. Check back soon.' } });

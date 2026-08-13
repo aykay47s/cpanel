@@ -1525,6 +1525,21 @@ document.addEventListener('visibilitychange', () => {
   if (typeof connectEvents === 'function') connectEvents();
 });
 
+// A stored session from one tenant's URL must never silently carry over to a
+// different tenant's URL on the same domain — localStorage is scoped by
+// origin only, not by path, so /goclearpanel and / (or any other tenant's
+// slug) all share the exact same storage. Without this check, a browser
+// that had previously logged into one panel would stay authenticated as
+// that SAME user (and see that user's real, correct data) even while
+// displaying a completely different tenant's URL - not a server-side leak,
+// since every API call really was for the stored session's genuine tenant,
+// but indistinguishable from one at a glance.
+const _cpPageTenantId = document.getElementById('cp-tenant-id')?.content || '';
+if (me && String(me.tenant_id ?? '') !== String(_cpPageTenantId)) {
+  localStorage.removeItem('dispatch_me');
+  me = null;
+}
+
 if (me) enterApp();
 
 // Branding is now handled by applyBranding() + server-side name injection.

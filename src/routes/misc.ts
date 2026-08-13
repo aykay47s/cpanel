@@ -19,11 +19,18 @@ export function signVonageJwt(applicationId: string, privateKey: string): string
 }
 
 // Public but deliberately minimal - just aggregate counts, never any lead/customer
-// data. This is what lets a super-admin's control panel pull live numbers from a
-// resold customer instance without needing that customer's admin credentials.
+// data. Called both by an authenticated admin's own dashboard and, unauthenticated,
+// by /api/master/live-stats fetching this same server's self-tenant numbers - so it
+// resolves the tenant from whichever context is actually present rather than
+// assuming a logged-in user, which crashed this route whenever it was hit without one.
 misc.get('/api/tenant-stats', async (c) => {
   const user = c.get('user');
-  const tid = user.tenant_id;
+  let tid = user?.tenant_id;
+  if (!tid) {
+    const [selfTenant] = await sql`SELECT id FROM tenants WHERE is_self = true`;
+    tid = selfTenant?.id ?? null;
+  }
+  if (!tid) return c.json({ error: 'No tenant context' }, 400);
   const [callers] = await sql`SELECT COUNT(*)::int as n FROM users WHERE role = 'caller' AND tenant_id = ${tid}`;
   const [managers] = await sql`SELECT COUNT(*)::int as n FROM users WHERE role = 'admin' AND tenant_id = ${tid}`;
   const [finishers] = await sql`SELECT COUNT(*)::int as n FROM users WHERE role = 'finisher' AND tenant_id = ${tid}`;

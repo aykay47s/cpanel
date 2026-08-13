@@ -150,7 +150,7 @@ app.get('/', async (c) => {
   // Empty content (not the string "null") so the frontend's `.content || null`
   // check correctly treats this as "no slug" — a non-empty string is truthy in JS
   // regardless of what it says, so content="null" was breaking every login here.
-  html = html.replace('</head>', '<meta id="cp-slug" content=""></head>');
+  html = html.replace('</head>', `<meta id="cp-slug" content=""><meta id="cp-tenant-id" content="${selfTenant?.id ?? ''}"></head>`);
   return c.html(html);
 });
 
@@ -181,7 +181,7 @@ app.get('/:slug', async (c) => {
     .replace(/<meta name="apple-mobile-web-app-title"[^>]*>/, `<meta name="apple-mobile-web-app-title" content="${tenantName}">`)
     .replace('<div class="brand-mark"></div>', `<div class="brand-mark">${logoTag}</div>`)
     .replace('<div id="loginTitle">ClearPanel</div>', `<div id="loginTitle">${tenantName}</div>`);
-  html = html.replace('</head>', `<meta id="cp-slug" content="${slug}"></head>`);
+  html = html.replace('</head>', `<meta id="cp-slug" content="${slug}"><meta id="cp-tenant-id" content="${tenant.id}"></head>`);
   return c.html(html);
 });
 
