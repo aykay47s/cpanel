@@ -1483,8 +1483,8 @@ tr.clickable:active{background:rgba(255,255,255,.05);}
 <div id="onboardingScreen" class="hidden" style="position:fixed;inset:0;z-index:500;display:flex;align-items:center;justify-content:center;padding:24px;background:linear-gradient(135deg, #07070a, #0a0a10);">
   <div class="panel p fade-up" style="max-width:360px;width:100%;">
     <div class="crest" style="margin-bottom:16px;"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5"><path d="M12 2l7 4v6c0 5-3.5 8-7 10-3.5-2-7-5-7-10V6l7-4z"/></svg></div>
-    <h2 style="font-size:18px;text-align:center;margin-bottom:4px;">Welcome, ${me?.name || 'Friend'}!</h2>
-    <p style="font-size:12.5px;color:var(--text-dim);text-align:center;margin-bottom:20px;line-height:1.6;">Before you can use ClearPanel, you need a username and Telegram account linked. Takes 30 seconds.</p>
+    <h2 style="font-size:18px;text-align:center;margin-bottom:4px;">Welcome!</h2>
+    <p style="font-size:12.5px;color:var(--text-dim);text-align:center;margin-bottom:20px;line-height:1.6;">Before you can use ClearPanel, set a username and link your Telegram. Takes 30 seconds.</p>
     
     <div class="field">
       <label>Your Username</label>
