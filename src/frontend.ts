@@ -599,6 +599,16 @@ function xpToast(amount, label) {
   document.body.appendChild(el);
   setTimeout(() => el.remove(), 1950);
 }
+// A brief green checkmark burst for landing a successful call — separate from
+// the XP toast (which is about the number) and the rank-up overlay (which is
+// about a level milestone). This one is purely "that call went well."
+function celebrateSuccessfulCall() {
+  const el = document.createElement('div');
+  el.className = 'success-burst';
+  el.innerHTML = '<div class="ring"></div><div class="check"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7"/></svg></div>';
+  document.body.appendChild(el);
+  setTimeout(() => { el.classList.add('leaving'); setTimeout(() => el.remove(), 320); }, 650);
+}
 function showNoteToast(d) {
   // Live note toast shown to admins/managers when a caller submits a note
   const existing = document.getElementById('noteToastEl');
@@ -735,6 +745,17 @@ function avatarHtml(person, size) {
   const color = avatarColor((person && person.id) || name);
   const fontSize = Math.round(size * 0.4);
   return '<div style="width:' + size + 'px;height:' + size + 'px;border-radius:50%;background:' + color + ';display:flex;align-items:center;justify-content:center;font-size:' + fontSize + 'px;font-weight:700;color:#fff;flex-shrink:0;letter-spacing:-.02em;box-shadow:0 0 0 2px rgba(255,255,255,.08), 0 2px 6px rgba(0,0,0,.3);">' + initials(name) + '</div>';
+}
+// The person's real photo (or initials) is always the primary image — a rank
+// never replaces it. The rank shows as a small badge overlapping the bottom
+// right corner instead, same pattern as a platform status indicator.
+function avatarWithRankHtml(person, size, rk) {
+  const badgeSize = Math.round(size * 0.46);
+  const badgeFont = Math.round(badgeSize * 0.52);
+  return '<div style="position:relative;width:' + size + 'px;height:' + size + 'px;flex-shrink:0;">'
+    + avatarHtml(person, size)
+    + '<div style="position:absolute;right:-3px;bottom:-3px;width:' + badgeSize + 'px;height:' + badgeSize + 'px;border-radius:50%;background:linear-gradient(160deg,' + rk.c2 + ',' + rk.c1 + ' 60%);display:flex;align-items:center;justify-content:center;font-size:' + badgeFont + 'px;box-shadow:0 0 0 3px var(--bg-2),0 2px 6px rgba(0,0,0,.4);line-height:1;">' + (rk.icon || '📞') + '</div>'
+    + '</div>';
 }
 
 // Shared lead-category badge (used on both the admin leads table and caller-facing
@@ -1074,6 +1095,12 @@ label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spa
 .stat-box .num{font-size:29px;font-weight:800;font-family:'Bricolage Grotesque',sans-serif;letter-spacing:-.03em;line-height:1.1;}
 .stat-box .lbl{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.5px;margin-top:5px;font-weight:600;}
 .stat-box.accent{border-color:var(--gold-glow);}
+/* ---- Stat tile v2: icon chip + number, used on the caller home screen ---- */
+.stat-tile{padding:16px 14px;border-radius:16px;position:relative;overflow:hidden;transition:transform .25s var(--ease-spring);}
+.stat-tile:active{transform:scale(.97);}
+.stat-tile .icon-chip{width:30px;height:30px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:15px;margin-bottom:10px;}
+.stat-tile .num{font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:800;letter-spacing:-.03em;line-height:1;}
+.stat-tile .lbl{font-size:10px;color:var(--text-faint);font-weight:700;letter-spacing:.04em;text-transform:uppercase;margin-top:4px;}
 .section-title{font-size:12px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.8px;margin:28px 0 14px;font-weight:600;}
 .p{padding:24px;margin-bottom:18px;}
 
@@ -1194,7 +1221,7 @@ tr.clickable:active{background:rgba(255,255,255,.05);}
 .script-item .content{font-size:12.5px;color:var(--text-dim);line-height:1.5;white-space:pre-wrap;}
 
 /* ---- Caller rank emblems — circular badges ---- */
-.rank-emblem{position:relative;display:flex;align-items:center;justify-content:center;border-radius:50%;background:linear-gradient(160deg,var(--rc2),var(--rc1) 60%);flex-shrink:0;box-shadow:0 0 12px var(--rc1)55;}
+.rank-emblem{position:relative;display:flex;align-items:center;justify-content:center;border-radius:50%;background:linear-gradient(160deg,var(--rc2),var(--rc1) 60%);flex-shrink:0;box-shadow:0 0 12px var(--rc1)55;overflow:hidden;}
 .rank-emblem::after{content:'';position:absolute;inset:0;border-radius:50%;background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.35) 50%,transparent 68%);transform:translateX(-120%);animation:emblemSheen 4.5s ease-in-out infinite;}
 @keyframes emblemSheen{0%,60%{transform:translateX(-120%);}85%,100%{transform:translateX(120%);}}
 .rank-emblem .div{position:relative;z-index:1;line-height:1;}
@@ -1206,6 +1233,21 @@ tr.clickable:active{background:rgba(255,255,255,.05);}
 .rankup-overlay .t1{font-family:'Geist Mono',monospace;font-size:11px;letter-spacing:.5em;text-transform:uppercase;color:var(--violet-bright);animation:fadeUp .5s ease both .4s;}
 .rankup-overlay .t2{font-family:'Bricolage Grotesque',sans-serif;font-size:34px;font-weight:800;letter-spacing:-.02em;animation:fadeUp .5s ease both .55s;}
 .rankup-overlay .t3{font-size:12.5px;color:var(--text-dim);animation:fadeUp .5s ease both .7s;}
+/* ---- Successful call celebration: a brief, satisfying burst — not a full
+   rank-up-scale interruption, just enough visual reward to make landing a
+   sale feel good, then it gets out of the way in under a second. ---- */
+.success-burst{position:fixed;inset:0;z-index:280;display:flex;align-items:center;justify-content:center;pointer-events:none;}
+.success-burst .ring{width:120px;height:120px;border-radius:50%;background:radial-gradient(circle,rgba(34,197,94,.35) 0%,rgba(34,197,94,0) 70%);animation:successRing .7s cubic-bezier(.16,1,.3,1) both;}
+.success-burst .check{position:absolute;width:88px;height:88px;border-radius:50%;background:linear-gradient(160deg,#4ade80,#16a34a);display:flex;align-items:center;justify-content:center;box-shadow:0 0 40px rgba(34,197,94,.5),0 8px 30px rgba(0,0,0,.4);animation:successPop .55s cubic-bezier(.16,1,.3,1) both;overflow:hidden;}
+.success-burst .check::after{content:'';position:absolute;inset:0;background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.55) 50%,transparent 68%);transform:translateX(-140%);animation:successSheen .7s ease-out .25s both;}
+.success-burst .check svg{width:40px;height:40px;stroke:#fff;stroke-width:3;fill:none;position:relative;z-index:1;}
+.success-burst .check svg path{stroke-dasharray:28;stroke-dashoffset:28;animation:successDraw .35s ease-out .2s both;}
+@keyframes successRing{0%{transform:scale(.3);opacity:0;}40%{opacity:1;}100%{transform:scale(2.4);opacity:0;}}
+@keyframes successPop{0%{transform:scale(.2);opacity:0;}55%{transform:scale(1.08);opacity:1;}100%{transform:scale(1);opacity:1;}}
+@keyframes successSheen{0%{transform:translateX(-140%);}100%{transform:translateX(140%);}}
+@keyframes successDraw{to{stroke-dashoffset:0;}}
+.success-burst.leaving{animation:successFade .3s ease both;}
+@keyframes successFade{to{opacity:0;}}
 /* ---- Bank picker (admin categories) ---- */
 .bank-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:10px;margin-top:14px;}
 .bank-card{display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:14px;background:var(--bg-2);border:1px solid var(--border);cursor:pointer;transition:border-color .15s ease, background .15s ease, transform .18s var(--ease-spring);}
