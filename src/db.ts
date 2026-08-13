@@ -7,8 +7,86 @@ let cleanupStarted = false;
 
 const DEFAULT_CALL_TEMPLATE = 'Greeting: Introduce yourself and confirm you\'re speaking with the right person.\nPurpose: Explain why you\'re calling in one clear sentence.\nQualify: Ask about their current situation and needs.\nNext step: Confirm interest and agree on what happens next.';
 
+
+// Categories used to be one global list shared by every tenant on the platform:
+// tenant A renaming or deleting "Barclays" changed it for everyone, and the
+// unique-on-name constraint meant A's colour silently overwrote B's. These are
+// now per-tenant rows. Existing global rows are adopted by the self-tenant.
+const DEFAULT_CATEGORIES: Array<[string, string]> = [
+  ['General', '#9c9184'], ['Priority', '#4f8cff'], ['UK', '#3fa89a'],
+  ['International', '#8b6fc9'], ['Callback', '#c04b3f'],
+  ['Lloyds', '#026a37'], ['Barclays', '#00aeef'], ['HSBC', '#db0011'],
+  ['NatWest', '#5a287d'], ['Santander', '#ec0000'], ['Halifax', '#0e5aa7'],
+  ['TSB', '#0091d4'], ['Nationwide', '#1b3a6b'], ['RBS', '#003087'],
+  ['Metro Bank', '#e2231a'], ['Monzo', '#f15a5a'], ['Starling', '#7433ff'],
+];
+
+async function migrateTenantScoping() {
+  const [self] = await sql`SELECT id FROM tenants WHERE is_self = true LIMIT 1`;
+  if (!self) return;
+
+  // Orphaned pre-migration rows belong to the instance owner, not to whichever
+  // tenant happens to query first.
+  await sql`UPDATE lead_categories SET tenant_id = ${self.id} WHERE tenant_id IS NULL`;
+  await sql`UPDATE clock_sessions cs SET tenant_id = u.tenant_id
+            FROM users u WHERE u.id = cs.user_id AND cs.tenant_id IS NULL`;
+  await sql`UPDATE clock_sessions SET tenant_id = ${self.id} WHERE tenant_id IS NULL`;
+
+  // Swap the global unique(name) for unique(tenant_id, name). Dropping by the
+  // default constraint name; ignore if an older/renamed variant isn't present.
+  try { await sql`ALTER TABLE lead_categories DROP CONSTRAINT IF EXISTS lead_categories_name_key`; } catch {}
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS lead_categories_tenant_name_idx
+            ON lead_categories (tenant_id, name)`;
+
+  await sql`CREATE INDEX IF NOT EXISTS clock_sessions_tenant_idx ON clock_sessions (tenant_id)`;
+  await sql`CREATE INDEX IF NOT EXISTS lead_categories_tenant_idx ON lead_categories (tenant_id)`;
+}
+
+// Give every tenant its own copy of the defaults, including tenants redeemed
+// after this migration ran.
+async function seedLeadCategories() {
+  const tenants = await sql`SELECT id FROM tenants`;
+  for (const t of tenants) {
+    for (const [name, color] of DEFAULT_CATEGORIES) {
+      await sql`INSERT INTO lead_categories (name, color, tenant_id)
+                VALUES (${name}, ${color}, ${t.id})
+                ON CONFLICT (tenant_id, name) DO NOTHING`;
+    }
+  }
+}
+
 export async function ensureDb() {
   if (ready) return;
+
+  // Every boot re-runs the whole idempotent schema block, and Postgres emits a
+  // NOTICE for each "already exists, skipping". That was ~350 lines per start,
+  // which tripped Railway's 500 logs/sec replica cap and DROPPED real log lines
+  // during the exact window a bad deploy would be crashing in. Warnings and
+  // errors still come through; only the "skipping" noise is suppressed.
+  await sql`SET client_min_messages = warning`;
+
+  // MUST come first. `tenants` has no FKs of its own, but half the schema
+  // depends on it: FK columns (telegram_verifications, panel_updates,
+  // license_keys) and ALTER TABLE tenants ADD COLUMN blocks for branding.
+  // It used to sit ~190 lines down, so on a genuinely fresh database the
+  // branding ALTERs hit a missing table, got swallowed by their
+  // `EXCEPTION WHEN OTHERS THEN NULL` wrapper, and boot then died on
+  // `SELECT panel_name FROM tenants`. Production never saw this: every table
+  // already existed, so CREATE TABLE IF NOT EXISTS skipped them and the
+  // ordering never mattered. Invisible on the live box, fatal on any new one.
+  await sql`CREATE TABLE IF NOT EXISTS tenants (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    slug TEXT UNIQUE,
+    url TEXT NOT NULL,
+    plan TEXT DEFAULT 'trial',
+    price_paid NUMERIC DEFAULT 0,
+    status TEXT DEFAULT 'active',
+    is_self BOOLEAN DEFAULT false,
+    notes TEXT,
+    expires_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`;
 
   await sql`CREATE TABLE IF NOT EXISTS users (
     id SERIAL PRIMARY KEY,
@@ -193,19 +271,6 @@ export async function ensureDb() {
   // endpoint, not stored/duplicated - this table just tracks who exists and what
   // they're paying, revenue is entered manually since there's no payment processor
   // wired up yet.
-  await sql`CREATE TABLE IF NOT EXISTS tenants (
-    id SERIAL PRIMARY KEY,
-    name TEXT NOT NULL,
-    slug TEXT UNIQUE,
-    url TEXT NOT NULL,
-    plan TEXT DEFAULT 'trial',
-    price_paid NUMERIC DEFAULT 0,
-    status TEXT DEFAULT 'active',
-    is_self BOOLEAN DEFAULT false,
-    notes TEXT,
-    expires_at TIMESTAMPTZ,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
-  )`;
 
   // Generated by the operator after a customer pays through the store; the customer
   // redeems it once to provision their own isolated call center - own tenant row,
@@ -285,6 +350,7 @@ export async function ensureDb() {
   await sql`CREATE TABLE IF NOT EXISTS clock_sessions (
     id SERIAL PRIMARY KEY,
     user_id INTEGER REFERENCES users(id),
+    tenant_id INTEGER REFERENCES tenants(id),
     clocked_in_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     clocked_out_at TIMESTAMPTZ,
     duration_seconds INTEGER
@@ -292,7 +358,8 @@ export async function ensureDb() {
 
   await sql`CREATE TABLE IF NOT EXISTS lead_categories (
     id SERIAL PRIMARY KEY,
-    name TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    tenant_id INTEGER REFERENCES tenants(id),
     color TEXT NOT NULL DEFAULT '#4f8cff',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`;
@@ -342,6 +409,11 @@ export async function ensureDb() {
     `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ`,
     `ALTER TABLE inbound_calls ADD COLUMN IF NOT EXISTS provider TEXT NOT NULL DEFAULT 'twilio'`,
     `ALTER TABLE inbound_calls ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id)`,
+    // lead_categories and clock_sessions were platform-global: every tenant read,
+    // edited and deleted the same rows. Adding the column here; the backfill and
+    // the unique-constraint swap happen below, after tenants is guaranteed seeded.
+    `ALTER TABLE lead_categories ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id)`,
+    `ALTER TABLE clock_sessions ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id)`,
     // --- 3CX Call Control API ---
     // Where 3CX should actually ring this person. Preferred over call_phone for
     // 3CX routing: routing to an internal extension stays on the PBX, while an
@@ -395,23 +467,6 @@ export async function ensureDb() {
       vonage_connected: false,
     });
     await sql`INSERT INTO settings (key, value) VALUES ('telephony_config', ${defaultTelephony}) ON CONFLICT (key) DO NOTHING`;
-  }
-  const [catRow] = await sql`SELECT 1 FROM lead_categories LIMIT 1`;
-  if (!catRow) {
-    await sql`INSERT INTO lead_categories (name, color) VALUES
-      ('General', '#9c9184'), ('Priority', '#4f8cff'), ('UK', '#3fa89a'), ('International', '#8b6fc9'), ('Callback', '#c04b3f'),
-      ('Lloyds', '#026a37'), ('Barclays', '#00aeef'), ('HSBC', '#db0011'), ('NatWest', '#5a287d'),
-      ('Santander', '#ec0000'), ('Halifax', '#0e5aa7'), ('TSB', '#0091d4'), ('Nationwide', '#1b3a6b'),
-      ('RBS', '#003087'), ('Metro Bank', '#e2231a'), ('Monzo', '#f15a5a'), ('Starling', '#7433ff')
-      ON CONFLICT (name) DO NOTHING`;
-  } else {
-    // Add the bank categories even if General/Priority/etc already existed from an
-    // earlier deploy — don't skip them just because the table wasn't empty.
-    await sql`INSERT INTO lead_categories (name, color) VALUES
-      ('Lloyds', '#026a37'), ('Barclays', '#00aeef'), ('HSBC', '#db0011'), ('NatWest', '#5a287d'),
-      ('Santander', '#ec0000'), ('Halifax', '#0e5aa7'), ('TSB', '#0091d4'), ('Nationwide', '#1b3a6b'),
-      ('RBS', '#003087'), ('Metro Bank', '#e2231a'), ('Monzo', '#f15a5a'), ('Starling', '#7433ff')
-      ON CONFLICT (name) DO NOTHING`;
   }
 
   // First admin account ever created on an instance gets super-admin - the person
@@ -492,8 +547,7 @@ export async function ensureDb() {
   // don't remember the URL. A username is unique per-tenant the same way, but
   // globally SEARCHABLE via a case-insensitive index below, so "find my panel"
   // can resolve a username to the one tenant it actually belongs to.
-  await sql.unsafe(`DO $$ BEGIN ALTER TABLE users ADD CONSTRAINT users_tenant_username_unique UNIQUE (tenant_id, username); EXCEPTION WHEN OTHERS THEN NULL; END $$;`);
-  await sql`CREATE INDEX IF NOT EXISTS users_username_lookup ON users (lower(username)) WHERE username IS NOT NULL`;
+  // (moved below — these depend on users.username existing first)
 
   // In-app update system: admin can push text updates to all callers in their
   // tenant. A LIVE update shows a persistent banner across all screens until
@@ -530,6 +584,13 @@ export async function ensureDb() {
   for (const stmt of usernameAlters) {
     await sql.unsafe(`DO $$ BEGIN ${stmt}; EXCEPTION WHEN OTHERS THEN NULL; END $$;`);
   }
+
+  // Moved here from ~25 lines above the ALTER that creates users.username.
+  // The UNIQUE constraint was silently swallowed by its EXCEPTION wrapper on a
+  // fresh DB, and the CREATE INDEX — which has no such wrapper — hard-failed
+  // boot with 'column "username" does not exist'.
+  await sql.unsafe(`DO $$ BEGIN ALTER TABLE users ADD CONSTRAINT users_tenant_username_unique UNIQUE (tenant_id, username); EXCEPTION WHEN OTHERS THEN NULL; END $$;`);
+  await sql`CREATE INDEX IF NOT EXISTS users_username_lookup ON users (lower(username)) WHERE username IS NOT NULL`;
   // CRITICAL FIX: telephony_config, twilio_auth_token, threecx_client_secret,
   // vonage_api_secret, vonage_private_key, and call_template were all stored as
   // single GLOBAL settings rows shared by every tenant on the platform — any
@@ -573,6 +634,12 @@ export async function ensureDb() {
       try { await sql`DELETE FROM chat_messages WHERE expires_at IS NOT NULL AND expires_at < now()`; } catch {}
     }, 30000);
   }
+
+  // Runs last: both need the tenants table populated (self-tenant is created
+  // further up in this function), and the category seed needs the unique index
+  // that migrateTenantScoping installs.
+  await migrateTenantScoping();
+  await seedLeadCategories();
 
   ready = true;
 }

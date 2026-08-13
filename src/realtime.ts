@@ -56,10 +56,15 @@ export async function notify(userId: number, type: string, content: string, rela
   return row;
 }
 
-export async function notifyRole(role: 'admin' | 'caller' | 'finisher' | 'all', type: string, content: string, relatedLeadId?: number, excludeUserId?: number, tenantId?: number) {
+// tenantId is REQUIRED, not optional. It used to fall back to an unscoped
+// `SELECT id FROM users`, i.e. notify every user on every tenant. Nothing calls
+// it that way today, but the fallback existing at all is how the SSE broadcast
+// leak happened — one new route forgetting one argument.
+export async function notifyRole(role: 'admin' | 'caller' | 'finisher' | 'all', type: string, content: string, relatedLeadId: number | undefined, excludeUserId: number | undefined, tenantId: number) {
+  if (tenantId == null) throw new Error('notifyRole requires a tenantId');
   const users = role === 'all'
-    ? (tenantId ? await sql`SELECT id FROM users WHERE tenant_id = ${tenantId}` : await sql`SELECT id FROM users`)
-    : (tenantId ? await sql`SELECT id FROM users WHERE role = ${role} AND tenant_id = ${tenantId}` : await sql`SELECT id FROM users WHERE role = ${role}`);
+    ? await sql`SELECT id FROM users WHERE tenant_id = ${tenantId}`
+    : await sql`SELECT id FROM users WHERE role = ${role} AND tenant_id = ${tenantId}`;
   for (const u of users) {
     if (excludeUserId && u.id === excludeUserId) continue;
     await notify(u.id, type, content, relatedLeadId);

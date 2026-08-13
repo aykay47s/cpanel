@@ -233,28 +233,44 @@ users.get('/api/clock/status', async (c) => {
 });
 
 users.get('/api/admin/clock-sessions', requireRole('admin'), async (c) => {
+  const user = c.get('user');
   const userId = c.req.query('userId');
+  // Scoped on the JOINed users row rather than clock_sessions.tenant_id alone:
+  // that column is backfilled, but joining through the user makes the scope
+  // correct even for a session row written before the backfill lands.
   const rows = userId
-    ? await sql`SELECT clock_sessions.*, users.name FROM clock_sessions LEFT JOIN users ON users.id = clock_sessions.user_id WHERE clock_sessions.user_id = ${userId} ORDER BY clocked_in_at DESC LIMIT 100`
-    : await sql`SELECT clock_sessions.*, users.name FROM clock_sessions LEFT JOIN users ON users.id = clock_sessions.user_id ORDER BY clocked_in_at DESC LIMIT 100`;
+    ? await sql`SELECT clock_sessions.*, users.name FROM clock_sessions
+        JOIN users ON users.id = clock_sessions.user_id
+        WHERE clock_sessions.user_id = ${userId} AND users.tenant_id = ${user.tenant_id}
+        ORDER BY clocked_in_at DESC LIMIT 100`
+    : await sql`SELECT clock_sessions.*, users.name FROM clock_sessions
+        JOIN users ON users.id = clock_sessions.user_id
+        WHERE users.tenant_id = ${user.tenant_id}
+        ORDER BY clocked_in_at DESC LIMIT 100`;
   return c.json({ data: rows });
 });
 
-users.get('/api/lead-categories', async (c) => {
-  const rows = await sql`SELECT * FROM lead_categories ORDER BY name ASC`;
+users.get('/api/lead-categories', requireAnyStaff, async (c) => {
+  const user = c.get('user');
+  const rows = await sql`SELECT * FROM lead_categories WHERE tenant_id = ${user.tenant_id} ORDER BY name ASC`;
   return c.json({ data: rows });
 });
 users.post('/api/admin/lead-categories', requireRole('admin'), async (c) => {
+  const user = c.get('user');
   const { name, color, domain } = await c.req.json().catch(() => ({}));
   if (!name) return bad(c, 'Name required');
   // ON CONFLICT: re-adding a bank from the picker updates its domain/colour
   // instead of erroring on the unique name.
-  const [row] = await sql`INSERT INTO lead_categories (name, color, domain) VALUES (${name}, ${color || '#4f8cff'}, ${domain || null})
-    ON CONFLICT (name) DO UPDATE SET color = EXCLUDED.color, domain = EXCLUDED.domain RETURNING *`;
+  const [row] = await sql`INSERT INTO lead_categories (name, color, domain, tenant_id)
+    VALUES (${name}, ${color || '#4f8cff'}, ${domain || null}, ${user.tenant_id})
+    ON CONFLICT (tenant_id, name) DO UPDATE SET color = EXCLUDED.color, domain = EXCLUDED.domain RETURNING *`;
   return c.json({ data: row });
 });
 users.delete('/api/admin/lead-categories/:id', requireRole('admin'), async (c) => {
-  await sql`DELETE FROM lead_categories WHERE id = ${c.req.param('id')}`;
+  const user = c.get('user');
+  const rows = await sql`DELETE FROM lead_categories
+    WHERE id = ${c.req.param('id')} AND tenant_id = ${user.tenant_id} RETURNING id`;
+  if (!rows.length) return bad(c, 'Not found', 404);
   return c.json({ ok: true });
 });
 

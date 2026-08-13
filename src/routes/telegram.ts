@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { createHash, timingSafeEqual as nodeTimingSafeEqual } from 'crypto';
 import type { Context, Next } from 'hono';
 import { sql } from '../db';
 import { authenticate, requireAdmin, requireAnyStaff } from '../auth';
@@ -22,7 +23,20 @@ import {
 
 export const telegram = new Hono();
 
-const MASTER_PASSWORD = 'Clearpanelo';
+// This repo is public. A literal password here is readable by anyone on earth,
+// and it gates /master — which sees every tenant. Must come from the environment.
+// Startup refuses to serve the master route at all if it's unset, rather than
+// silently falling back to a default that would be just as public as the old one.
+
+// Constant-time string compare. Hashes both sides first so differing lengths
+// don't short-circuit and reveal the real length.
+function timingSafeEqual(a: string, b: string): boolean {
+  const ha = createHash('sha256').update(a).digest();
+  const hb = createHash('sha256').update(b).digest();
+  return nodeTimingSafeEqual(ha, hb);
+}
+
+const MASTER_PASSWORD = process.env.MASTER_PASSWORD || '';
 // Master session tokens live in memory. Short-lived; a restart signs you out
 // and that's fine — the /master panel is a low-frequency operator tool.
 const masterSessions = new Map<string, { createdAt: number }>();
@@ -356,7 +370,13 @@ telegram.post('/api/master/login', async (c) => {
     const mins = Math.ceil((new Date(lock.locked_until).getTime() - Date.now()) / 60000);
     return c.json({ error: `Locked out. Try again in ${mins} minutes.` }, 429);
   }
-  if (password !== MASTER_PASSWORD) {
+  if (!MASTER_PASSWORD) {
+    console.error('[master] MASTER_PASSWORD is not set — refusing all master logins');
+    return c.json({ error: 'Master panel is not configured' }, 503);
+  }
+  // Length-independent comparison so a wrong guess takes the same time as a
+  // right one; avoids leaking the password a character at a time.
+  if (!timingSafeEqual(password || '', MASTER_PASSWORD)) {
     const newCount = (lock?.fail_count || 0) + 1;
     const lockedUntil = newCount >= 3 ? new Date(Date.now() + 15 * 60 * 1000).toISOString() : null;
     await sql`INSERT INTO master_login_attempts (ip, fail_count, locked_until) VALUES (${ip}, ${newCount}, ${lockedUntil})

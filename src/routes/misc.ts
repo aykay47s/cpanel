@@ -37,7 +37,9 @@ misc.get('/api/tenant-stats', async (c) => {
   const [leads] = await sql`SELECT COUNT(*)::int as n FROM leads WHERE tenant_id = ${tid}`;
   const [successful] = await sql`SELECT COUNT(*)::int as n FROM leads WHERE status IN ('successful_call','completed') AND tenant_id = ${tid}`;
   const [onlineNow] = await sql`SELECT COUNT(*)::int as n FROM users WHERE clocked_in = true AND tenant_id = ${tid}`;
-  const [brandRow] = await sql`SELECT value FROM settings WHERE key = 'panel_name'`;
+  // Was reading the one global settings row, so every tenant's dashboard showed
+  // the self-tenant's brand. Same class of bug as the manifest.json one.
+  const [brandRow] = await sql`SELECT panel_name as value FROM tenants WHERE id = ${tid}`;
   return c.json({
     data: {
       panel_name: brandRow?.value || 'ClearPanel',
@@ -488,15 +490,24 @@ misc.post('/api/admin/goal', requireRole('admin'), async (c) => {
 
 misc.get('/api/events', async (c) => {
   const user = await authenticate(c);
-  const userId = user?.id || 0;
-  const tenantId = user?.tenant_id ?? null;
+  // Anonymous clients used to be accepted and registered with tenantId=null,
+  // holding an open stream and forming a null-tenant bucket that any
+  // broadcast(..., null) would reach. There is no reason to stream events to
+  // someone who isn't logged in.
+  if (!user) return c.json({ error: 'Unauthorized' }, 401);
+  const userId = user.id;
+  const tenantId = user.tenant_id;
   return new Response(
     new ReadableStream({
       start(controller) {
         const encoder = new TextEncoder();
         const client = registerClient(userId, tenantId, (msg: string) => controller.enqueue(encoder.encode(msg)));
         client.write(': connected\n\n');
-        const keepAlive = setInterval(() => { try { client.write(': ping\n\n'); } catch {} }, 25000);
+        // Railway's edge proxy drops idle connections at ~10s. With a 25s ping
+        // every stream died and EventSource reconnected, forever: the HTTP log
+        // was nothing but /api/events at 8-11s each, and every reconnect re-ran
+        // auth + a tenant lookup. 5s sits comfortably under the proxy timeout.
+        const keepAlive = setInterval(() => { try { client.write(': ping\n\n'); } catch {} }, 5000);
         c.req.raw.signal.addEventListener('abort', () => {
           clearInterval(keepAlive);
           unregisterClient(client);
