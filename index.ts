@@ -10,8 +10,10 @@ import { misc } from './src/routes/misc';
 import { CONTROL_PAGE } from './src/control';
 import { telephony } from './src/routes/telephony';
 import { tenancy } from './src/routes/tenancy';
+import { telegram } from './src/routes/telegram';
 import { STORE_PAGE } from './src/store';
 import { REDEEM_PAGE } from './src/redeem';
+import { MASTER_PAGE } from './src/master';
 import { page } from './src/frontend';
 import * as threecx from './src/threecx';
 
@@ -45,6 +47,12 @@ app.route('/', scripts);
 app.route('/', misc);
 app.route('/', telephony);
 app.route('/', tenancy);
+app.route('/', telegram);
+
+app.get('/master', (c) => {
+  c.header('Cache-Control', 'no-store, no-cache, must-revalidate');
+  return c.html(MASTER_PAGE);
+});
 
 app.get('/sw.js', async (c) => {
   const file = Bun.file('./public/sw.js');
@@ -141,6 +149,20 @@ app.get('/:slug', async (c) => {
 // the panel itself from serving.
 ensureDb()
   .then(() => threecx.start())
+  .then(async () => {
+    // Point the master Telegram bot at our webhook. Non-fatal if it fails or
+    // if the token isn't set yet — the operator can (re)set it any time by
+    // restarting the server after adding the env var.
+    try {
+      const { setMasterWebhook, isMasterBotConfigured } = await import('./src/telegram');
+      if (isMasterBotConfigured()) {
+        const base = process.env.PUBLIC_URL || 'https://fraptiseacdivr.up.railway.app';
+        const r = await setMasterWebhook(base);
+        if (!r.ok) console.warn('[telegram] webhook install failed:', r.error);
+        else console.log('[telegram] master webhook installed');
+      }
+    } catch (e: any) { console.warn('[telegram] webhook setup skipped:', e?.message); }
+  })
   .catch((err) => console.error('[3cx] startup skipped:', err?.message));
 
 export default {

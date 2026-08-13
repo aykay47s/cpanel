@@ -83,6 +83,72 @@ export async function ensureDb() {
   )`;
   await sql`CREATE INDEX IF NOT EXISTS xp_events_user_time ON xp_events (user_id, created_at)`;
 
+  // ============ TELEGRAM ============
+  // Every caller and admin can (and by default must) link a Telegram account so
+  // ClearPanel (via the master bot) — and optionally their own tenant's bot —
+  // can reach them for account matters and broadcasts. Verification uses a
+  // short-lived 6-digit code the user pastes into the bot chat; the bot's
+  // webhook matches the code and stores the chat_id. No OTPs from other
+  // services ever touch this system; codes are single-use and expire in 5 min.
+  const telegramAlters = [
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_username TEXT`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_chat_id_master BIGINT`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_chat_id_tenant BIGINT`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_verified_master_at TIMESTAMPTZ`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_verified_tenant_at TIMESTAMPTZ`,
+    `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS telegram_bot_token TEXT`,
+    `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS telegram_bot_username TEXT`,
+    `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS telegram_webhook_secret TEXT`,
+    `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS telegram_require_verification BOOLEAN DEFAULT true`,
+  ];
+  for (const stmt of telegramAlters) {
+    await sql.unsafe(`DO $$ BEGIN ${stmt}; EXCEPTION WHEN OTHERS THEN NULL; END $$;`);
+  }
+  // Pending verification codes — memory would work, but a table survives restarts
+  // and lets multiple server instances agree. Rows self-clean via expires_at.
+  await sql`CREATE TABLE IF NOT EXISTS telegram_verifications (
+    id SERIAL PRIMARY KEY,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    telegram_username TEXT NOT NULL,
+    code TEXT NOT NULL,
+    scope TEXT NOT NULL,
+    tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    expires_at TIMESTAMPTZ NOT NULL,
+    consumed_at TIMESTAMPTZ
+  )`;
+  await sql`CREATE INDEX IF NOT EXISTS tgv_code ON telegram_verifications (code) WHERE consumed_at IS NULL`;
+  await sql`CREATE INDEX IF NOT EXISTS tgv_user ON telegram_verifications (user_id, scope)`;
+  // Log of every DM we send, so operator can see what landed and what bounced.
+  await sql`CREATE TABLE IF NOT EXISTS telegram_broadcasts (
+    id SERIAL PRIMARY KEY,
+    sender_scope TEXT NOT NULL,
+    sender_tenant_id INTEGER REFERENCES tenants(id) ON DELETE SET NULL,
+    audience_label TEXT NOT NULL,
+    message TEXT NOT NULL,
+    total_recipients INTEGER DEFAULT 0,
+    sent_count INTEGER DEFAULT 0,
+    blocked_count INTEGER DEFAULT 0,
+    failed_count INTEGER DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`;
+  await sql`CREATE TABLE IF NOT EXISTS telegram_deliveries (
+    id SERIAL PRIMARY KEY,
+    broadcast_id INTEGER REFERENCES telegram_broadcasts(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    status TEXT NOT NULL,
+    error TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`;
+  // Rate limit for /master login attempts. Wipes on server restart which is
+  // fine — a real attacker sees a fresh 3-strikes window at worst.
+  await sql`CREATE TABLE IF NOT EXISTS master_login_attempts (
+    ip TEXT PRIMARY KEY,
+    fail_count INTEGER DEFAULT 0,
+    locked_until TIMESTAMPTZ
+  )`;
+
+
   // Inbound calls received through a connected Twilio number — logged whether
   // answered, missed, or abandoned in the menu, so admins have visibility even
   // before this becomes a full call center feature.

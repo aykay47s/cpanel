@@ -1,0 +1,388 @@
+import { Hono } from 'hono';
+import type { Context, Next } from 'hono';
+import { sql } from '../db';
+import { authenticate, requireAdmin, requireAnyStaff } from '../auth';
+import {
+  MASTER_BOT_USERNAME,
+  isMasterBotConfigured,
+  getMasterToken,
+  sendTelegramDM,
+  sendMasterDM,
+  normalizeTelegramUsername,
+  createVerification,
+  consumeVerificationCode,
+  tgApi,
+} from '../telegram';
+
+export const telegram = new Hono();
+
+const MASTER_PASSWORD = 'Clearpanelo';
+// Master session tokens live in memory. Short-lived; a restart signs you out
+// and that's fine — the /master panel is a low-frequency operator tool.
+const masterSessions = new Map<string, { createdAt: number }>();
+const MASTER_SESSION_TTL_MS = 4 * 60 * 60 * 1000; // 4 hours
+
+function makeSessionToken(): string {
+  const bytes = new Uint8Array(24);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+}
+function isMasterSessionValid(token: string | undefined | null): boolean {
+  if (!token) return false;
+  const s = masterSessions.get(token);
+  if (!s) return false;
+  if (Date.now() - s.createdAt > MASTER_SESSION_TTL_MS) {
+    masterSessions.delete(token);
+    return false;
+  }
+  return true;
+}
+async function requireMaster(c: Context, next: Next) {
+  const token = c.req.header('x-master-token') || c.req.query('mt');
+  if (!isMasterSessionValid(token)) return c.json({ error: 'Unauthorized' }, 401);
+  await next();
+}
+
+// ============ VERIFICATION (called from within the app, by a logged-in user) ============
+// User picks a scope: 'master' (link to ClearPanel's master bot) or 'tenant'
+// (link to their tenant's own bot, if configured). Returns the code + the bot
+// deep-link URL. The client shows both, plus a Copy button and an Open Telegram
+// button, and polls /status until the webhook confirms.
+
+telegram.post('/api/telegram/start-verification', requireAnyStaff, async (c) => {
+  const user = c.get('user');
+  const { username, scope } = await c.req.json().catch(() => ({}));
+  const cleanUsername = normalizeTelegramUsername(username || '');
+  if (!cleanUsername || cleanUsername.length < 3) return c.json({ error: 'Enter a valid Telegram username' }, 400);
+  const s = scope === 'tenant' ? 'tenant' : 'master';
+  if (s === 'master' && !isMasterBotConfigured()) return c.json({ error: 'ClearPanel bot not configured yet — set TELEGRAM_BOT_TOKEN.' }, 400);
+  let tenantBotUsername: string | null = null;
+  if (s === 'tenant') {
+    const [t] = await sql`SELECT telegram_bot_token, telegram_bot_username FROM tenants WHERE id = ${user.tenant_id}`;
+    if (!t?.telegram_bot_token) return c.json({ error: "Your tenant hasn't set up its own Telegram bot yet." }, 400);
+    tenantBotUsername = t.telegram_bot_username || null;
+  }
+  const { code, expiresAt } = await createVerification(user.id, cleanUsername, s, s === 'tenant' ? user.tenant_id : null);
+  await sql`UPDATE users SET telegram_username = ${cleanUsername} WHERE id = ${user.id} AND (telegram_username IS NULL OR telegram_username = '')`;
+  const botUsername = s === 'master' ? MASTER_BOT_USERNAME : (tenantBotUsername || 'unknown');
+  return c.json({
+    data: {
+      code,
+      expires_at: expiresAt.toISOString(),
+      bot_username: botUsername,
+      deep_link: `https://t.me/${botUsername}?start=${code}`,
+      scope: s,
+    },
+  });
+});
+
+// Polled by the verification screen every ~2s to auto-advance the moment the
+// bot's webhook has stamped the chat_id on this user.
+telegram.get('/api/telegram/status', requireAnyStaff, async (c) => {
+  const user = c.get('user');
+  const [row] = await sql`SELECT telegram_username, telegram_chat_id_master, telegram_chat_id_tenant,
+    telegram_verified_master_at, telegram_verified_tenant_at FROM users WHERE id = ${user.id}`;
+  return c.json({ data: row || {} });
+});
+
+// ============ WEBHOOKS ============
+// Telegram POSTs updates here. We only care about text messages; if the text
+// matches an unconsumed 6-digit code we stamp the user, DM back a success
+// message, and (if start-payload was used) return early. Everything else the
+// bot receives gets a polite "hi, you'll only hear from us for account matters"
+// so nobody wonders why they DMed a bot into the void.
+async function handleTelegramUpdate(
+  update: any,
+  scope: 'master' | 'tenant',
+  tenantId: number | null,
+  botToken: string,
+): Promise<void> {
+  const msg = update?.message;
+  if (!msg || !msg.text) return;
+  const chatId = msg.chat?.id;
+  const fromUsername = (msg.from?.username || '').toLowerCase();
+  const text = String(msg.text).trim();
+  // Accept either the raw code, "/start <code>" (deep link), or a code inside
+  // any longer message. First 6 consecutive digits wins.
+  const codeMatch = text.match(/\d{6}/);
+  if (!codeMatch) {
+    if (chatId) await sendTelegramDM(botToken, chatId, "Hey! I'm the ClearPanel verification bot. Paste your 6-digit code here to link your account.");
+    return;
+  }
+  const consumed = await consumeVerificationCode(codeMatch[0], scope, tenantId);
+  if (!consumed) {
+    if (chatId) await sendTelegramDM(botToken, chatId, "That code isn't valid (or it expired). Head back to ClearPanel and generate a new one.");
+    return;
+  }
+  if (scope === 'master') {
+    await sql`UPDATE users SET telegram_chat_id_master = ${chatId}, telegram_verified_master_at = now(),
+      telegram_username = COALESCE(telegram_username, ${fromUsername || null}) WHERE id = ${consumed.userId}`;
+    await sendTelegramDM(botToken, chatId, `✅ Verified with ClearPanel. You'll hear from us here for account and product updates.`);
+  } else {
+    await sql`UPDATE users SET telegram_chat_id_tenant = ${chatId}, telegram_verified_tenant_at = now(),
+      telegram_username = COALESCE(telegram_username, ${fromUsername || null}) WHERE id = ${consumed.userId}`;
+    await sendTelegramDM(botToken, chatId, `✅ Verified. Your call center admin can now reach you here for shift updates and announcements.`);
+  }
+}
+
+telegram.post('/api/telegram/webhook/master', async (c) => {
+  const token = getMasterToken();
+  if (!token) return c.json({ ok: true }); // silently drop — not configured
+  const update = await c.req.json().catch(() => null);
+  if (!update) return c.json({ ok: true });
+  // Fire-and-forget so we return 200 fast — Telegram retries on non-200.
+  handleTelegramUpdate(update, 'master', null, token).catch(() => {});
+  return c.json({ ok: true });
+});
+
+telegram.post('/api/telegram/webhook/tenant/:secret', async (c) => {
+  const secret = c.req.param('secret');
+  const [t] = await sql`SELECT id, telegram_bot_token FROM tenants WHERE telegram_webhook_secret = ${secret} LIMIT 1`;
+  if (!t?.telegram_bot_token) return c.json({ ok: true });
+  const update = await c.req.json().catch(() => null);
+  if (!update) return c.json({ ok: true });
+  handleTelegramUpdate(update, 'tenant', t.id, t.telegram_bot_token).catch(() => {});
+  return c.json({ ok: true });
+});
+
+// ============ TENANT-LEVEL BOT CONFIG (admin only) ============
+// A tenant admin sets a token + username to enable their own bot. We install
+// the webhook against a random secret so tenants can't collide or forge each
+// other. Storing the raw token is unavoidable (we need it to call the API);
+// the master password + admin PIN are the only ways to reach it.
+
+telegram.get('/api/admin/telegram-bot', requireAdmin, async (c) => {
+  const user = c.get('user');
+  const [t] = await sql`SELECT telegram_bot_username, telegram_require_verification,
+    (telegram_bot_token IS NOT NULL) as configured, telegram_webhook_secret
+    FROM tenants WHERE id = ${user.tenant_id}`;
+  return c.json({ data: {
+    configured: !!t?.configured,
+    bot_username: t?.telegram_bot_username || null,
+    require_verification: t?.telegram_require_verification !== false,
+    webhook_url: t?.telegram_webhook_secret ? `${new URL(c.req.url).origin}/api/telegram/webhook/tenant/${t.telegram_webhook_secret}` : null,
+  }});
+});
+
+telegram.post('/api/admin/telegram-bot', requireAdmin, async (c) => {
+  const user = c.get('user');
+  const { bot_token, bot_username, require_verification } = await c.req.json().catch(() => ({}));
+  if (bot_token !== undefined) {
+    if (!bot_token) {
+      await sql`UPDATE tenants SET telegram_bot_token = NULL, telegram_bot_username = NULL, telegram_webhook_secret = NULL WHERE id = ${user.tenant_id}`;
+      return c.json({ ok: true, cleared: true });
+    }
+    if (!String(bot_token).includes(':')) return c.json({ error: 'That does not look like a bot token' }, 400);
+    // Validate by calling getMe against Telegram — no point saving a dead token.
+    const me = await tgApi(bot_token, 'getMe', {});
+    if (!me.ok) return c.json({ error: 'Telegram rejected that token: ' + (me.error || 'unknown') }, 400);
+    const resolvedUsername = (me.result?.username || bot_username || '').replace(/^@/, '');
+    // Random webhook secret so tenants can't guess each other's URLs.
+    const secretBytes = new Uint8Array(24);
+    crypto.getRandomValues(secretBytes);
+    const secret = Array.from(secretBytes, b => b.toString(16).padStart(2, '0')).join('');
+    const webhookUrl = `${new URL(c.req.url).origin}/api/telegram/webhook/tenant/${secret}`;
+    const install = await tgApi(bot_token, 'setWebhook', { url: webhookUrl, allowed_updates: ['message'] });
+    if (!install.ok) return c.json({ error: 'Could not install webhook: ' + (install.error || 'unknown') }, 400);
+    await sql`UPDATE tenants SET telegram_bot_token = ${bot_token}, telegram_bot_username = ${resolvedUsername},
+      telegram_webhook_secret = ${secret} WHERE id = ${user.tenant_id}`;
+  }
+  if (require_verification !== undefined) {
+    await sql`UPDATE tenants SET telegram_require_verification = ${!!require_verification} WHERE id = ${user.tenant_id}`;
+  }
+  return c.json({ ok: true });
+});
+
+// ============ TENANT-LEVEL BROADCAST (admin only, tenant's own bot, tenant's own users) ============
+
+telegram.post('/api/admin/telegram-broadcast', requireAdmin, async (c) => {
+  const user = c.get('user');
+  const { message, audience } = await c.req.json().catch(() => ({}));
+  if (!message || !String(message).trim()) return c.json({ error: 'Message is empty' }, 400);
+  const [t] = await sql`SELECT telegram_bot_token FROM tenants WHERE id = ${user.tenant_id}`;
+  if (!t?.telegram_bot_token) return c.json({ error: 'Set up your tenant bot first.' }, 400);
+  const targets = await resolveTenantAudience(user.tenant_id, audience);
+  return runBroadcast('tenant', user.tenant_id, audience || 'tenant_all', String(message), targets, t.telegram_bot_token, 'tenant', c);
+});
+
+async function resolveTenantAudience(tenantId: number, audience: string): Promise<Array<{ id: number; name: string; chat_id: number }>> {
+  const rows = await sql`SELECT id, name, telegram_chat_id_tenant as chat_id, role FROM users
+    WHERE tenant_id = ${tenantId} AND telegram_chat_id_tenant IS NOT NULL`;
+  return rows.filter((r: any) => {
+    if (audience === 'admins') return r.role === 'admin';
+    if (audience === 'callers') return r.role === 'caller' || r.role === 'finisher';
+    return true;
+  });
+}
+
+// ============ MASTER PANEL (cross-tenant) ============
+
+telegram.post('/api/master/login', async (c) => {
+  const { password } = await c.req.json().catch(() => ({}));
+  const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || c.req.header('x-real-ip') || 'unknown';
+  const [lock] = await sql`SELECT fail_count, locked_until FROM master_login_attempts WHERE ip = ${ip}`;
+  if (lock?.locked_until && new Date(lock.locked_until) > new Date()) {
+    const mins = Math.ceil((new Date(lock.locked_until).getTime() - Date.now()) / 60000);
+    return c.json({ error: `Locked out. Try again in ${mins} minutes.` }, 429);
+  }
+  if (password !== MASTER_PASSWORD) {
+    const newCount = (lock?.fail_count || 0) + 1;
+    const lockedUntil = newCount >= 3 ? new Date(Date.now() + 15 * 60 * 1000).toISOString() : null;
+    await sql`INSERT INTO master_login_attempts (ip, fail_count, locked_until) VALUES (${ip}, ${newCount}, ${lockedUntil})
+      ON CONFLICT (ip) DO UPDATE SET fail_count = ${newCount}, locked_until = ${lockedUntil}`;
+    if (lockedUntil) return c.json({ error: 'Too many wrong attempts. Locked for 15 minutes.' }, 429);
+    return c.json({ error: 'Wrong password' }, 401);
+  }
+  // Success — clear the counter for this IP and mint a session token.
+  await sql`DELETE FROM master_login_attempts WHERE ip = ${ip}`;
+  const token = makeSessionToken();
+  masterSessions.set(token, { createdAt: Date.now() });
+  return c.json({ data: { token, expires_in_ms: MASTER_SESSION_TTL_MS } });
+});
+
+telegram.post('/api/master/logout', requireMaster, async (c) => {
+  const token = c.req.header('x-master-token') || '';
+  masterSessions.delete(token);
+  return c.json({ ok: true });
+});
+
+// Overview of every tenant + user counts + verified counts.
+telegram.get('/api/master/overview', requireMaster, async (c) => {
+  const tenants = await sql`
+    SELECT t.id, t.name, t.slug, t.plan, t.status, t.expires_at, t.is_self,
+      (t.telegram_bot_username IS NOT NULL) as has_own_bot,
+      t.telegram_bot_username as own_bot_username,
+      COUNT(u.id) FILTER (WHERE u.id IS NOT NULL) as user_count,
+      COUNT(u.id) FILTER (WHERE u.telegram_chat_id_master IS NOT NULL) as verified_master_count,
+      COUNT(u.id) FILTER (WHERE u.role = 'caller' OR u.role = 'finisher') as caller_count
+    FROM tenants t
+    LEFT JOIN users u ON u.tenant_id = t.id
+    GROUP BY t.id
+    ORDER BY t.created_at ASC`;
+  const totals = {
+    tenants: tenants.length,
+    users: tenants.reduce((a: number, t: any) => a + Number(t.user_count || 0), 0),
+    verified: tenants.reduce((a: number, t: any) => a + Number(t.verified_master_count || 0), 0),
+    callers: tenants.reduce((a: number, t: any) => a + Number(t.caller_count || 0), 0),
+  };
+  return c.json({ data: { tenants, totals, bot_configured: isMasterBotConfigured(), bot_username: MASTER_BOT_USERNAME } });
+});
+
+// Every caller-role user across every tenant, with their Telegram status.
+// Supports filtering and search.
+telegram.get('/api/master/callers', requireMaster, async (c) => {
+  const q = (c.req.query('q') || '').trim().toLowerCase();
+  const tenantId = c.req.query('tenant_id');
+  const role = c.req.query('role') || '';
+  const verified = c.req.query('verified'); // 'yes' | 'no' | ''
+  let rows = await sql`
+    SELECT u.id, u.name, u.role, u.tenant_id, u.telegram_username,
+      (u.telegram_chat_id_master IS NOT NULL) as verified_master,
+      (u.telegram_chat_id_tenant IS NOT NULL) as verified_tenant,
+      u.clocked_in, u.last_seen_at, u.xp,
+      t.name as tenant_name, t.slug as tenant_slug
+    FROM users u LEFT JOIN tenants t ON t.id = u.tenant_id
+    ORDER BY t.name ASC, u.name ASC`;
+  rows = rows.filter((r: any) => {
+    if (tenantId && String(r.tenant_id) !== String(tenantId)) return false;
+    if (role && r.role !== role) return false;
+    if (verified === 'yes' && !r.verified_master) return false;
+    if (verified === 'no' && r.verified_master) return false;
+    if (q) {
+      const hay = `${r.name || ''} ${r.telegram_username || ''} ${r.tenant_name || ''}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+  return c.json({ data: rows });
+});
+
+telegram.get('/api/master/broadcasts', requireMaster, async (c) => {
+  const rows = await sql`SELECT * FROM telegram_broadcasts ORDER BY created_at DESC LIMIT 50`;
+  return c.json({ data: rows });
+});
+
+telegram.get('/api/master/broadcast/:id/deliveries', requireMaster, async (c) => {
+  const rows = await sql`SELECT d.*, u.name as user_name, t.name as tenant_name
+    FROM telegram_deliveries d
+    LEFT JOIN users u ON u.id = d.user_id
+    LEFT JOIN tenants t ON t.id = u.tenant_id
+    WHERE d.broadcast_id = ${c.req.param('id')}
+    ORDER BY d.created_at ASC`;
+  return c.json({ data: rows });
+});
+
+// Send a broadcast via the master bot to a chosen audience.
+telegram.post('/api/master/broadcast', requireMaster, async (c) => {
+  const { message, audience, tenant_id } = await c.req.json().catch(() => ({}));
+  if (!message || !String(message).trim()) return c.json({ error: 'Message is empty' }, 400);
+  if (!isMasterBotConfigured()) return c.json({ error: 'Master bot not configured' }, 400);
+  const targets = await resolveMasterAudience(audience, tenant_id);
+  const label = audienceLabel(audience, tenant_id);
+  return runBroadcast('master', null, label, String(message), targets, getMasterToken(), 'master', c);
+});
+
+async function resolveMasterAudience(audience: string, tenantId?: number): Promise<Array<{ id: number; name: string; chat_id: number }>> {
+  const rows = await sql`SELECT id, name, telegram_chat_id_master as chat_id, role, tenant_id FROM users
+    WHERE telegram_chat_id_master IS NOT NULL`;
+  return rows.filter((r: any) => {
+    if (audience === 'admins') return r.role === 'admin';
+    if (audience === 'callers') return r.role === 'caller' || r.role === 'finisher';
+    if (audience === 'tenant' && tenantId) return String(r.tenant_id) === String(tenantId);
+    return true; // 'all'
+  });
+}
+
+function audienceLabel(audience: string, tenantId?: number): string {
+  if (audience === 'admins') return 'All admins (every tenant)';
+  if (audience === 'callers') return 'All callers/finishers (every tenant)';
+  if (audience === 'tenant') return `Tenant #${tenantId}`;
+  return 'Everyone verified';
+}
+
+// Common broadcast runner: sends sequentially with a small delay to stay under
+// Telegram's 30/sec limit, logs each attempt.
+async function runBroadcast(
+  scope: 'master' | 'tenant',
+  tenantId: number | null,
+  label: string,
+  message: string,
+  targets: Array<{ id: number; name: string; chat_id: number }>,
+  botToken: string,
+  _senderScope: 'master' | 'tenant',
+  c: Context,
+) {
+  const [b] = await sql`INSERT INTO telegram_broadcasts (sender_scope, sender_tenant_id, audience_label, message, total_recipients)
+    VALUES (${scope}, ${tenantId}, ${label}, ${message}, ${targets.length}) RETURNING id`;
+  const broadcastId = b.id;
+  let sent = 0, blocked = 0, failed = 0;
+  for (const t of targets) {
+    const r = await sendTelegramDM(botToken, t.chat_id, message);
+    await sql`INSERT INTO telegram_deliveries (broadcast_id, user_id, status, error)
+      VALUES (${broadcastId}, ${t.id}, ${r.status}, ${r.error || null})`;
+    if (r.status === 'sent') sent++;
+    else if (r.status === 'blocked') blocked++;
+    else failed++;
+    // 40ms between sends keeps us well under Telegram's 30 msg/sec cap.
+    await new Promise(res => setTimeout(res, 40));
+  }
+  await sql`UPDATE telegram_broadcasts SET sent_count = ${sent}, blocked_count = ${blocked}, failed_count = ${failed}
+    WHERE id = ${broadcastId}`;
+  return c.json({ data: { broadcast_id: broadcastId, total: targets.length, sent, blocked, failed } });
+}
+
+// Small utility: whether the current logged-in user has verified the master bot.
+// The staff app calls this to decide whether to show the verification screen.
+telegram.get('/api/telegram/my-status', requireAnyStaff, async (c) => {
+  const user = c.get('user');
+  const [row] = await sql`SELECT u.telegram_username, u.telegram_chat_id_master IS NOT NULL as verified_master,
+    u.telegram_chat_id_tenant IS NOT NULL as verified_tenant,
+    t.telegram_bot_username as tenant_bot_username,
+    t.telegram_require_verification as tenant_requires
+    FROM users u LEFT JOIN tenants t ON t.id = u.tenant_id WHERE u.id = ${user.id}`;
+  return c.json({ data: {
+    ...row,
+    master_bot_username: MASTER_BOT_USERNAME,
+    master_configured: isMasterBotConfigured(),
+  }});
+});

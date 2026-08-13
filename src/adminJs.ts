@@ -721,8 +721,9 @@ async function renderAdminLeaderboard(el) {
 
 
 async function renderAdminBranding(el) {
-  const res = await api('/api/branding');
-  const b = (await res.json()).data;
+  const [bRes, tbRes] = await Promise.all([api('/api/branding'), api('/api/admin/telegram-bot')]);
+  const b = (await bRes.json()).data;
+  const tb = (await tbRes.json()).data;
   el.innerHTML = \`
     <div class="panel p fade-up">
       <div class="section-title" style="margin-top:0;">Panel Branding</div>
@@ -737,7 +738,31 @@ async function renderAdminBranding(el) {
       <div class="field"><label>Panel Name</label><input id="brandName" value="\${esc(b.name)}" placeholder="FRPTS" /></div>
       <button class="btn btn-gold btn-block" onclick="saveBranding()">Save Branding</button>
       <div id="brandStatus" style="font-size:12px;margin-top:10px;"></div>
+    </div>
+    <div class="panel p fade-up">
+      <div class="section-title" style="margin-top:0;">Your Telegram Bot (optional)</div>
+      <p style="font-size:12px;color:var(--text-dim);margin-bottom:14px;line-height:1.55;">Connect your own bot to DM your team announcements, shift reminders, or urgent alerts. Create a bot via <a href="https://t.me/BotFather" target="_blank" style="color:var(--gold-bright);">@BotFather</a> on Telegram, then paste the token below. This is entirely separate from ClearPanel's master bot — your callers will still verify with ClearPanel first regardless.</p>
+      \${tb.configured ? '<div style="padding:12px 14px;border-radius:12px;background:rgba(34,197,94,.08);border:1px solid rgba(34,197,94,.3);margin-bottom:14px;font-size:12.5px;"><b style="color:var(--success);">Connected</b> — @'+esc(tb.bot_username||'bot')+' · <button class="btn btn-danger btn-sm" onclick="clearTenantBot()" style="margin-left:10px;">Disconnect</button></div>' : ''}
+      <div class="field"><label>Bot token from @BotFather</label><input id="tgBotToken" type="password" placeholder="\${tb.configured ? '••••••••••••  (replace to change)' : '123456789:AA...'}" /></div>
+      <button class="btn btn-gold" onclick="saveTenantBot()">\${tb.configured ? 'Update Token' : 'Connect Bot'}</button>
+      <div id="tgBotStatus" style="font-size:12px;margin-top:10px;"></div>
     </div>\`;
+}
+async function saveTenantBot() {
+  const token = document.getElementById('tgBotToken').value.trim();
+  const s = document.getElementById('tgBotStatus');
+  if (!token) { s.textContent = 'Paste the token first.'; s.style.color = 'var(--danger)'; return; }
+  s.textContent = 'Validating…'; s.style.color = 'var(--text-dim)';
+  const r = await api('/api/admin/telegram-bot', { method:'POST', body: JSON.stringify({ bot_token: token })});
+  const data = await r.json();
+  if (!r.ok) { s.textContent = data.error || 'Failed'; s.style.color = 'var(--danger)'; return; }
+  s.textContent = 'Connected ✓'; s.style.color = 'var(--success)';
+  setTimeout(() => renderAdminTab('branding'), 800);
+}
+async function clearTenantBot() {
+  if (!confirm('Disconnect your bot? Callers linked to it will no longer receive DMs from you.')) return;
+  await api('/api/admin/telegram-bot', { method:'POST', body: JSON.stringify({ bot_token: '' })});
+  renderAdminTab('branding');
 }
 let pendingBrandLogo = null;
 function handleBrandLogoUpload(event) {

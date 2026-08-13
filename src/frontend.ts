@@ -693,6 +693,12 @@ async function enterApp() {
   connectEvents();
   refreshNotifBadge();
   registerServiceWorker();
+  // Telegram gate: if the master bot is configured and this user hasn't linked
+  // yet, show the verification screen before the app. Skipping isn't allowed
+  // for the master bot when it's live, since operator broadcast reach is the
+  // point. Tenant-bot verification is checked separately, non-blocking.
+  const gated = await maybeShowTelegramGate();
+  if (gated) return;
   if (me.role === 'admin') {
     document.getElementById('adminApp').classList.remove('hidden');
     switchAdminTab('dashboard');
@@ -703,6 +709,99 @@ async function enterApp() {
     switchStaffTab('home');
   }
   checkFirstLoginTutorial();
+}
+// Returns true if the gate took over the screen (so caller stops).
+async function maybeShowTelegramGate() {
+  try {
+    const r = await api('/api/telegram/my-status');
+    const s = (await r.json()).data;
+    if (!s || !s.master_configured) return false;
+    if (s.verified_master) return false;
+    showTelegramGate(s);
+    return true;
+  } catch { return false; }
+}
+function showTelegramGate(status) {
+  const gate = document.createElement('div');
+  gate.id = 'tgGate';
+  gate.style.cssText = 'position:fixed;inset:0;z-index:400;display:flex;align-items:center;justify-content:center;padding:24px;background:radial-gradient(ellipse 80% 50% at 15% -10%,rgba(124,92,255,.15),transparent 55%),radial-gradient(ellipse 70% 50% at 100% 10%,rgba(79,140,255,.12),transparent 55%),var(--bg);';
+  gate.innerHTML = '<div class="panel p" style="max-width:420px;width:100%;padding:36px 32px;text-align:center;">'
+    + '<div style="font-size:11px;letter-spacing:.28em;text-transform:uppercase;color:var(--violet-bright);font-weight:700;margin-bottom:8px;">One quick step</div>'
+    + '<h2 style="font-size:22px;margin-bottom:10px;">Link your Telegram</h2>'
+    + '<p style="font-size:13px;color:var(--text-dim);line-height:1.55;margin-bottom:22px;">ClearPanel uses this to reach you for account updates and important announcements. Takes 15 seconds — one code, one paste.</p>'
+    + '<div id="tgStep1">'
+    +   '<div class="field" style="text-align:left;"><label style="font-size:11px;color:var(--text-dim);">Your Telegram username</label><input id="tgUname" placeholder="@yourname" value="' + esc(status.telegram_username ? '@' + status.telegram_username : '') + '" style="margin-top:6px;" /></div>'
+    +   '<button class="btn btn-gold btn-block" onclick="tgStartVerify()" style="margin-top:14px;">Get my code</button>'
+    +   '<div id="tgErr" style="color:var(--danger);font-size:12px;min-height:16px;margin-top:8px;"></div>'
+    + '</div>'
+    + '<div id="tgStep2" style="display:none;">'
+    +   '<div style="font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.14em;font-weight:700;margin-bottom:10px;">Your code</div>'
+    +   '<div id="tgCode" class="mono" style="font-size:42px;font-weight:800;letter-spacing:.2em;padding:20px;border-radius:16px;background:rgba(124,92,255,.1);border:2px dashed rgba(167,139,250,.4);margin-bottom:14px;cursor:pointer;user-select:all;" onclick="tgCopyCode()"></div>'
+    +   '<div style="font-size:11.5px;color:var(--text-faint);margin-bottom:16px;">Tap the code to copy · Expires in <span id="tgCountdown">5:00</span></div>'
+    +   '<a id="tgOpenBtn" class="btn btn-gold btn-block" target="_blank" rel="noopener" style="text-decoration:none;display:block;">Open Telegram & paste code</a>'
+    +   '<div style="font-size:12px;color:var(--text-dim);margin-top:14px;line-height:1.5;">Message our bot with the code above. This screen will advance automatically the moment we see it land.</div>'
+    +   '<div id="tgPollStatus" style="font-size:11.5px;color:var(--violet-bright);margin-top:10px;min-height:16px;">Waiting for your message…</div>'
+    + '</div>'
+    + '</div>';
+  document.body.appendChild(gate);
+}
+async function tgStartVerify() {
+  const uname = document.getElementById('tgUname').value.trim();
+  const err = document.getElementById('tgErr');
+  err.textContent = '';
+  if (!uname || uname.length < 3) { err.textContent = 'Enter your @username'; return; }
+  const r = await api('/api/telegram/start-verification', { method:'POST', body: JSON.stringify({ username: uname, scope: 'master' })});
+  const data = await r.json();
+  if (!r.ok) { err.textContent = data.error || 'Failed'; return; }
+  document.getElementById('tgStep1').style.display = 'none';
+  document.getElementById('tgStep2').style.display = 'block';
+  document.getElementById('tgCode').textContent = data.data.code.replace(/(\d{3})(\d{3})/, '$1 $2');
+  document.getElementById('tgOpenBtn').href = data.data.deep_link;
+  window._tgCode = data.data.code;
+  window._tgExpires = new Date(data.data.expires_at).getTime();
+  startTgCountdown();
+  startTgPoll();
+}
+function tgCopyCode() {
+  navigator.clipboard.writeText(window._tgCode || '').then(() => {
+    const el = document.getElementById('tgCode');
+    const orig = el.style.background;
+    el.style.background = 'rgba(34,197,94,.2)';
+    setTimeout(() => { el.style.background = orig; }, 400);
+  }).catch(()=>{});
+}
+function startTgCountdown() {
+  const cd = document.getElementById('tgCountdown');
+  const tick = () => {
+    const left = Math.max(0, Math.floor((window._tgExpires - Date.now()) / 1000));
+    const m = Math.floor(left/60), s = left%60;
+    if (cd) cd.textContent = m + ':' + String(s).padStart(2,'0');
+    if (left <= 0) {
+      clearInterval(window._tgCdI);
+      const status = document.getElementById('tgPollStatus');
+      if (status) status.textContent = 'Code expired — reload to get a new one.';
+      clearInterval(window._tgPollI);
+    }
+  };
+  tick();
+  window._tgCdI = setInterval(tick, 1000);
+}
+function startTgPoll() {
+  clearInterval(window._tgPollI);
+  window._tgPollI = setInterval(async () => {
+    const r = await api('/api/telegram/status');
+    const s = (await r.json()).data;
+    if (s && s.telegram_chat_id_master) {
+      clearInterval(window._tgPollI);
+      clearInterval(window._tgCdI);
+      const status = document.getElementById('tgPollStatus');
+      if (status) { status.textContent = '✅ Linked! Loading ClearPanel…'; status.style.color = 'var(--success)'; }
+      setTimeout(() => {
+        document.getElementById('tgGate').remove();
+        enterApp();
+      }, 900);
+    }
+  }, 2000);
 }
 // Registered unconditionally on every login, not just when someone opts into push -
 // an active service worker is also what makes Chrome/Android treat this as a real
