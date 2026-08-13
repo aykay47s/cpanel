@@ -219,7 +219,9 @@ telephony.post('/api/telephony/status', async (c) => {
 
 async function getTelnyxKey(tenantId: number | null): Promise<string | null> {
   const [row] = await sql`SELECT value FROM settings WHERE key = ${'telnyx_api_key:' + tenantId}`;
-  return row?.value || null;
+  // Fall back to a server-level key (env) when the tenant hasn't stored one — lets
+  // the self-tenant's telephony work from config alone, no in-panel connect step.
+  return row?.value || process.env.TELNYX_API_KEY || null;
 }
 
 // Issue a single Call Control command. action is e.g. 'answer', 'gather_using_speak',
@@ -345,7 +347,7 @@ async function telnyxDialNext(apiKey: string, callControlId: string, cfg: any, d
     return;
   }
   const target = callers[index].call_phone;
-  const fromNumber = cfg.telnyx_phone_number || undefined;
+  const fromNumber = cfg.telnyx_phone_number || process.env.TELNYX_PHONE_NUMBER || undefined;
   await telnyxCommand(apiKey, callControlId, 'transfer', {
     to: target,
     from: fromNumber,
