@@ -17,15 +17,25 @@ async function applyBranding() {
     const { data } = await res.json();
     if (data && data.name) {
       brandingData = data;
-      // Update login screen title
+      // A branded logo, when the admin has uploaded one, replaces the generic
+      // gradient mark everywhere the brand shows — login, caller topbar, sidebar.
+      const markHtml = data.logo
+        ? '<div class="brand-mark" style="background:none;box-shadow:0 2px 10px rgba(0,0,0,.3);"><img src="' + esc(data.logo) + '" style="width:100%;height:100%;object-fit:cover;border-radius:7px;" /></div>'
+        : '<div class="brand-mark"></div>';
+      const liveTag = ' <span class="mono" style="color:var(--text-faint);font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;margin-left:6px;display:inline-flex;align-items:center;gap:5px;"><span style="width:5px;height:5px;border-radius:50%;background:var(--success);box-shadow:0 0 0 0 rgba(34,197,94,.55);animation:liveDotPulse 2.2s ease-out infinite;"></span>Control Room</span>';
+      // Update login screen title + logo
       const loginTitle = document.querySelector('.login-title');
       if (loginTitle) loginTitle.textContent = data.name;
-      // Update topbar brand
-      const topbarBrand = document.querySelector('.topbar .brand');
-      if (topbarBrand) topbarBrand.innerHTML = '<div class="brand-mark"></div>' + esc(data.name) + ' <span class="mono" style="color:var(--text-faint);font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;margin-left:6px;display:inline-flex;align-items:center;gap:5px;"><span style="width:5px;height:5px;border-radius:50%;background:var(--success);box-shadow:0 0 0 0 rgba(34,197,94,.55);animation:liveDotPulse 2.2s ease-out infinite;"></span>Control Room</span>';
+      const loginCrest = document.getElementById('loginCrest');
+      if (loginCrest && data.logo) loginCrest.innerHTML = '<img src="' + esc(data.logo) + '" style="width:100%;height:100%;object-fit:cover;border-radius:inherit;" />';
+      // Admin topbar keeps the "Control Room" live tag; the caller topbar shows
+      // just the branded name. Scope each to its own shell.
+      const adminBrand = document.querySelector('#adminApp .topbar .brand');
+      if (adminBrand) adminBrand.innerHTML = markHtml + esc(data.name) + liveTag;
+      const staffBrand = document.querySelector('#staffApp .topbar .brand');
+      if (staffBrand) staffBrand.innerHTML = markHtml + esc(data.name);
       // Update sidebar brand
-      const sidebarBrand = document.querySelector('.sidebar .brand');
-      if (sidebarBrand) sidebarBrand.textContent = data.name.split(' ')[0];
+      document.querySelectorAll('.sidebar .brand').forEach(sb => { sb.innerHTML = markHtml + esc(data.name.split(' ')[0]); });
       // Update document title
       document.title = data.name;
     }
@@ -1202,11 +1212,12 @@ label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spa
 .icon-btn{width:38px;height:38px;border-radius:50%;background:var(--s2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;position:relative;color:var(--text-dim);transition:transform .18s var(--ease-spring), color .15s ease, border-color .15s ease, background .15s ease;}
 .icon-btn:hover{transform:scale(1.08) rotate(-6deg);color:var(--text);border-color:var(--violet-glow);box-shadow:0 0 0 3px rgba(167,139,250,.08);}
 .icon-btn:active{transform:scale(.92);}
-.clock-toggle{display:flex;align-items:center;gap:8px;padding:9px 16px 9px 12px;border-radius:100px;font-size:12.5px;font-weight:700;font-family:'Geist Mono',monospace;letter-spacing:-.01em;background:rgba(255,255,255,.05);border:1px solid var(--border-2);color:var(--text-dim);transition:background .15s ease, color .15s ease, border-color .15s ease, transform .12s ease;}
-.clock-toggle:active{transform:scale(.96);}
-.clock-toggle .clock-dot{width:8px;height:8px;border-radius:50%;background:var(--text-faint);flex-shrink:0;transition:background .15s ease, box-shadow .15s ease;}
-.clock-toggle.on{background:rgba(34,197,94,.12);border-color:rgba(34,197,94,.35);color:var(--success);}
-.clock-toggle.on .clock-dot{background:var(--success);box-shadow:0 0 0 0 rgba(34,197,94,.55);animation:liveDotPulse 1.8s ease-out infinite;}
+.clock-toggle{display:flex;align-items:center;gap:8px;padding:9px 16px 9px 13px;border-radius:100px;font-size:12.5px;font-weight:600;letter-spacing:-.01em;background:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,.03));border:1px solid var(--border-2);color:var(--text-dim);box-shadow:inset 0 1px 0 rgba(255,255,255,.06), 0 1px 3px rgba(0,0,0,.2);transition:background .18s ease, color .18s ease, border-color .18s ease, transform .12s var(--ease-spring), box-shadow .18s ease;-webkit-tap-highlight-color:transparent;}
+.clock-toggle:hover{border-color:rgba(255,255,255,.2);color:var(--text);}
+.clock-toggle:active{transform:scale(.95);}
+.clock-toggle .clock-dot{width:8px;height:8px;border-radius:50%;background:var(--text-faint);flex-shrink:0;transition:background .18s ease, box-shadow .18s ease;}
+.clock-toggle.on{background:linear-gradient(180deg,rgba(34,197,94,.18),rgba(34,197,94,.08));border-color:rgba(34,197,94,.4);color:#5eeaa0;box-shadow:inset 0 1px 0 rgba(255,255,255,.08), 0 2px 10px rgba(34,197,94,.16);}
+.clock-toggle.on .clock-dot{background:#34d399;box-shadow:0 0 0 0 rgba(34,197,94,.55);animation:liveDotPulse 1.8s ease-out infinite;}
 .icon-btn:hover{color:var(--text);border-color:var(--border-2);background:var(--s3);}
 .icon-btn .dot{position:absolute;top:6px;right:6px;width:7px;height:7px;border-radius:50%;background:var(--crimson);animation:bellPulse 1.6s ease-in-out infinite;}
 @keyframes bellPulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,.6);}50%{box-shadow:0 0 0 5px rgba(239,68,68,0);}}
@@ -1524,7 +1535,7 @@ tr.clickable:active{background:rgba(255,255,255,.05);}
 /* import preview */
 .parse-row{display:grid;grid-template-columns:1.2fr 1fr 1.2fr auto;gap:10px;padding:11px 0;border-bottom:1px solid var(--border);font-size:12.5px;align-items:center;}
 .parse-row .miss{color:var(--text-faint);font-style:italic;}
-.dup-warn{font-size:10px;color:var(--gold-bright);background:rgba(201,161,94,.12);padding:3px 8px;border-radius:6px;white-space:nowrap;}
+.dup-warn{display:inline-block;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#f5b942;background:rgba(245,158,11,.14);border:1px solid rgba(245,158,11,.28);padding:2px 7px;border-radius:100px;white-space:nowrap;vertical-align:middle;}
 
 /* timeline */
 .timeline{position:relative;padding-left:22px;}
