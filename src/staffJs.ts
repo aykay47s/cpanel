@@ -559,6 +559,15 @@ async function renderStaffProfile() {
       <div id="profileStatus" style="font-size:12px;margin-top:10px;"></div>
     </div>
     <div class="panel p fade-up">
+      <div class="section-title" style="margin-top:0;">Username</div>
+      <p style="font-size:11.5px;color:var(--text-dim);margin-bottom:10px;line-height:1.5;">Your PIN only works on this one panel — if you ever forget which one, a username lets you find your way back. \${me.username ? 'Yours is set below.' : 'Not set yet — pick one.'}</p>
+      <div style="display:flex;gap:8px;">
+        <input id="pfUsername" value="\${esc(me.username || '')}" placeholder="e.g. sarah_m" maxlength="20" />
+        <button class="btn btn-ghost" style="flex-shrink:0;" onclick="saveUsername()">\${me.username ? 'Update' : 'Claim'}</button>
+      </div>
+      <div id="usernameStatus" style="font-size:12px;margin-top:8px;"></div>
+    </div>
+    <div class="panel p fade-up">
       <div class="section-title" style="margin-top:0;">Notification Preferences</div>
       <label style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;text-transform:none;letter-spacing:0;font-weight:500;color:var(--text);font-size:13px;"><span>Lead assignments</span><input type="checkbox" class="toggle-switch" id="prefLead" checked /></label>
       <label style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;text-transform:none;letter-spacing:0;font-weight:500;color:var(--text);font-size:13px;"><span>Chat messages</span><input type="checkbox" class="toggle-switch" id="prefChat" checked /></label>
@@ -604,11 +613,34 @@ async function saveProfile() {
   const call_phone = document.getElementById('pfPhone').value.trim();
   const body = { name, call_phone };
   if (pendingPfpData) body.pfp_data = pendingPfpData;
+  const statusEl = document.getElementById('profileStatus');
+  statusEl.textContent = 'Saving…'; statusEl.style.color = 'var(--text-dim)';
   const res = await api('/api/me/profile', { method: 'PATCH', body: JSON.stringify(body) });
   const data = await res.json();
+  // The save can genuinely fail (image too large, network hiccup, expired
+  // session) - previously this was never checked, so a failed save still
+  // showed "Saved" and threw away the pending photo, leaving the person
+  // with no idea anything was wrong until they refreshed and it was gone.
+  if (!res.ok || !data.data) {
+    statusEl.textContent = data.error || 'Could not save — try again.';
+    statusEl.style.color = 'var(--danger)';
+    return; // keep pendingPfpData so Save Changes can be retried without re-uploading
+  }
   me = { ...me, ...data.data }; localStorage.setItem('dispatch_me', JSON.stringify(me));
   pendingPfpData = null;
-  document.getElementById('profileStatus').textContent = 'Saved ✓'; document.getElementById('profileStatus').style.color = 'var(--success)';
+  statusEl.textContent = 'Saved ✓'; statusEl.style.color = 'var(--success)';
+}
+async function saveUsername() {
+  const val = document.getElementById('pfUsername').value.trim();
+  const statusEl = document.getElementById('usernameStatus');
+  if (!val) { statusEl.textContent = 'Enter a username first.'; statusEl.style.color = 'var(--danger)'; return; }
+  statusEl.textContent = 'Saving…'; statusEl.style.color = 'var(--text-dim)';
+  const res = await api('/api/me/set-username', { method: 'POST', body: JSON.stringify({ username: val }) });
+  const data = await res.json();
+  if (!res.ok) { statusEl.textContent = data.error || 'Could not save that username.'; statusEl.style.color = 'var(--danger)'; return; }
+  me.username = data.data.username; localStorage.setItem('dispatch_me', JSON.stringify(me));
+  statusEl.textContent = 'Username set ✓'; statusEl.style.color = 'var(--success)';
+  renderStaffProfile();
 }
 async function saveNotifPrefs() {
   await api('/api/me/notif-prefs', { method: 'PATCH', body: JSON.stringify({ lead_assigned: document.getElementById('prefLead').checked, chat: document.getElementById('prefChat').checked, announcements: document.getElementById('prefAnn').checked }) });

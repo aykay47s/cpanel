@@ -100,6 +100,26 @@ async function attemptLogin() {
   localStorage.setItem('dispatch_me', JSON.stringify(me));
   enterApp();
 }
+function showFindPanel() {
+  document.getElementById('findPanelGate').classList.remove('hidden');
+  document.getElementById('findPanelResult').textContent = '';
+  document.getElementById('findPanelInput').value = '';
+}
+async function findMyPanel() {
+  const val = document.getElementById('findPanelInput').value.trim();
+  const resultEl = document.getElementById('findPanelResult');
+  if (!val) { resultEl.textContent = 'Enter a username.'; resultEl.style.color = 'var(--danger)'; return; }
+  resultEl.textContent = 'Looking…'; resultEl.style.color = 'var(--text-dim)';
+  try {
+    const res = await fetch('/api/find-panel/' + encodeURIComponent(val));
+    const data = await res.json();
+    if (!res.ok) { resultEl.textContent = data.error || 'No panel found for that username.'; resultEl.style.color = 'var(--danger)'; return; }
+    resultEl.innerHTML = 'Found it — <b>' + esc(data.data.panel_name) + '</b>. <a href="' + data.data.url + '" style="color:var(--gold-bright);">Go to your panel →</a>';
+    resultEl.style.color = 'var(--success)';
+  } catch {
+    resultEl.textContent = 'Network error — try again.'; resultEl.style.color = 'var(--danger)';
+  }
+}
 function logout() {
   if (me) api('/api/clock', { method: 'POST', body: JSON.stringify({ clockedIn: false }) });
   if (es) { es.close(); es = null; }
@@ -1408,10 +1428,23 @@ tr.clickable:active{background:rgba(255,255,255,.05);}
       <button class="key wide" data-k="clear">Clear</button><button class="key" data-k="0">0</button><button class="key wide" data-k="back">⌫</button>
     </div>
     <div class="login-error" id="loginError"></div>
+    <div style="margin-top:14px;">
+      <a href="javascript:void(0)" onclick="showFindPanel()" style="font-size:11.5px;color:var(--text-faint);text-decoration:underline;">Forgot which panel you're on?</a>
+    </div>
     <div style="margin-top:18px;display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;">
       <a href="https://t.me/+M-aK0jz4wDI5Nzdh" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--text-faint);text-decoration:none;padding:5px 12px;border-radius:100px;background:rgba(255,255,255,.04);border:1px solid var(--border);transition:color .15s;"><span>📣</span>Updates channel</a>
       <a href="https://t.me/clearpanelotpbot" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--text-faint);text-decoration:none;padding:5px 12px;border-radius:100px;background:rgba(255,255,255,.04);border:1px solid var(--border);transition:color .15s;"><span>🤖</span>@clearpanelotpbot</a>
     </div>
+  </div>
+</div>
+<div id="findPanelGate" class="hidden" style="position:fixed;inset:0;z-index:400;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(5,5,9,.85);backdrop-filter:blur(10px);">
+  <div class="panel p" style="max-width:380px;width:100%;text-align:center;">
+    <h2 style="font-size:18px;margin-bottom:8px;">Find Your Panel</h2>
+    <p style="font-size:12.5px;color:var(--text-dim);line-height:1.6;margin-bottom:18px;">Enter your username and we'll point you to the right panel — no PIN needed for this part.</p>
+    <input id="findPanelInput" placeholder="your username" maxlength="20" style="text-align:center;margin-bottom:10px;" onkeydown="if(event.key==='Enter') findMyPanel()" />
+    <button class="btn btn-gold btn-block" onclick="findMyPanel()">Find My Panel</button>
+    <div id="findPanelResult" style="font-size:13px;margin-top:14px;"></div>
+    <button class="btn btn-ghost btn-block" style="margin-top:10px;" onclick="document.getElementById('findPanelGate').classList.add('hidden')">Close</button>
   </div>
 </div>
 

@@ -42,9 +42,10 @@ users.post('/api/auth/login', async (c) => {
 });
 
 users.get('/api/me', async (c) => {
+  c.header('Cache-Control', 'no-store, no-cache, must-revalidate');
   const user = await authenticate(c);
   if (!user) return bad(c, 'Unauthorized', 401);
-  const [fresh] = await sql`SELECT id, name, pin, role, avatar, pfp_data, xp, clocked_in, notif_prefs, is_super_admin, role_confirmed_at, tenant_id FROM users WHERE id = ${user.id}`;
+  const [fresh] = await sql`SELECT id, name, pin, role, avatar, pfp_data, xp, clocked_in, notif_prefs, is_super_admin, role_confirmed_at, tenant_id, username FROM users WHERE id = ${user.id}`;
   return c.json({ data: fresh });
 });
 
@@ -56,6 +57,40 @@ users.post('/api/me/confirm-role', async (c) => {
   if (!user) return bad(c, 'Unauthorized', 401);
   await sql`UPDATE users SET role_confirmed_at = now() WHERE id = ${user.id} AND role_confirmed_at IS NULL`;
   return c.json({ ok: true });
+});
+
+function normalizeUsername(raw: string): string {
+  return String(raw || '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+}
+
+// A username exists for one reason: finding your way back to the right panel.
+// PINs are only unique WITHIN a tenant, so "1234" alone can't tell you which
+// call center you belong to if you've lost the URL - a username can, since
+// it's looked up independently of any particular tenant's login page.
+users.post('/api/me/set-username', async (c) => {
+  const user = await authenticate(c);
+  if (!user) return bad(c, 'Unauthorized', 401);
+  const { username } = await c.req.json().catch(() => ({}));
+  const clean = normalizeUsername(username);
+  if (clean.length < 3 || clean.length > 20) return bad(c, 'Username must be 3-20 characters (letters, numbers, underscore)');
+  const [collision] = await sql`SELECT id FROM users WHERE tenant_id = ${user.tenant_id} AND lower(username) = ${clean} AND id != ${user.id}`;
+  if (collision) return bad(c, 'That username is already taken on this panel');
+  await sql`UPDATE users SET username = ${clean} WHERE id = ${user.id}`;
+  return c.json({ data: { username: clean } });
+});
+
+// Public, deliberately minimal - just enough to point someone back to the
+// right door. Never reveals a PIN, XP, phone number, or anything else about
+// the account; only which panel (name + link) the username belongs to.
+users.get('/api/find-panel/:username', async (c) => {
+  const clean = normalizeUsername(c.req.param('username'));
+  if (clean.length < 3) return bad(c, 'Enter a valid username');
+  const [row] = await sql`
+    SELECT tenants.slug, tenants.name, tenants.is_self, tenants.status
+    FROM users JOIN tenants ON tenants.id = users.tenant_id
+    WHERE lower(users.username) = ${clean} LIMIT 1`;
+  if (!row || row.status !== 'active') return bad(c, 'No panel found for that username', 404);
+  return c.json({ data: { panel_name: row.name, url: row.is_self ? '/' : `/${row.slug}` } });
 });
 
 users.patch('/api/me/profile', async (c) => {

@@ -486,6 +486,15 @@ export async function ensureDb() {
   await sql.unsafe(`DO $$ BEGIN ALTER TABLE users DROP CONSTRAINT IF EXISTS users_pin_key; EXCEPTION WHEN OTHERS THEN NULL; END $$;`);
   await sql.unsafe(`DO $$ BEGIN ALTER TABLE users ADD CONSTRAINT users_tenant_pin_unique UNIQUE (tenant_id, pin); EXCEPTION WHEN OTHERS THEN NULL; END $$;`);
 
+  // Username: how a person finds their way back to the right panel. PINs are
+  // only unique WITHIN a tenant (two different call centers can both hand out
+  // PIN 1234), so a PIN alone can't tell you which panel you belong to if you
+  // don't remember the URL. A username is unique per-tenant the same way, but
+  // globally SEARCHABLE via a case-insensitive index below, so "find my panel"
+  // can resolve a username to the one tenant it actually belongs to.
+  await sql.unsafe(`DO $$ BEGIN ALTER TABLE users ADD CONSTRAINT users_tenant_username_unique UNIQUE (tenant_id, username); EXCEPTION WHEN OTHERS THEN NULL; END $$;`);
+  await sql`CREATE INDEX IF NOT EXISTS users_username_lookup ON users (lower(username)) WHERE username IS NOT NULL`;
+
   // In-app update system: admin can push text updates to all callers in their
   // tenant. A LIVE update shows a persistent banner across all screens until
   // resolved. Callers with no Telegram linked always see in-app updates;
