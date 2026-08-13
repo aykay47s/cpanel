@@ -283,7 +283,7 @@ async function renderAdminImport(el) {
           const color = c.color || '#4f8cff';
           const initial = esc(String(c.name).charAt(0).toUpperCase());
           const logo = domain
-            ? '<img src="' + bankLogoUrl(domain) + '" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\';" /><span class="bank-fallback" style="display:none;background:' + esc(color) + ';">' + initial + '</span>'
+            ? '<img src="' + bankLogoUrl(domain) + '" onerror="bankImgFallback(this)" /><span class="bank-fallback" style="display:none;background:' + esc(color) + ';">' + initial + '</span>'
             : '<span class="bank-fallback" style="display:flex;background:' + esc(color) + ';">' + initial + '</span>';
           return '<div class="bank-card import-bank' + (i === 0 ? ' selected' : '') + '" data-import-bank="' + esc(c.name) + '" onclick="pickImportBank(this)">' + logo + '<span class="bn">' + esc(c.name) + '</span><span class="bank-tick">' + (ICONS.check || '') + '</span></div>';
         }).join('') || '<div class="bank-card import-bank selected" data-import-bank="general" onclick="pickImportBank(this)"><span class="bn">General</span></div>'}</div>
@@ -310,6 +310,11 @@ let lastImportPreview = [];
 // Click-to-select for the import bank picker. Toggles the .selected state and
 // writes the chosen bank name into the hidden #importLeadType input that
 // runImportPreview() reads.
+function bankImgFallback(img) {
+  // Logo failed to load — hide it and reveal the colored-initial fallback next to it.
+  img.style.display = 'none';
+  if (img.nextElementSibling) img.nextElementSibling.style.display = 'flex';
+}
 function pickImportBank(el) {
   const grid = document.getElementById('importBankGrid');
   if (grid) grid.querySelectorAll('.import-bank').forEach(c => c.classList.remove('selected'));
