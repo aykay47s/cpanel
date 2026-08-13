@@ -511,6 +511,9 @@ export async function ensureDb() {
   const usernameAlters = [
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS username TEXT',
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS role_confirmed_at TIMESTAMPTZ',
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS suspended_at TIMESTAMPTZ',
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS suspended_reason TEXT',
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS suspended_by INTEGER REFERENCES users(id) ON DELETE SET NULL',
     'ALTER TABLE tenants ADD COLUMN IF NOT EXISTS gateway_bot_token TEXT',
     'ALTER TABLE tenants ADD COLUMN IF NOT EXISTS gateway_bot_username TEXT',
     'ALTER TABLE settings ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE',

@@ -31,8 +31,13 @@ users.post('/api/auth/login', async (c) => {
     const [selfTenant] = await sql`SELECT id FROM tenants WHERE is_self = true`;
     tenantId = selfTenant?.id ?? null;
   }
-  const [user] = await sql`SELECT id, name, pin, role, avatar, pfp_data, xp, clocked_in, is_super_admin, tenant_id FROM users WHERE pin = ${pin} AND tenant_id = ${tenantId}`;
+  const [user] = await sql`SELECT id, name, pin, role, avatar, pfp_data, xp, clocked_in, is_super_admin, tenant_id, suspended_at, suspended_reason FROM users WHERE pin = ${pin} AND tenant_id = ${tenantId}`;
   if (!user) return bad(c, 'Invalid PIN', 401);
+  if (user.suspended_at) {
+    return bad(c, user.suspended_reason ? `Your access has been suspended: ${user.suspended_reason}` : 'Your access has been suspended. Contact your admin.', 403);
+  }
+  delete (user as any).suspended_at;
+  delete (user as any).suspended_reason;
   return c.json({ data: user });
 });
 
@@ -224,6 +229,7 @@ users.get('/api/admin/users', requireRole('admin'), async (c) => {
   const rows = await sql`
     SELECT users.id, users.name, users.pin, users.role, users.avatar, users.pfp_data, users.xp, users.clocked_in, users.status,
       users.call_phone, users.inbound_eligible, users.inbound_priority, users.threecx_extension, users.created_at, users.last_seen_at,
+      users.suspended_at, users.suspended_reason,
       active_lead.first_name as active_lead_first_name, active_lead.last_name as active_lead_last_name, active_lead.status as active_lead_status
     FROM users
     LEFT JOIN LATERAL (
@@ -294,6 +300,38 @@ users.delete('/api/admin/users/:id', requireRole('admin'), async (c) => {
   await sql`UPDATE duplicate_flags SET reviewed_by = NULL WHERE reviewed_by = ${id}`;
   await sql`DELETE FROM notifications WHERE user_id = ${id}`;
   await sql`DELETE FROM users WHERE id = ${id}`;
+  return c.json({ ok: true });
+});
+
+// Suspending is deliberately not deletion: the account, their XP/history, and
+// every record they're attached to all stay exactly as they are - this just
+// cuts off access. Blocked at authenticate() itself (the one chokepoint every
+// route already goes through), so a suspended caller can never see a lead, a
+// queue, chat, anything - not a per-route check that could be missed
+// somewhere, and it takes effect immediately even on a session that was
+// already open when the suspension happened.
+users.post('/api/admin/users/:id/suspend', requireRole('admin'), async (c) => {
+  const admin = c.get('user');
+  const id = c.req.param('id');
+  const { reason } = await c.req.json().catch(() => ({}));
+  const [target] = await sql`SELECT id, role, clocked_in FROM users WHERE id = ${id} AND tenant_id = ${admin.tenant_id}`;
+  if (!target) return bad(c, 'Not found', 404);
+  await sql`UPDATE users SET suspended_at = now(), suspended_reason = ${reason || null}, suspended_by = ${admin.id}, clocked_in = false WHERE id = ${id}`;
+  // If they're mid-call, put the lead back rather than leaving it silently
+  // stuck assigned to someone who can no longer touch it.
+  await sql`UPDATE leads SET status = 'not_called', assigned_caller_id = NULL, updated_at = now() WHERE assigned_caller_id = ${id} AND status IN ('calling','active_call')`;
+  if (target.clocked_in) {
+    await sql`UPDATE clock_sessions SET clocked_out_at = now(), duration_seconds = EXTRACT(EPOCH FROM (now() - clocked_in_at))::int WHERE user_id = ${id} AND clocked_out_at IS NULL`;
+  }
+  return c.json({ ok: true });
+});
+
+users.post('/api/admin/users/:id/unsuspend', requireRole('admin'), async (c) => {
+  const admin = c.get('user');
+  const id = c.req.param('id');
+  const [target] = await sql`SELECT id FROM users WHERE id = ${id} AND tenant_id = ${admin.tenant_id}`;
+  if (!target) return bad(c, 'Not found', 404);
+  await sql`UPDATE users SET suspended_at = NULL, suspended_reason = NULL, suspended_by = NULL WHERE id = ${id}`;
   return c.json({ ok: true });
 });
 

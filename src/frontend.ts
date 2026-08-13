@@ -41,6 +41,25 @@ async function api(url, opts = {}) {
   } catch (netErr) {
     return { ok: false, status: 0, json: async () => ({ error: 'Network error — check your connection' }) };
   }
+  // A session that authenticate() now rejects (suspended mid-session, or a
+  // deleted account) shouldn't leave the caller staring at broken screens
+  // one at a time as each API call quietly 401s - log them out cleanly the
+  // first time it happens, with whatever reason the server gave.
+  if ((res.status === 401 || res.status === 403) && url !== '/api/auth/login' && me) {
+    const clone401 = res.clone();
+    clone401.json().then(d => {
+      const msg = d && d.error;
+      // A bare "Unauthorized" on a 403 usually just means this specific action
+      // isn't allowed for the current role - not that the session itself is
+      // invalid, so don't log someone out over it. 401, or any more specific
+      // message (suspended, tenant expired), does mean the session is dead.
+      if (res.status === 403 && msg === 'Unauthorized') return;
+      const reason = msg || 'Your session is no longer valid. Please log in again.';
+      logout();
+      const errEl = document.getElementById('loginError');
+      if (errEl) errEl.textContent = reason;
+    }).catch(() => {});
+  }
   const clone = res.clone();
   const originalJson = res.json.bind(res);
   res.json = async () => {

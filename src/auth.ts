@@ -12,6 +12,8 @@ export interface AuthUser {
   xp: number;
   clocked_in: boolean;
   tenant_id: number;
+  suspended_at: string | null;
+  suspended_reason: string | null;
 }
 
 // Verifies the caller is who they claim to be by checking id+pin against the DB on
@@ -30,20 +32,44 @@ export async function authenticate(c: Context): Promise<AuthUser | null> {
   // window expires, not just new logins going forward.
   const [row] = await sql`
     SELECT users.id, users.name, users.pin, users.role, users.avatar, users.pfp_data, users.xp, users.clocked_in, users.is_super_admin, users.tenant_id,
+      users.suspended_at, users.suspended_reason,
       tenants.expires_at as tenant_expires_at
     FROM users LEFT JOIN tenants ON tenants.id = users.tenant_id
     WHERE users.id = ${uid} AND users.pin = ${pin}`;
   if (!row) return null;
   if (row.tenant_expires_at && new Date(row.tenant_expires_at) < new Date()) return null;
+  // A suspended user is rejected at the single chokepoint every route already goes
+  // through - not a per-route check that could be missed somewhere. They can never
+  // reach a lead, a queue, a chat message, anything, the moment they're suspended,
+  // including on a session that was already open when the suspension happened.
+  if (row.suspended_at) return null;
   sql`UPDATE users SET last_seen_at = now() WHERE id = ${row.id} AND (last_seen_at IS NULL OR last_seen_at < now() - INTERVAL '20 seconds')`.catch(() => {});
   const { tenant_expires_at, ...user } = row;
   return user as AuthUser;
 }
 
+// authenticate() returns null uniformly for every denial reason (wrong pin,
+// expired tenant, suspended) - that's correct for security, never special-
+// case around it there. This is purely for messaging: when a request was
+// denied, look up whether suspension specifically was why, so the person
+// sees the actual reason instead of a bare "Unauthorized" on every screen
+// that happens to hit an API call after they've been suspended mid-session.
+async function suspensionMessageFor(c: Context): Promise<string | null> {
+  const uid = c.req.header('x-user-id') || c.req.query('uid');
+  const pin = c.req.header('x-user-pin') || c.req.query('pin');
+  if (!uid || !pin) return null;
+  const [row] = await sql`SELECT suspended_at, suspended_reason FROM users WHERE id = ${uid} AND pin = ${pin}`;
+  if (!row?.suspended_at) return null;
+  return row.suspended_reason ? `Your access has been suspended: ${row.suspended_reason}` : 'Your access has been suspended. Contact your admin.';
+}
+
 export function requireRole(...roles: Array<'admin' | 'manager' | 'caller' | 'finisher'>) {
   return async (c: Context, next: Next) => {
     const user = await authenticate(c);
-    if (!user || !roles.includes(user.role)) return c.json({ error: 'Unauthorized' }, 403);
+    if (!user || !roles.includes(user.role)) {
+      const reason = await suspensionMessageFor(c);
+      return c.json({ error: reason || 'Unauthorized' }, 403);
+    }
     c.set('user', user);
     await next();
   };
@@ -56,7 +82,10 @@ export const requireAnyStaff = requireRole('admin', 'manager', 'caller', 'finish
 export function requireSuperAdmin() {
   return async (c: Context, next: Next) => {
     const user = await authenticate(c);
-    if (!user || user.role !== 'admin' || !user.is_super_admin) return c.json({ error: 'Unauthorized' }, 403);
+    if (!user || user.role !== 'admin' || !user.is_super_admin) {
+      const reason = await suspensionMessageFor(c);
+      return c.json({ error: reason || 'Unauthorized' }, 403);
+    }
     c.set('user', user);
     await next();
   };

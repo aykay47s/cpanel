@@ -22,22 +22,28 @@ function slugify(name: string): string {
 // The operator generates a key themselves for any number of days they want (they
 // sell keys their own way, outside this system entirely), and can label it however
 // they like for their own tracking - the label is display-only, "days" is what
-// actually determines the access window when it's redeemed.
+// actually determines the access window when it's redeemed. count generates several
+// identical keys (same days/price/label) in one call, for batch-selling ahead of time.
 tenancy.post('/api/master/license-keys', requireSuperAdmin(), async (c) => {
-  const { label, days, price } = await c.req.json().catch(() => ({}));
+  const { label, days, price, count } = await c.req.json().catch(() => ({}));
   const numDays = parseInt(days, 10);
   if (!numDays || numDays < 1 || numDays > 3650) return c.json({ error: 'Enter a valid number of days (1-3650)' }, 400);
+  const numCount = Math.max(1, Math.min(500, parseInt(count, 10) || 1));
   const planLabel = String(label || '').trim() || `${numDays} Day Access`;
   const numPrice = parseFloat(price) || 0;
-  let key_code = generateKeyCode();
-  // Extremely unlikely to collide, but check anyway rather than trust chance.
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const [existing] = await sql`SELECT 1 FROM license_keys WHERE key_code = ${key_code}`;
-    if (!existing) break;
-    key_code = generateKeyCode();
+  const created: any[] = [];
+  for (let n = 0; n < numCount; n++) {
+    let key_code = generateKeyCode();
+    // Extremely unlikely to collide, but check anyway rather than trust chance.
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const [existing] = await sql`SELECT 1 FROM license_keys WHERE key_code = ${key_code}`;
+      if (!existing) break;
+      key_code = generateKeyCode();
+    }
+    const [row] = await sql`INSERT INTO license_keys (key_code, plan, days, price_paid) VALUES (${key_code}, ${planLabel}, ${numDays}, ${numPrice}) RETURNING *`;
+    created.push(row);
   }
-  const [row] = await sql`INSERT INTO license_keys (key_code, plan, days, price_paid) VALUES (${key_code}, ${planLabel}, ${numDays}, ${numPrice}) RETURNING *`;
-  return c.json({ data: row });
+  return c.json({ data: numCount === 1 ? created[0] : created, keys: created });
 });
 
 tenancy.get('/api/master/license-keys', requireSuperAdmin(), async (c) => {

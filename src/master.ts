@@ -136,6 +136,7 @@ async function renderApp() {
       <div class="tabs">
         <button class="tab \${currentTab==='overview'?'on':''}" onclick="switchTab('overview')">Overview</button>
         <button class="tab \${currentTab==='callers'?'on':''}" onclick="switchTab('callers')">Callers</button>
+        <button class="tab \${currentTab==='keys'?'on':''}" onclick="switchTab('keys')">License Keys</button>
         <button class="tab \${currentTab==='broadcast'?'on':''}" onclick="switchTab('broadcast')">Broadcast</button>
         <button class="tab \${currentTab==='history'?'on':''}" onclick="switchTab('history')">History</button>
       </div>
@@ -151,6 +152,7 @@ async function loadTab() {
   body.innerHTML = '<div class="panel" style="color:var(--text-dim);">Loading…</div>';
   if (currentTab === 'overview') await renderOverview();
   else if (currentTab === 'callers') await renderCallers();
+  else if (currentTab === 'keys') await renderKeys();
   else if (currentTab === 'broadcast') await renderBroadcast();
   else if (currentTab === 'history') await renderHistory();
 }
@@ -240,6 +242,90 @@ async function renderCallers() {
 
 let debounceT = null;
 function debouncedReload() { clearTimeout(debounceT); debounceT = setTimeout(renderCallers, 300); }
+
+let lastGeneratedKeys = [];
+async function renderKeys() {
+  const res = await api('/api/master/license-keys');
+  if (res.status === 401) { renderGate('Session expired'); return; }
+  const keys = (await res.json()).data || [];
+  const unredeemed = keys.filter(k => !k.redeemed);
+  const redeemed = keys.filter(k => k.redeemed);
+  $('#body').innerHTML = \`
+    <div class="panel">
+      <h3 style="margin-bottom:14px;">Generate License Keys</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div><label style="font-size:11px;color:var(--text-dim);display:block;margin-bottom:6px;">Label (optional)</label><input id="keyLabel" placeholder="e.g. Starter Plan" /></div>
+        <div><label style="font-size:11px;color:var(--text-dim);display:block;margin-bottom:6px;">Days of access</label><input id="keyDays" type="number" value="30" min="1" max="3650" /></div>
+        <div><label style="font-size:11px;color:var(--text-dim);display:block;margin-bottom:6px;">Price paid (optional, your records only)</label><input id="keyPrice" type="number" step="0.01" placeholder="0.00" /></div>
+        <div><label style="font-size:11px;color:var(--text-dim);display:block;margin-bottom:6px;">How many keys</label><input id="keyCount" type="number" value="1" min="1" max="500" /></div>
+      </div>
+      <button class="btn btn-gold" onclick="generateKeys()">Generate</button>
+      <div id="genStatus" style="font-size:12px;margin-top:10px;color:var(--text-dim);"></div>
+      \${lastGeneratedKeys.length ? \`
+        <div style="margin-top:16px;padding:14px;border-radius:12px;background:rgba(34,197,94,.06);border:1px solid rgba(34,197,94,.25);">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <b style="font-size:13px;color:var(--success);">\${lastGeneratedKeys.length} key\${lastGeneratedKeys.length > 1 ? 's' : ''} just generated</b>
+            <button class="btn btn-ghost" style="padding:6px 14px;font-size:12px;" onclick="copyAllKeys()">Copy All</button>
+          </div>
+          <div class="mono" style="font-size:12.5px;line-height:1.9;max-height:220px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;">\${lastGeneratedKeys.join('\\n')}</div>
+        </div>
+      \` : ''}
+    </div>
+    <div class="panel">
+      <h3 style="margin-bottom:14px;">Unredeemed (\${unredeemed.length})</h3>
+      \${unredeemed.length ? \`<table>
+        <thead><tr><th>Key</th><th>Label</th><th>Days</th><th>Price</th><th>Created</th><th></th></tr></thead>
+        <tbody>\${unredeemed.map(k => \`<tr>
+          <td class="mono">\${esc(k.key_code)}</td>
+          <td>\${esc(k.plan)}</td>
+          <td>\${k.days}</td>
+          <td>\${k.price_paid ? '$' + Number(k.price_paid).toFixed(2) : '—'}</td>
+          <td class="mono" style="color:var(--text-dim);font-size:11.5px;">\${new Date(k.created_at).toLocaleDateString()}</td>
+          <td><button class="btn btn-ghost" style="padding:5px 10px;font-size:11px;" onclick="copyOneKey('\${esc(k.key_code)}')">Copy</button> <button class="btn btn-ghost" style="padding:5px 10px;font-size:11px;color:var(--danger);" onclick="deleteKey(\${k.id})">Delete</button></td>
+        </tr>\`).join('')}</tbody>
+      </table>\` : '<div style="color:var(--text-dim);font-size:13px;">None waiting to be redeemed.</div>'}
+    </div>
+    <div class="panel">
+      <h3 style="margin-bottom:14px;">Redeemed (\${redeemed.length})</h3>
+      \${redeemed.length ? \`<table>
+        <thead><tr><th>Key</th><th>Label</th><th>Redeemed By</th><th>Redeemed</th></tr></thead>
+        <tbody>\${redeemed.map(k => \`<tr>
+          <td class="mono" style="color:var(--text-dim);">\${esc(k.key_code)}</td>
+          <td>\${esc(k.plan)}</td>
+          <td><b>\${esc(k.tenant_name || '—')}</b></td>
+          <td class="mono" style="color:var(--text-dim);font-size:11.5px;">\${k.redeemed_at ? new Date(k.redeemed_at).toLocaleDateString() : '—'}</td>
+        </tr>\`).join('')}</tbody>
+      </table>\` : '<div style="color:var(--text-dim);font-size:13px;">None redeemed yet.</div>'}
+    </div>\`;
+}
+async function generateKeys() {
+  const label = $('#keyLabel').value.trim();
+  const days = $('#keyDays').value;
+  const price = $('#keyPrice').value;
+  const count = $('#keyCount').value;
+  const statusEl = $('#genStatus');
+  statusEl.textContent = 'Generating…';
+  const res = await api('/api/master/license-keys', { method: 'POST', body: JSON.stringify({ label, days, price, count }) });
+  const data = await res.json();
+  if (!res.ok) { statusEl.textContent = data.error || 'Failed to generate'; statusEl.style.color = 'var(--danger)'; return; }
+  lastGeneratedKeys = (data.keys || [data.data]).map(k => k.key_code);
+  await renderKeys();
+}
+function copyAllKeys() {
+  navigator.clipboard.writeText(lastGeneratedKeys.join('\\n'));
+  const btn = event.target;
+  const original = btn.textContent;
+  btn.textContent = 'Copied ✓';
+  setTimeout(() => { btn.textContent = original; }, 1500);
+}
+function copyOneKey(code) {
+  navigator.clipboard.writeText(code);
+}
+async function deleteKey(id) {
+  if (!confirm('Delete this unredeemed key? It will no longer work.')) return;
+  await api('/api/master/license-keys/' + id, { method: 'DELETE' });
+  renderKeys();
+}
 
 async function renderBroadcast() {
   if (!overviewData) {
