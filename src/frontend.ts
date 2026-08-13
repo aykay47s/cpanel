@@ -12,7 +12,7 @@ async function applyBranding() {
     // The slug is set in the server HTML as <meta id="cp-slug" content="...">
     const slugMeta = document.querySelector('meta#cp-slug');
     const slug = slugMeta?.getAttribute('content') || '';
-    const url = slug ? `/api/branding?slug=${encodeURIComponent(slug)}` : '/api/branding';
+    const url = slug ? '/api/branding?slug=' + encodeURIComponent(slug) : '/api/branding';
     const res = await fetch(url);
     const { data } = await res.json();
     if (data && data.name) {
