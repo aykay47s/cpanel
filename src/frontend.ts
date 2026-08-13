@@ -7,7 +7,13 @@ let me = JSON.parse(localStorage.getItem('dispatch_me') || 'null');
 let brandingData = null;
 async function applyBranding() {
   try {
-    const res = await fetch('/api/branding');
+    // If we're on a resold panel (/:slug), pass it to /api/branding so it returns
+    // that tenant's name instead of falling back to the global "Frap Ties".
+    // The slug is set in the server HTML as <meta id="cp-slug" content="...">
+    const slugMeta = document.querySelector('meta#cp-slug');
+    const slug = slugMeta?.getAttribute('content') || '';
+    const url = slug ? `/api/branding?slug=${encodeURIComponent(slug)}` : '/api/branding';
+    const res = await fetch(url);
     const { data } = await res.json();
     if (data && data.name) {
       brandingData = data;

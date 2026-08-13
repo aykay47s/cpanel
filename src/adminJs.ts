@@ -278,11 +278,26 @@ async function renderAdminImport(el) {
       <div class="field" style="margin-top:16px;">
         <label>Which bank are these for?</label>
         <p style="font-size:11px;color:var(--text-faint);margin:-2px 0 8px;line-height:1.4;">This tags every lead in the batch. Manage the list under Lead Categories.</p>
-        <select id="importLeadType">\${cats.map(c => '<option value="' + esc(c.name) + '">' + esc(c.name) + '</option>').join('') || '<option value="general">General</option>'}</select>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">\${cats.map(c => {
+          const logoTag = c.domain ? '<img src="' + esc(c.domain) + '" style="width:20px;height:20px;object-fit:contain;vertical-align:middle;margin-right:4px;" />' : '';
+          return '<label style="display:flex;align-items:center;padding:8px 12px;border:1px solid var(--border-subtle);border-radius:6px;cursor:pointer;background:var(--bg-dim);transition:all .2s;"><input type="radio" name="importLeadType" value="' + esc(c.name) + '" style="cursor:pointer;margin-right:4px;" />' + logoTag + '<span style="font-size:13px;">' + esc(c.name) + '</span></label>';
+        }).join('') || '<label><input type="radio" name="importLeadType" value="general" />General</label>'}</div>
+        <select id="importLeadType" style="display:none;">\${cats.map(c => '<option value="' + esc(c.name) + '"></option>').join('')}</select>
       </div>
       <button class="btn btn-gold btn-block" style="margin-top:14px;" onclick="runImportPreview()">Analyze \u2192</button>
     </div>
     <div id="importPreview"></div>\`;
+  // Sync radio buttons to hidden select for backward compatibility with runImportPreview()
+  setTimeout(() => {
+    const radios = document.querySelectorAll('input[name="importLeadType"]');
+    const select = document.getElementById('importLeadType');
+    if (select && radios.length) select.value = radios[0].value;  // Set default to first
+    radios.forEach(radio => {
+      radio.addEventListener('change', () => {
+        if (select) select.value = radio.value;
+      });
+    });
+  }, 0);
 }
 function importStepActive(n) {
   const s2 = document.getElementById('istep2'), s3 = document.getElementById('istep3');
