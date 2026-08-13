@@ -16,6 +16,8 @@ export const STORE_PAGE = (checkoutUrl: string) => `<!DOCTYPE html>
   body{margin:0;font-family:'Inter',-apple-system,sans-serif;background:radial-gradient(ellipse 80% 50% at 20% -10%,rgba(124,92,255,.18),transparent 55%),radial-gradient(ellipse 70% 50% at 100% 10%,rgba(79,140,255,.14),transparent 55%),var(--bg);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased;}
   h1,h2{font-family:'Space Grotesk',sans-serif;}
   .wrap{max-width:1000px;margin:0 auto;padding:60px 20px 80px;text-align:center;}
+  .cp-logo{width:min(440px,80vw);height:auto;margin:0 auto 8px;display:block;filter:drop-shadow(0 8px 40px rgba(124,92,255,.35));animation:cpFloat 5s ease-in-out infinite;}
+  @keyframes cpFloat{0%,100%{transform:translateY(0);}50%{transform:translateY(-7px);}}
   .hero h1{font-size:36px;font-weight:800;letter-spacing:-.02em;margin:0 0 12px;}
   .hero p{font-size:15px;color:var(--text-dim);max-width:520px;margin:0 auto 48px;line-height:1.6;}
   .tiers{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px;text-align:left;}
@@ -39,6 +41,7 @@ export const STORE_PAGE = (checkoutUrl: string) => `<!DOCTYPE html>
 <body>
 <div class="wrap">
   <div class="hero">
+    <img src="/clearpanel-logo.png" alt="ClearPanel" class="cp-logo" />
     <h1>Get Your Own Call Center Panel</h1>
     <p>Full lead management, live call routing, team leaderboard, and your own admin panel - completely separate from anyone else's data.</p>
   </div>

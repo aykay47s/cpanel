@@ -73,7 +73,7 @@ app.get('/redeem', (c) => {
 app.get('/manifest.json', async (c) => {
   const rows = await sql`SELECT key, value FROM settings WHERE key IN ('panel_name', 'panel_logo')`;
   const map = Object.fromEntries(rows.map((r: any) => [r.key, r.value]));
-  const name = map.panel_name || 'FRPTS';
+  const name = map.panel_name || 'ClearPanel';
   return c.json({
     name,
     short_name: name,
@@ -90,6 +90,7 @@ app.get('/manifest.json', async (c) => {
   });
 });
 
+app.get('/clearpanel-logo.png', async (c) => { c.header('Content-Type', 'image/png'); c.header('Cache-Control', 'public, max-age=86400'); return c.body(await Bun.file('./public/clearpanel-logo.png').arrayBuffer()); });
 app.get('/icon.png', async (c) => { c.header('Content-Type', 'image/png'); return c.body(await Bun.file('./public/icon.png').arrayBuffer()); });
 app.get('/icon-192.png', async (c) => { c.header('Content-Type', 'image/png'); return c.body(await Bun.file('./public/icon-192.png').arrayBuffer()); });
 app.get('/icon-512.png', async (c) => { c.header('Content-Type', 'image/png'); return c.body(await Bun.file('./public/icon-512.png').arrayBuffer()); });
@@ -99,7 +100,7 @@ app.get('/', async (c) => {
   c.header('Cache-Control', 'no-store, no-cache, must-revalidate');
   const rows = await sql`SELECT key, value FROM settings WHERE key IN ('panel_name', 'panel_logo')`;
   const map = Object.fromEntries(rows.map((r: any) => [r.key, r.value]));
-  const name = map.panel_name || 'FRPTS';
+  const name = map.panel_name || 'ClearPanel';
   const logoTag = map.panel_logo ? `<img src="${map.panel_logo}" style="width:100%;height:100%;object-fit:contain;border-radius:inherit;" />` : '';
   let html = page
     .split('Frap Ties').join(name)

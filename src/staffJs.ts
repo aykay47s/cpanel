@@ -10,6 +10,7 @@ async function switchStaffTab(tab) {
     else if (tab === 'queue') { await renderStaffQueue(); startQueuePolling(); }
     else if (tab === 'chat') { body.innerHTML = '<div class="fade-up" id="staffChatWrap"></div>'; await renderChatInto(document.getElementById('staffChatWrap')); }
     else if (tab === 'board') await renderStaffBoard();
+    else if (tab === 'scripts') await renderStaffScripts();
     else if (tab === 'profile') await renderStaffProfile();
     body.classList.remove('page-transition'); void body.offsetWidth; body.classList.add('page-transition');
   } catch (err) {
@@ -51,18 +52,20 @@ async function renderStaffHome() {
   const myRank = (lb.findIndex(r => r.id === me.id) + 1) || '—';
   const myStat = lb.find(r => r.id === me.id) || { successful_calls: 0 };
   const li = levelInfo(me.xp);
+  const rk = rankInfo(me.xp);
   const goalPct = Math.min(100, Math.round((goal.current / goal.target) * 100));
 
   body.innerHTML = \`
     <div class="panel p fade-up" style="position:relative;overflow:hidden;">
       <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px;">
-        <div style="width:56px;height:56px;flex-shrink:0;">\${avatarHtml(me, 56)}</div>
+        <div style="flex-shrink:0;">\${rankEmblemHtml(rk, 56)}</div>
         <div style="flex:1;min-width:0;">
           <div style="font-size:20px;font-weight:700;font-family:'Bricolage Grotesque',sans-serif;letter-spacing:-.01em;">\${esc(me.name)}</div>
-          <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
+          <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center;">
             \${statusBadge(me.role)}
-            <span class="lvl-chip">Lv \${li.level} · \${li.title}</span>
-            <span class="badge not_called">Rank #\${myRank}</span>
+            <span class="rank-chip" style="color:\${rk.c1};border-color:\${rk.c1}55;">\${rk.label}</span>
+            <span class="lvl-chip">Lv \${li.level}</span>
+            <span class="badge not_called">#\${myRank}</span>
           </div>
         </div>
       </div>
@@ -80,30 +83,16 @@ async function renderStaffHome() {
     </div>
     <div class="section-title">Announcements</div>
     \${anns.length ? anns.map(a => \`<div class="announcement panel \${a.important ? 'important' : ''} fade-up"><div><div class="txt">\${esc(a.content)}</div><div class="meta">\${a.author_name || 'Admin'} · \${timeAgo(a.created_at)}</div></div></div>\`).join('') : '<div style="color:var(--text-faint);font-size:13px;padding:10px 2px;">Nothing from admin yet.</div>'}
-    <div class="section-title">Script Manager</div>
-    <div class="panel p fade-up">
-      <p style="font-size:11.5px;color:var(--text-dim);margin-bottom:12px;line-height:1.4;">Every script admin has approved, browsable anytime — not just during a call.</p>
-      <input id="scriptSearchInput" placeholder="Search scripts…" oninput="filterScriptManager()" style="margin-bottom:10px;" />
-      <div id="scriptManagerList"></div>
-    </div>
     <div class="section-title" style="display:flex;justify-content:space-between;align-items:baseline;">Call Log \${callLog.length > 6 ? '<span id="callLogToggle" style="text-transform:none;letter-spacing:0;font-weight:600;font-size:12px;color:var(--gold-bright);cursor:pointer;" onclick="toggleCallLogExpanded()">Show all ' + callLog.length + '</span>' : ''}</div>
     <div class="panel p fade-up">
       <div id="callLogRows">\${callLog.length ? callLog.slice(0, 6).map(callLogRowHtml).join('') : '<div style="color:var(--text-dim);font-size:12.5px;">No calls logged yet.</div>'}</div>
     </div>
-    <div class="section-title">Suggest a Script</div>
-    <div class="panel p fade-up">
-      <p style="font-size:11.5px;color:var(--text-dim);margin-bottom:10px;line-height:1.4;">Got a line that's working well for you? Send it in — admin reviews it and can approve it for the whole team to see during calls.</p>
-      <div class="field"><input id="scriptSuggestTitle" placeholder="Give it a short title" /></div>
-      <div class="field"><textarea id="scriptSuggestContent" rows="3" placeholder="What do you actually say?"></textarea></div>
-      <button class="btn btn-gold btn-block" onclick="suggestScript()">Send for Review</button>
-      <div id="scriptSuggestStatus" style="font-size:12px;margin-top:8px;"></div>
-    </div>
+
   \`;
   animateCountUps(body);
   window._allScripts = allScripts;
   window._allCallLog = callLog;
   callLogExpanded = false;
-  renderScriptManagerList(allScripts);
 }
 function callLogRowHtml(e) {
   return \`<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">
@@ -125,6 +114,28 @@ function toggleCallLogExpanded() {
   if (!rows || !window._allCallLog) return;
   rows.innerHTML = (callLogExpanded ? window._allCallLog : window._allCallLog.slice(0, 6)).map(callLogRowHtml).join('');
   if (toggle) toggle.textContent = callLogExpanded ? 'Show less' : 'Show all ' + window._allCallLog.length;
+}
+async function renderStaffScripts() {
+  const body = document.getElementById('staffBody');
+  await loadCategoryCache();
+  const scripts = (await api('/api/scripts').then(r => r.json())).data;
+  window._allScripts = scripts;
+  body.innerHTML = \`
+    <div class="tab-hint"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg><span>Every script admin has approved, searchable anytime — not just mid-call. Got a line that lands? Send it in at the bottom and admin can approve it for the whole floor.</span></div>
+    <div class="panel p fade-up">
+      <div class="section-title" style="margin-top:0;">Script Library</div>
+      <input id="scriptSearchInput" placeholder="Search scripts…" oninput="filterScriptManager()" style="margin-bottom:12px;" />
+      <div id="scriptManagerList"></div>
+    </div>
+    <div class="section-title">Suggest a Script</div>
+    <div class="panel p fade-up">
+      <p style="font-size:11.5px;color:var(--text-dim);margin-bottom:10px;line-height:1.4;">Admin reviews it and can approve it for the whole team to see during calls.</p>
+      <div class="field"><input id="scriptSuggestTitle" placeholder="Give it a short title" /></div>
+      <div class="field"><textarea id="scriptSuggestContent" rows="3" placeholder="What do you actually say?"></textarea></div>
+      <button class="btn btn-gold btn-block" onclick="suggestScript()">Send for Review</button>
+      <div id="scriptSuggestStatus" style="font-size:12px;margin-top:8px;"></div>
+    </div>\`;
+  renderScriptManagerList(scripts);
 }
 function renderScriptManagerList(scripts) {
   const list = document.getElementById('scriptManagerList');
@@ -360,19 +371,30 @@ function startCallTimer() {
 }
 async function connectCall(id) { await api('/api/caller/leads/' + id + '/connect', { method: 'POST' }); renderStaffQueue(); }
 async function endCall(id) { await api('/api/caller/leads/' + id + '/end-call', { method: 'POST' }); renderStaffQueue(); }
+// After XP lands, roll me.xp forward locally and fire the rank-up moment if the
+// tier changed — the emblem animation only shows on a genuine promotion.
+function applyXpEarned(amount, label) {
+  if (!amount) return;
+  const before = rankInfo(me.xp);
+  me.xp = (me.xp || 0) + amount;
+  localStorage.setItem('dispatch_me', JSON.stringify(me));
+  const after = rankInfo(me.xp);
+  xpToast(amount, label);
+  if (after.tier !== before.tier || after.div !== before.div) setTimeout(() => showRankUp(after), 700);
+}
 async function recordOutcome(id, outcome) {
   const res = await api('/api/caller/leads/' + id + '/outcome', { method: 'POST', body: JSON.stringify({ outcome, duration: callStart ? Math.floor((Date.now()-callStart)/1000) : 0 }) });
   const data = await res.json().catch(() => ({}));
   callStart = null; clearInterval(callTimerInterval);
   renderStaffQueue();
-  xpToast(data.xp_awarded, titleCase(outcome));
+  applyXpEarned(data.xp_awarded, titleCase(outcome));
 }
 async function finisherOutcome(id, outcome) {
   const res = await api('/api/finisher/leads/' + id + '/outcome', { method: 'POST', body: JSON.stringify({ outcome }) });
   const data = await res.json().catch(() => ({}));
   callStart = null; clearInterval(callTimerInterval); workingFinisherLeadId = null;
   renderStaffQueue();
-  xpToast(data.xp_awarded, titleCase(outcome));
+  applyXpEarned(data.xp_awarded, titleCase(outcome));
 }
 
 let lbMode = 'week';

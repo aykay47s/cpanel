@@ -195,9 +195,12 @@ users.get('/api/lead-categories', async (c) => {
   return c.json({ data: rows });
 });
 users.post('/api/admin/lead-categories', requireRole('admin'), async (c) => {
-  const { name, color } = await c.req.json().catch(() => ({}));
+  const { name, color, domain } = await c.req.json().catch(() => ({}));
   if (!name) return bad(c, 'Name required');
-  const [row] = await sql`INSERT INTO lead_categories (name, color) VALUES (${name}, ${color || '#4f8cff'}) RETURNING *`;
+  // ON CONFLICT: re-adding a bank from the picker updates its domain/colour
+  // instead of erroring on the unique name.
+  const [row] = await sql`INSERT INTO lead_categories (name, color, domain) VALUES (${name}, ${color || '#4f8cff'}, ${domain || null})
+    ON CONFLICT (name) DO UPDATE SET color = EXCLUDED.color, domain = EXCLUDED.domain RETURNING *`;
   return c.json({ data: row });
 });
 users.delete('/api/admin/lead-categories/:id', requireRole('admin'), async (c) => {

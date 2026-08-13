@@ -262,21 +262,32 @@ async function overrideStatus(id, status) {
 async function renderAdminImport(el) {
   const cats = await api('/api/lead-categories').then(r => r.json()).then(d => d.data);
   el.innerHTML = \`
+    <div class="import-steps">
+      <div class="import-step on"><span class="n">1</span>Paste</div><div class="bar"></div>
+      <div class="import-step" id="istep2"><span class="n">2</span>Category</div><div class="bar"></div>
+      <div class="import-step" id="istep3"><span class="n">3</span>Review</div>
+    </div>
     <div class="panel p fade-up">
-      <div class="section-title" style="margin-top:0;">Smart Import</div>
-      <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:12px;">Paste leads in any format — CSV, pipe-separated, freeform text, phone numbers with or without separators, local or international. Sensitive data (card numbers, CVVs, passwords) is automatically stripped before anything is stored.</p>
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
-        <label class="btn btn-ghost btn-sm" style="cursor:pointer;">Upload a File Instead<input type="file" id="importFile" accept=".txt,.csv,.tsv" style="display:none;" onchange="handleImportFile(event)" /></label>
+      <div class="section-title" style="margin-top:0;">Paste your leads</div>
+      <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:14px;line-height:1.5;">Any format works — CSV, pipe-separated, or freeform text, local or international numbers. Card numbers, CVVs and passwords are stripped automatically before anything is stored.</p>
+      <textarea id="importText" rows="8" placeholder="John Smith, 07515 944454, john@email.com, 42 Oak St&#10;paste one lead per line — thousands at once is fine" oninput="importStepActive(this.value.trim()?2:1)"></textarea>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:10px;">
+        <label class="btn btn-ghost btn-sm" style="cursor:pointer;">Upload a file<input type="file" id="importFile" accept=".txt,.csv,.tsv" style="display:none;" onchange="handleImportFile(event)" /></label>
         <span id="importFileName" style="font-size:11.5px;color:var(--text-dim);"></span>
       </div>
-      <textarea id="importText" rows="9" placeholder="John Smith, 555-123-4567, john@email.com, 42 Oak St&#10;or paste freeform data, CSV, or pipe-separated rows — any size, including thousands of rows for a mass import"></textarea>
-      <div class="row-flex" style="margin-top:12px;">
-        <div class="field"><label>Assign Category</label><select id="importLeadType">\${cats.map(c => '<option value="' + esc(c.name) + '">' + esc(c.name) + '</option>').join('') || '<option value="general">General</option>'}</select></div>
-        <div class="field"><label>Source Label</label><input id="importSource" placeholder="e.g. Facebook Ad" /></div>
+      <div class="field" style="margin-top:16px;">
+        <label>Which bank are these for?</label>
+        <p style="font-size:11px;color:var(--text-faint);margin:-2px 0 8px;line-height:1.4;">This tags every lead in the batch. Manage the list under Lead Categories.</p>
+        <select id="importLeadType">\${cats.map(c => '<option value="' + esc(c.name) + '">' + esc(c.name) + '</option>').join('') || '<option value="general">General</option>'}</select>
       </div>
-      <button class="btn btn-gold btn-block" style="margin-top:12px;" onclick="runImportPreview()">Analyze</button>
+      <button class="btn btn-gold btn-block" style="margin-top:14px;" onclick="runImportPreview()">Analyze \u2192</button>
     </div>
     <div id="importPreview"></div>\`;
+}
+function importStepActive(n) {
+  const s2 = document.getElementById('istep2'), s3 = document.getElementById('istep3');
+  if (s2) s2.classList.toggle('on', n >= 2);
+  if (s3) s3.classList.toggle('on', n >= 3);
 }
 function handleImportFile(event) {
   const file = event.target.files[0];
@@ -296,6 +307,7 @@ async function runImportPreview() {
   if (!res.ok) { const e = await res.json().catch(() => ({})); preview.innerHTML = '<div class="panel p" style="color:var(--danger);">' + (e.error || 'Import failed') + '</div>'; return; }
   const data = (await res.json()).data;
   lastImportPreview = data.leads;
+  importStepActive(3);
   let html = '';
   if (data.redacted.redactedCount > 0) {
     html += \`<div class="panel p fade-up" style="border-color:var(--gold-glow);"><b style="color:var(--gold-bright);">\${data.redacted.redactedCount} sensitive field(s) removed</b> before parsing (\${data.redacted.redactedTypes.join(', ')}). These are never stored.</div>\`;
@@ -340,7 +352,6 @@ function addBlankImportRow() {
 }
 async function confirmImport() {
   const lead_type = document.getElementById('importLeadType').value.trim() || 'general';
-  const source = document.getElementById('importSource').value.trim() || 'import';
   const to_vault = document.getElementById('importToVault')?.checked || false;
   const validLeads = lastImportPreview.filter(r => r.phone && r.phone.replace(/[^\\d]/g, '').length >= 7);
   const invalidCount = lastImportPreview.length - validLeads.length;
@@ -348,7 +359,7 @@ async function confirmImport() {
     return alert('None of the ' + lastImportPreview.length + ' row(s) have a phone number with at least 7 digits. Edit the Phone field directly in the row(s) above, then hit Import again.');
   }
   if (invalidCount > 0 && !confirm(invalidCount + ' row(s) are missing a valid phone and will be skipped. Import the remaining ' + validLeads.length + '?')) return;
-  const res = await api('/api/admin/leads/import/confirm', { method: 'POST', body: JSON.stringify({ leads: validLeads, lead_type, source, to_vault }) });
+  const res = await api('/api/admin/leads/import/confirm', { method: 'POST', body: JSON.stringify({ leads: validLeads, lead_type, source: 'import', to_vault }) });
   const data = await res.json();
   alert((to_vault ? 'Sent ' : 'Imported ') + data.inserted + (to_vault ? ' lead(s) to the vault' : ' leads') + (data.flagged ? ' (' + data.flagged + ' flagged as possible duplicates for review)' : ''));
   switchAdminTab(to_vault ? 'vault' : 'leads');
@@ -583,26 +594,100 @@ async function saveTemplate() {
   document.getElementById('templateStatus').style.color = 'var(--success)';
 }
 
+let bankPickerTab = 'uk';
+let bankPickerQuery = '';
 async function renderAdminCategories(el) {
   const res = await api('/api/lead-categories');
   const cats = (await res.json()).data;
+  window._catNames = new Set(cats.map(c => c.name.toLowerCase()));
   el.innerHTML = \`
     <div class="panel p fade-up">
-      <div class="section-title" style="margin-top:0;">Add Category</div>
-      <div class="row-flex">
-        <div class="field"><label>Name</label><input id="catName" placeholder="e.g. Priority" /></div>
-        <div class="field"><label>Color</label><input id="catColor" type="color" value="#4f8cff" style="height:44px;padding:4px;" /></div>
-        <button class="btn btn-gold" onclick="addCategory()">Add</button>
+      <div class="section-title" style="margin-top:0;">Add a Bank</div>
+      <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:14px;line-height:1.5;">Search UK or international banks and tap to add — the real logo comes with it and shows on every lead. Not listed? Type any bank name under Custom and it still gets a logo.</p>
+      <div class="seg-tabs" style="margin-bottom:12px;">
+        <button class="seg-tab \${bankPickerTab==='uk'?'on':''}" onclick="setBankTab('uk')">UK Banks</button>
+        <button class="seg-tab \${bankPickerTab==='intl'?'on':''}" onclick="setBankTab('intl')">International</button>
+        <button class="seg-tab \${bankPickerTab==='custom'?'on':''}" onclick="setBankTab('custom')">Custom</button>
       </div>
+      <div id="bankPickerBody"></div>
     </div>
     <div class="panel p fade-up">
-      <div class="section-title" style="margin-top:0;">Categories (\${cats.length})</div>
-      \${cats.map(cat => \`<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--border);">
-        <span style="width:14px;height:14px;border-radius:4px;background:\${cat.color};"></span>
+      <div class="section-title" style="margin-top:0;">Your Categories (\${cats.length})</div>
+      \${cats.length ? cats.map(cat => \`<div style="display:flex;align-items:center;gap:11px;padding:10px 0;border-bottom:1px solid var(--border);">
+        \${cat.domain ? '<img src="' + bankLogoUrl(cat.domain) + '" style="width:24px;height:24px;border-radius:6px;object-fit:contain;flex-shrink:0;" onerror="this.remove()" />' : '<span style="width:14px;height:14px;border-radius:4px;background:' + cat.color + ';flex-shrink:0;"></span>'}
         <span style="flex:1;font-size:13px;">\${esc(cat.name)}</span>
         <button class="btn btn-danger btn-sm" onclick="deleteCategory(\${cat.id})">Delete</button>
-      </div>\`).join('') || '<div style="color:var(--text-dim);">No categories yet.</div>'}
+      </div>\`).join('') : '<div style="color:var(--text-dim);">No categories yet — add your first bank above.</div>'}
     </div>\`;
+  renderBankPicker();
+}
+function setBankTab(t) { bankPickerTab = t; bankPickerQuery = ''; renderAdminTab('categories'); }
+function renderBankPicker() {
+  const wrap = document.getElementById('bankPickerBody');
+  if (!wrap) return;
+  if (bankPickerTab === 'custom') {
+    wrap.innerHTML = '<div class="row-flex">'
+      + '<div class="field" style="flex:2;"><label>Bank name</label><input id="customBankName" placeholder="e.g. First National Bank" oninput="previewCustomBank()" /></div>'
+      + '<div class="field" style="flex:2;"><label>Website (for the logo)</label><input id="customBankDomain" placeholder="e.g. fnb.co.za" oninput="previewCustomBank()" /></div>'
+      + '</div>'
+      + '<div id="customBankPreview" style="display:flex;align-items:center;gap:10px;margin:4px 0 14px;min-height:26px;"></div>'
+      + '<button class="btn btn-gold" onclick="addCustomBank()">Add Category</button>'
+      + '<p style="font-size:11px;color:var(--text-faint);margin-top:10px;line-height:1.5;">The website is only used to fetch the logo — enter the bank main domain, no https. Leave it blank for a plain coloured tag.</p>';
+    return;
+  }
+  const list = BANK_DIR[bankPickerTab] || [];
+  const q = bankPickerQuery.toLowerCase();
+  const filtered = q ? list.filter(b => b[0].toLowerCase().includes(q)) : list;
+  // Cards carry the name/domain as data-* and are handled by one delegated
+  // listener (installed once, below) — no inline-onclick quote escaping, which is
+  // exactly the thing that keeps breaking inside the page's outer template string.
+  let cards = '';
+  for (const b of filtered) {
+    const added = window._catNames && window._catNames.has(b[0].toLowerCase());
+    cards += '<div class="bank-card' + (added ? ' added' : '') + '"'
+      + (added ? '' : ' data-bank-name="' + esc(b[0]) + '" data-bank-domain="' + esc(b[1]) + '"')
+      + '><img src="' + bankLogoUrl(b[1]) + '" onerror="this.remove()" /><span class="bn">' + esc(b[0]) + '</span></div>';
+  }
+  wrap.innerHTML = '<input placeholder="Search ' + filtered.length + ' banks…" value="' + esc(bankPickerQuery) + '" oninput="bankPickerQuery=this.value;renderBankPicker()" style="margin-bottom:6px;" autofocus />'
+    + '<div class="bank-grid">' + cards + '</div>'
+    + (filtered.length === 0 ? '<div style="color:var(--text-dim);font-size:12.5px;padding:8px 2px;">No match. Try the Custom tab to add it by hand.</div>' : '');
+}
+// One delegated handler for every bank card, present or future.
+document.addEventListener('click', (e) => {
+  const card = e.target.closest && e.target.closest('.bank-card[data-bank-name]');
+  if (card) addBankFromDir(card, card.dataset.bankName, card.dataset.bankDomain);
+});
+// No regex literals here on purpose: inside the page's big template string, the
+// escaping for /^https?:\/\// collapses and produces a broken pattern. Plain
+// string ops are unambiguous and do the same job.
+function normalizeDomain(v) {
+  let d = String(v || '').trim();
+  if (d.startsWith('http://')) d = d.slice(7);
+  if (d.startsWith('https://')) d = d.slice(8);
+  const slash = d.indexOf('/');
+  if (slash !== -1) d = d.slice(0, slash);
+  return d.trim();
+}
+function previewCustomBank() {
+  const name = document.getElementById('customBankName').value.trim();
+  const domain = normalizeDomain(document.getElementById('customBankDomain').value);
+  const prev = document.getElementById('customBankPreview');
+  if (!name) { prev.innerHTML = ''; return; }
+  prev.innerHTML = (domain ? '<img src="' + bankLogoUrl(domain) + '" style="width:24px;height:24px;border-radius:6px;object-fit:contain;" onerror="this.remove()" />' : '') + '<span style="font-size:13px;font-weight:600;">' + esc(name) + '</span>';
+}
+async function addCustomBank() {
+  const name = document.getElementById('customBankName').value.trim();
+  const domain = normalizeDomain(document.getElementById('customBankDomain').value);
+  if (!name) return alert('Enter a bank name');
+  await api('/api/admin/lead-categories', { method: 'POST', body: JSON.stringify({ name, color: '#4f8cff', domain: domain || null }) });
+  renderAdminTab('categories');
+}
+async function addBankFromDir(elm, name, domain) {
+  elm.classList.add('added'); elm.onclick = null;
+  await api('/api/admin/lead-categories', { method: 'POST', body: JSON.stringify({ name, color: '#4f8cff', domain }) });
+  sharedCategoryCache = null;
+  if (window._catNames) window._catNames.add(name.toLowerCase());
+  renderAdminTab('categories');
 }
 async function addCategory() {
   const name = document.getElementById('catName').value.trim();
@@ -614,9 +699,9 @@ async function addCategory() {
 async function deleteCategory(id) {
   if (!confirm('Delete this category?')) return;
   await api('/api/admin/lead-categories/' + id, { method: 'DELETE' });
+  sharedCategoryCache = null;
   renderAdminTab('categories');
 }
-
 
 let adminLbMode = 'week';
 async function renderAdminLeaderboard(el) {

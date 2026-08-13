@@ -207,6 +207,9 @@ export async function ensureDb() {
     color TEXT NOT NULL DEFAULT '#4f8cff',
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`;
+  // Bank categories carry the bank's real domain so badges can show the actual
+  // brand mark — works for any bank on earth, not just a hardcoded UK list.
+  await sql`ALTER TABLE lead_categories ADD COLUMN IF NOT EXISTS domain TEXT`;
 
   // ---- Idempotent migrations for tables carried over from earlier deploys ----
   const alters = [
@@ -278,7 +281,7 @@ export async function ensureDb() {
   }
   const [brandRow] = await sql`SELECT 1 FROM settings WHERE key = 'panel_name'`;
   if (!brandRow) {
-    await sql`INSERT INTO settings (key, value) VALUES ('panel_name', 'FRPTS') ON CONFLICT (key) DO NOTHING`;
+    await sql`INSERT INTO settings (key, value) VALUES ('panel_name', 'ClearPanel') ON CONFLICT (key) DO NOTHING`;
   }
   const [telRow] = await sql`SELECT 1 FROM settings WHERE key = 'telephony_config'`;
   if (!telRow) {

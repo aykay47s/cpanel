@@ -31,7 +31,7 @@ misc.get('/api/tenant-stats', async (c) => {
   const [brandRow] = await sql`SELECT value FROM settings WHERE key = 'panel_name'`;
   return c.json({
     data: {
-      panel_name: brandRow?.value || null,
+      panel_name: brandRow?.value || 'ClearPanel',
       callers: callers.n, managers: managers.n, finishers: finishers.n,
       total_leads: leads.n, successful_leads: successful.n, online_now: onlineNow.n,
     },
@@ -348,7 +348,7 @@ misc.post('/api/admin/telephony-config/test-call', requireRole('admin'), async (
 misc.get('/api/branding', async (c) => {
   const rows = await sql`SELECT key, value FROM settings WHERE key IN ('panel_name', 'panel_logo')`;
   const map = Object.fromEntries(rows.map((r: any) => [r.key, r.value]));
-  return c.json({ data: { name: map.panel_name || 'FRPTS', logo: map.panel_logo || null } });
+  return c.json({ data: { name: map.panel_name || 'ClearPanel', logo: map.panel_logo || null } });
 });
 misc.post('/api/admin/branding', requireRole('admin'), async (c) => {
   const { name, logo } = await c.req.json().catch(() => ({}));
