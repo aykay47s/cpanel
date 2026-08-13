@@ -228,7 +228,7 @@ app.get('/:slug', async (c) => {
   const safeLogo = safeLogoUrl(tenantLogo) || '/clearpanel-icon.png';
   const logoTag = `<img src="${esc(safeLogo)}" style="width:100%;height:100%;object-fit:contain;border-radius:inherit;" />`;
   let html = page
-    .replace('<title>Frap Ties</title>', `<title>${esc(tenantName)}</title>`)
+    .replace(/<title>[^<]*<\/title>/, `<title>${esc(tenantName)}</title>`)
     .replace(/<meta name="apple-mobile-web-app-title"[^>]*>/, `<meta name="apple-mobile-web-app-title" content="${esc(tenantName)}">`)
     .replace('<div class="brand-mark"></div>', `<div class="brand-mark">${logoTag}</div>`)
     .replace('<div id="loginTitle">ClearPanel</div>', `<div id="loginTitle">${esc(tenantName)}</div>`)

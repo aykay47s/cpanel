@@ -104,6 +104,13 @@ async function attemptLogin() {
   }
   me = data.data;
   localStorage.setItem('dispatch_me', JSON.stringify(me));
+  
+  // If onboarding is required, show onboarding form instead of entering app
+  if (data.onboarding_required) {
+    showOnboarding();
+    return;
+  }
+  
   enterApp();
 }
 function showFindPanel() {
@@ -134,6 +141,36 @@ function logout() {
   document.getElementById('adminApp').classList.add('hidden');
   document.getElementById('staffApp').classList.add('hidden');
   document.getElementById('loginScreen').classList.remove('hidden');
+}
+function showOnboarding() {
+  document.getElementById('loginScreen').classList.add('hidden');
+  document.getElementById('onboardingScreen').classList.remove('hidden');
+  document.getElementById('onboardingUsername').focus();
+}
+async function completeOnboarding() {
+  const username = document.getElementById('onboardingUsername').value.trim();
+  const telegram = document.getElementById('onboardingTelegram').value.trim();
+  const errEl = document.getElementById('onboardingError');
+  errEl.textContent = '';
+  
+  if (!username) { errEl.textContent = 'Username required'; return; }
+  if (!telegram) { errEl.textContent = 'Telegram username required'; return; }
+  
+  try {
+    const res = await api('/api/onboarding/complete', { method: 'POST', body: JSON.stringify({ username, telegram_username: telegram }) });
+    const data = await res.json();
+    if (!res.ok) { errEl.textContent = data.error || 'Onboarding failed'; return; }
+    
+    // Update localStorage and proceed
+    me.username = username;
+    me.telegram_username = telegram;
+    localStorage.setItem('dispatch_me', JSON.stringify(me));
+    
+    document.getElementById('onboardingScreen').classList.add('hidden');
+    enterApp();
+  } catch (err) {
+    errEl.textContent = 'Network error — try again';
+  }
 }
 async function enterApp() {
   document.getElementById('loginScreen').classList.add('hidden');
@@ -1441,6 +1478,29 @@ tr.clickable:active{background:rgba(255,255,255,.05);}
       <a href="https://t.me/+M-aK0jz4wDI5Nzdh" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--text-faint);text-decoration:none;padding:5px 12px;border-radius:100px;background:rgba(255,255,255,.04);border:1px solid var(--border);transition:color .15s;"><span>📣</span>Updates channel</a>
       <a href="https://t.me/clearpanelotpbot" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--text-faint);text-decoration:none;padding:5px 12px;border-radius:100px;background:rgba(255,255,255,.04);border:1px solid var(--border);transition:color .15s;"><span>🤖</span>@clearpanelotpbot</a>
     </div>
+  </div>
+</div>
+<div id="onboardingScreen" class="hidden" style="position:fixed;inset:0;z-index:500;display:flex;align-items:center;justify-content:center;padding:24px;background:linear-gradient(135deg, #07070a, #0a0a10);">
+  <div class="panel p fade-up" style="max-width:360px;width:100%;">
+    <div class="crest" style="margin-bottom:16px;"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5"><path d="M12 2l7 4v6c0 5-3.5 8-7 10-3.5-2-7-5-7-10V6l7-4z"/></svg></div>
+    <h2 style="font-size:18px;text-align:center;margin-bottom:4px;">Welcome, ${me?.name || 'Friend'}!</h2>
+    <p style="font-size:12.5px;color:var(--text-dim);text-align:center;margin-bottom:20px;line-height:1.6;">Before you can use ClearPanel, you need a username and Telegram account linked. Takes 30 seconds.</p>
+    
+    <div class="field">
+      <label>Your Username</label>
+      <input id="onboardingUsername" type="text" placeholder="alphanumeric, _, or -" maxlength="32" />
+      <p style="font-size:10px;color:var(--text-faint);margin:4px 0 0;">2-32 characters, used to find your panel later</p>
+    </div>
+    
+    <div class="field" style="margin-top:14px;">
+      <label>Telegram Username</label>
+      <input id="onboardingTelegram" type="text" placeholder="@yourusername (without @)" maxlength="32" />
+      <p style="font-size:10px;color:var(--text-faint);margin:4px 0 0;">Your Telegram handle, 5-32 chars. Get Telegram: <a href="https://t.me" target="_blank" style="color:var(--gold);">t.me</a></p>
+    </div>
+    
+    <div id="onboardingError" style="color:var(--danger);font-size:12px;margin-top:12px;min-height:16px;"></div>
+    
+    <button class="btn btn-gold btn-block" style="margin-top:18px;" onclick="completeOnboarding()">Complete Setup</button>
   </div>
 </div>
 <div id="findPanelGate" class="hidden" style="position:fixed;inset:0;z-index:400;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(5,5,9,.85);backdrop-filter:blur(10px);">

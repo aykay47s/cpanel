@@ -31,17 +31,64 @@ users.post('/api/auth/login', async (c) => {
     const [selfTenant] = await sql`SELECT id FROM tenants WHERE is_self = true`;
     tenantId = selfTenant?.id ?? null;
   }
-  const [user] = await sql`SELECT id, name, pin, role, avatar, pfp_data, xp, clocked_in, is_super_admin, tenant_id, suspended_at, suspended_reason FROM users WHERE pin = ${pin} AND tenant_id = ${tenantId}`;
+  const [user] = await sql`SELECT id, name, pin, role, avatar, pfp_data, xp, clocked_in, is_super_admin, tenant_id, suspended_at, suspended_reason, username, telegram_username FROM users WHERE pin = ${pin} AND tenant_id = ${tenantId}`;
   if (!user) return bad(c, 'Invalid PIN', 401);
   if (user.suspended_at) {
     return bad(c, user.suspended_reason ? `Your access has been suspended: ${user.suspended_reason}` : 'Your access has been suspended. Contact your admin.', 403);
   }
   delete (user as any).suspended_at;
   delete (user as any).suspended_reason;
-  return c.json({ data: user });
+  
+  // Check if onboarding is required (missing username or telegram_username)
+  const onboarding_required = !user.username || !user.telegram_username;
+  if (onboarding_required) {
+    console.log(`[login] user ${user.id} needs onboarding: username=${!!user.username}, telegram=${!!user.telegram_username}`);
+  }
+  
+  return c.json({ data: user, onboarding_required });
 });
 
-users.get('/api/me', async (c) => {
+users.post('/api/onboarding/complete', async (c) => {
+  // Save username and telegram_username, only if user is authenticated
+  const user = await authenticate(c);
+  if (!user) return bad(c, 'Unauthorized', 401);
+  
+  const { username, telegram_username } = await c.req.json().catch(() => ({}));
+  
+  if (!username || !telegram_username) {
+    return bad(c, 'Username and telegram username are required');
+  }
+  
+  // Validate username: alphanumeric, underscore, dash, 2-32 chars
+  if (!/^[a-zA-Z0-9_-]{2,32}$/.test(username)) {
+    return bad(c, 'Username must be 2-32 characters, alphanumeric, underscore, or dash only');
+  }
+  
+  // Validate telegram: starts with @, alphanumeric and underscore, 5-32 chars
+  let tgHandle = telegram_username.trim();
+  if (tgHandle.startsWith('@')) tgHandle = tgHandle.slice(1);
+  if (!/^[a-zA-Z0-9_]{5,32}$/.test(tgHandle)) {
+    return bad(c, 'Telegram username must be 5-32 characters, alphanumeric or underscore only (no @)');
+  }
+  
+  try {
+    // Check for duplicate username in same tenant
+    const [existing] = await sql`SELECT id FROM users WHERE username = ${username} AND tenant_id = ${user.tenant_id} AND id != ${user.id}`;
+    if (existing) {
+      return bad(c, 'This username is already taken in your panel');
+    }
+    
+    // Update user
+    await sql`UPDATE users SET username = ${username}, telegram_username = ${'@' + tgHandle} WHERE id = ${user.id}`;
+    console.log(`[onboarding] user ${user.id} set username=${username}, telegram=${tgHandle}`);
+    
+    return c.json({ ok: true });
+  } catch (err) {
+    console.error('[onboarding] error:', err);
+    return bad(c, 'Failed to save onboarding data');
+  }
+});
+
   c.header('Cache-Control', 'no-store, no-cache, must-revalidate');
   const user = await authenticate(c);
   if (!user) return bad(c, 'Unauthorized', 401);
