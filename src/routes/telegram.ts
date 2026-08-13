@@ -124,7 +124,7 @@ telegram.post('/api/telegram/confirm-code', requireAnyStaff, async (c) => {
     botUsername = t?.telegram_bot_username || botUsername;
   }
   if (chatId) {
-    const welcome = `👋 Welcome to ClearPanel, <b>${fresh?.name || 'there'}</b>!\n\nYour Telegram is now linked to your account. We'll use this to send you shift alerts, announcements, and account updates. You're all set — head back to the app.`;
+    const welcome = `👋 Welcome to ClearPanel, <b>${fresh?.name || 'there'}</b>!\n\nYour Telegram is now linked. You'll receive shift alerts, announcements, and account updates right here.\n\n📣 <b>Join the ClearPanel updates channel</b> to stay in the loop on new features and platform news:\nhttps://t.me/+M-aK0jz4wDI5Nzdh\n\nHead back to the app — you're all set.`;
     sendTelegramDM(botToken, chatId, welcome).catch(() => {});
   }
   return c.json({ data: { verified: true, name: fresh?.name || '' } });
@@ -167,7 +167,7 @@ async function handleTelegramUpdate(
   if (isStart) {
     // /start: just greet them and tell them to head back to the app.
     await sendTelegramDM(botToken, chatId,
-      "👋 Hi! I'm the ClearPanel verification bot.\n\nHead back to the app — it will send your verification code here once you enter your Telegram username. Don't close this chat.");
+      "👋 Hi! I'm the ClearPanel verification bot.\n\nHead back to the app — it will send your verification code here once you enter your Telegram username.\n\n📣 Stay updated: https://t.me/+M-aK0jz4wDI5Nzdh");
     return;
   }
   // Any non-/start message that has no 6-digit code gets a hint.
@@ -195,7 +195,7 @@ async function handleTelegramUpdate(
   const [fresh] = await sql`SELECT name FROM users WHERE id = ${consumed.userId}`;
   const name = fresh?.name || 'there';
   const welcome = scope === 'master'
-    ? `👋 Welcome to ClearPanel, <b>${name}</b>!\n\nYour Telegram is linked. We'll use this for account updates and announcements. Head back to the app.`
+    ? `👋 Welcome to ClearPanel, <b>${name}</b>!\n\nYour Telegram is linked. You'll get updates, alerts, and announcements right here.\n\n📣 Join the updates channel: https://t.me/+M-aK0jz4wDI5Nzdh`
     : `👋 Verified, <b>${name}</b>! Your admin can now reach you here. Head back to the app.`;
   await sendTelegramDM(botToken, chatId, welcome);
 }

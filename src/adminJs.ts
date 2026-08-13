@@ -402,7 +402,7 @@ async function renderAdminRoster(el) {
       <div class="section-title" style="margin-top:0;">Add Team Member</div>
       <div class="row-flex">
         <div class="field"><label>Name</label><input id="ncName" /></div>
-        <div class="field"><label>Role</label><select id="ncRole"><option value="caller">Caller</option><option value="finisher">Finisher</option><option value="admin">Admin</option></select></div>
+        <div class="field"><label>Role</label><select id="ncRole"><option value="caller">Caller</option><option value="manager">Manager</option><option value="finisher">Finisher</option><option value="admin">Admin</option></select></div>
         <button class="btn btn-gold" onclick="addUser()">Generate PIN</button>
       </div>
       <div id="newPinBanner"></div>
@@ -423,7 +423,7 @@ async function renderAdminRoster(el) {
       <td>\${u.call_phone ? '<span class="blur-phone mono" onclick="this.classList.toggle(\\'revealed\\')">' + esc(u.call_phone) + '</span>' : '<span style="color:var(--text-faint);">—</span>'}</td>
       <td>\${u.xp}</td><td>\${statusBadge(u.status)}\${u.clocked_in ? ' <span class="mono roster-clock-timer" data-uid="' + u.id + '" style="font-size:10.5px;color:var(--gold-bright);"></span>' : ''}</td>
       <td>\${rightNowBadge(u)}</td>
-      <td style="display:flex;gap:6px;"><select onchange="changeRole(\${u.id}, this.value)" style="width:auto;padding:6px 8px;font-size:11px;"><option value="">Change role…</option><option value="caller">Caller</option><option value="finisher">Finisher</option><option value="admin">Admin</option></select><button class="btn btn-ghost btn-sm" onclick="viewClockHistory(\${u.id},'\${esc(u.name)}')">History</button><button class="btn btn-danger btn-sm" onclick="removeUser(\${u.id})">Remove</button></td></tr>\`).join('')}</tbody></table></div></div>
+      <td style="display:flex;gap:6px;"><select onchange="changeRole(\${u.id}, this.value)" style="width:auto;padding:6px 8px;font-size:11px;"><option value="">Change role…</option><option value="caller">Caller</option><option value="manager">Manager</option><option value="finisher">Finisher</option><option value="admin">Admin</option></select><button class="btn btn-ghost btn-sm" onclick="viewClockHistory(\${u.id},'\${esc(u.name)}')">History</button><button class="btn btn-danger btn-sm" onclick="removeUser(\${u.id})">Remove</button></td></tr>\`).join('')}</tbody></table></div></div>
     <div id="clockHistoryPanel"></div>\`;
   loadRosterClockTimers(rows);
 }

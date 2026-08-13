@@ -245,7 +245,7 @@ users.post('/api/admin/users', requireRole('admin'), async (c) => {
   const user = c.get('user');
   const { name, role } = await c.req.json().catch(() => ({}));
   if (!name) return bad(c, 'Name is required');
-  if (!['caller', 'finisher', 'admin'].includes(role)) return bad(c, 'Invalid role');
+  if (!['caller', 'finisher', 'admin', 'manager'].includes(role)) return bad(c, 'Invalid role');
   let pin: string, row: any;
   for (let i = 0; i < 8; i++) {
     pin = genPin();
@@ -261,7 +261,7 @@ users.post('/api/admin/users', requireRole('admin'), async (c) => {
 users.post('/api/admin/users/:id/role', requireRole('admin'), async (c) => {
   const user = c.get('user');
   const { role } = await c.req.json().catch(() => ({}));
-  if (!['caller', 'finisher', 'admin'].includes(role)) return bad(c, 'Invalid role');
+  if (!['caller', 'finisher', 'admin', 'manager'].includes(role)) return bad(c, 'Invalid role');
   await sql`UPDATE users SET role = ${role} WHERE id = ${c.req.param('id')} AND tenant_id = ${user.tenant_id}`;
   return c.json({ ok: true });
 });

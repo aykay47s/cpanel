@@ -5,7 +5,7 @@ export interface AuthUser {
   id: number;
   name: string;
   pin: string;
-  role: 'admin' | 'caller' | 'finisher';
+  role: 'admin' | 'manager' | 'caller' | 'finisher';
   avatar: string;
   pfp_data: string | null;
   is_super_admin: boolean;
@@ -40,7 +40,7 @@ export async function authenticate(c: Context): Promise<AuthUser | null> {
   return user as AuthUser;
 }
 
-export function requireRole(...roles: Array<'admin' | 'caller' | 'finisher'>) {
+export function requireRole(...roles: Array<'admin' | 'manager' | 'caller' | 'finisher'>) {
   return async (c: Context, next: Next) => {
     const user = await authenticate(c);
     if (!user || !roles.includes(user.role)) return c.json({ error: 'Unauthorized' }, 403);
@@ -50,7 +50,8 @@ export function requireRole(...roles: Array<'admin' | 'caller' | 'finisher'>) {
 }
 
 export const requireAdmin = requireRole('admin');
-export const requireAnyStaff = requireRole('admin', 'caller', 'finisher');
+export const requireManager = requireRole('admin', 'manager');
+export const requireAnyStaff = requireRole('admin', 'manager', 'caller', 'finisher');
 
 export function requireSuperAdmin() {
   return async (c: Context, next: Next) => {

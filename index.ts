@@ -14,6 +14,9 @@ import { telegram } from './src/routes/telegram';
 import { STORE_PAGE } from './src/store';
 import { REDEEM_PAGE } from './src/redeem';
 import { MASTER_PAGE } from './src/master';
+import { MAIN_JS } from './src/frontend';
+import { ADMIN_JS } from './src/adminJs';
+import { STAFF_JS } from './src/staffJs';
 import { page } from './src/frontend';
 import * as threecx from './src/threecx';
 
@@ -69,7 +72,7 @@ app.get('/control', (c) => {
 app.get('/store', async (c) => {
   c.header('Cache-Control', 'no-store, no-cache, must-revalidate');
   const [row] = await sql`SELECT value FROM settings WHERE key = 'store_checkout_url'`;
-  const checkoutUrl = row?.value || 'mailto:sales@example.com';
+  const checkoutUrl = row?.value || 'https://t.me/+M-aK0jz4wDI5Nzdh';
   return c.html(STORE_PAGE(checkoutUrl));
 });
 
@@ -99,24 +102,33 @@ app.get('/manifest.json', async (c) => {
 });
 
 app.get('/clearpanel-logo.png', async (c) => { c.header('Content-Type', 'image/png'); c.header('Cache-Control', 'public, max-age=86400'); return c.body(await Bun.file('./public/clearpanel-logo.png').arrayBuffer()); });
+app.get('/clearpanel-icon.png', async (c) => { c.header('Content-Type', 'image/png'); c.header('Cache-Control', 'public, max-age=86400'); return c.body(await Bun.file('./public/clearpanel-icon.png').arrayBuffer()); });
 app.get('/icon.png', async (c) => { c.header('Content-Type', 'image/png'); return c.body(await Bun.file('./public/icon.png').arrayBuffer()); });
+app.get('/icons.js', async (c) => { c.header('Content-Type', 'application/javascript'); c.header('Cache-Control', 'public, max-age=3600'); return c.body(await Bun.file('./public/icons.js').text()); });
+// Serve extracted JS blocks as external files so <script src> can load them
+// without the HTML-parser-vs-script-content collision that breaks inline blocks.
+const JS_CACHE = 'no-store, no-cache, must-revalidate';
+app.get('/js/main.js', (c) => { c.header('Content-Type', 'application/javascript'); c.header('Cache-Control', JS_CACHE); return c.text(MAIN_JS); });
+app.get('/js/admin.js', (c) => { c.header('Content-Type', 'application/javascript'); c.header('Cache-Control', JS_CACHE); return c.text(ADMIN_JS); });
+app.get('/js/staff.js', (c) => { c.header('Content-Type', 'application/javascript'); c.header('Cache-Control', JS_CACHE); return c.text(STAFF_JS); });
 app.get('/icon-192.png', async (c) => { c.header('Content-Type', 'image/png'); return c.body(await Bun.file('./public/icon-192.png').arrayBuffer()); });
 app.get('/icon-512.png', async (c) => { c.header('Content-Type', 'image/png'); return c.body(await Bun.file('./public/icon-512.png').arrayBuffer()); });
 app.get('/apple-touch-icon.png', async (c) => { c.header('Content-Type', 'image/png'); return c.body(await Bun.file('./public/apple-touch-icon.png').arrayBuffer()); });
 
 app.get('/', async (c) => {
   c.header('Cache-Control', 'no-store, no-cache, must-revalidate');
-  const rows = await sql`SELECT key, value FROM settings WHERE key IN ('panel_name', 'panel_logo')`;
-  const map = Object.fromEntries(rows.map((r: any) => [r.key, r.value]));
-  const name = map.panel_name || 'ClearPanel';
-  const logoTag = map.panel_logo ? `<img src="${map.panel_logo}" style="width:100%;height:100%;object-fit:contain;border-radius:inherit;" />` : '';
+  // Serve the self-tenant panel with its own branding
+  const [selfTenant] = await sql`SELECT * FROM tenants WHERE is_self = true LIMIT 1`;
+  const tenantName = selfTenant?.panel_name || 'ClearPanel';
+  const tenantLogo = selfTenant?.panel_logo || null;
+  const logoTag = tenantLogo ? `<img src="${tenantLogo}" style="width:100%;height:100%;object-fit:contain;border-radius:inherit;" />` : '';
   let html = page
-    .split('Frap Ties').join(name)
-    .split('<div class="brand-mark"></div>').join(`<div class="brand-mark">${logoTag}</div>`)
-    .replace('<script>', '<script>const TENANT_SLUG = null;');
-  if (map.panel_logo) {
-    html = html.replace('<svg viewBox="0 0 24 24" fill="none" stroke-width="1.5"><path d="M12 2l7 4v6c0 5-3.5 8-7 10-3.5-2-7-5-7-10V6l7-4z"/></svg>', logoTag);
-  }
+    .replace(/<meta name="apple-mobile-web-app-title"[^>]*>/, `<meta name="apple-mobile-web-app-title" content="${tenantName}">`)
+    .replace('<div class="brand-mark"></div>', `<div class="brand-mark">${logoTag}</div>`)
+    .replace('<div id="loginTitle">ClearPanel</div>', `<div id="loginTitle">${tenantName}</div>`)
+    + `<!-- ts:null -->`;
+  // Inject TENANT_SLUG=null into main.js via a meta tag the script reads at runtime
+  html = html.replace('</head>', '<meta id="cp-slug" content="null"></head>');
   return c.html(html);
 });
 
@@ -127,18 +139,21 @@ app.get('/', async (c) => {
 // those are global settings that belong to the self tenant, not shared out.
 app.get('/:slug', async (c) => {
   const slug = c.req.param('slug');
-  const [tenant] = await sql`SELECT * FROM tenants WHERE slug = ${slug} AND status = 'active' AND is_self = false`;
+  const [tenant] = await sql`SELECT * FROM tenants WHERE slug = ${slug} AND status = 'active'`;
   if (!tenant) return c.notFound();
-  // Also check expiry — expired tenants get a clean, clear page rather than a panel that
-  // partially loads then fails every API call with 401
   if (tenant.expires_at && new Date(tenant.expires_at) < new Date()) {
     await sql`UPDATE tenants SET status = 'expired' WHERE id = ${tenant.id}`;
-    return c.html(`<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Panel Expired</title><style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:-apple-system,sans-serif;background:#07070a;color:#eaeaec;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}div{text-align:center;max-width:360px;}h1{font-size:20px;margin-bottom:8px;}p{font-size:13px;color:#8f8f98;line-height:1.6;}</style></head><body><div><h1>Access Expired</h1><p>The access period for <strong>${String(tenant.name).replace(/&/g,'&amp;').replace(/</g,'&lt;')}</strong> has ended. Contact whoever set this up to renew your access.</p></div></body></html>`);
+    return c.html(`<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Panel Expired</title><style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:-apple-system,sans-serif;background:#07070a;color:#eaeaec;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}div{text-align:center;max-width:360px;}h1{font-size:20px;margin-bottom:8px;}p{font-size:13px;color:#8f8f98;line-height:1.6;}</style></head><body><div><h1>Access Expired</h1><p>The access period for <strong>${String(tenant.name).replace(/&/g,'&amp;').replace(/</g,'&lt;')}</strong> has ended. Contact whoever set this up to renew access.</p></div></body></html>`);
   }
   c.header('Cache-Control', 'no-store, no-cache, must-revalidate');
-  const html = page
-    .split('Frap Ties').join(tenant.name)
-    .replace('<script>', `<script>const TENANT_SLUG = ${JSON.stringify(slug)};`);
+  const tenantName = tenant.panel_name || tenant.name || 'ClearPanel';
+  const tenantLogo = tenant.panel_logo || null;
+  const logoTag = tenantLogo ? `<img src="${tenantLogo}" style="width:100%;height:100%;object-fit:contain;border-radius:inherit;" />` : '';
+  let html = page
+    .replace(/<meta name="apple-mobile-web-app-title"[^>]*>/, `<meta name="apple-mobile-web-app-title" content="${tenantName}">`)
+    .replace('<div class="brand-mark"></div>', `<div class="brand-mark">${logoTag}</div>`)
+    .replace('<div id="loginTitle">ClearPanel</div>', `<div id="loginTitle">${tenantName}</div>`);
+  html = html.replace('</head>', `<meta id="cp-slug" content="${slug}"></head>`);
   return c.html(html);
 });
 

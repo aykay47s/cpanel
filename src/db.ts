@@ -90,7 +90,17 @@ export async function ensureDb() {
   // short-lived 6-digit code the user pastes into the bot chat; the bot's
   // webhook matches the code and stores the chat_id. No OTPs from other
   // services ever touch this system; codes are single-use and expire in 5 min.
-  const telegramAlters = [
+  // Per-tenant branding — each tenant can have its own panel name and logo.
+  // Falls back to the global 'panel_name' setting if not set.
+  const brandAlters = [
+    'ALTER TABLE tenants ADD COLUMN IF NOT EXISTS panel_name TEXT',
+    'ALTER TABLE tenants ADD COLUMN IF NOT EXISTS panel_logo TEXT',
+  ];
+  for (const stmt of brandAlters) {
+    await sql.unsafe(`DO $$ BEGIN ${stmt}; EXCEPTION WHEN OTHERS THEN NULL; END $$;`);
+  }
+
+    const telegramAlters = [
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_username TEXT`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_chat_id_master BIGINT`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_chat_id_tenant BIGINT`,
@@ -429,6 +439,9 @@ export async function ensureDb() {
   // Backfill: every user/lead created before tenant_id existed belongs to this
   // operator's own usage, not a customer's - never silently orphaned or mixed up.
   await sql`UPDATE users SET tenant_id = ${selfTenantId} WHERE tenant_id IS NULL`;
+  // Ensure the self-tenant has a real slug so /fraptise routes to the operator panel
+  await sql`UPDATE tenants SET slug = 'fraptise' WHERE is_self = true AND (slug IS NULL OR slug = '')`;
+
   await sql`UPDATE leads SET tenant_id = ${selfTenantId} WHERE tenant_id IS NULL`;
   await sql`UPDATE chat_messages SET tenant_id = ${selfTenantId} WHERE tenant_id IS NULL`;
   await sql`UPDATE announcements SET tenant_id = ${selfTenantId} WHERE tenant_id IS NULL`;
@@ -446,7 +459,39 @@ export async function ensureDb() {
   await sql.unsafe(`DO $$ BEGIN ALTER TABLE users DROP CONSTRAINT IF EXISTS users_pin_key; EXCEPTION WHEN OTHERS THEN NULL; END $$;`);
   await sql.unsafe(`DO $$ BEGIN ALTER TABLE users ADD CONSTRAINT users_tenant_pin_unique UNIQUE (tenant_id, pin); EXCEPTION WHEN OTHERS THEN NULL; END $$;`);
 
-  // Hard-delete expired disappearing messages every 30s. This actually removes the
+  // In-app update system: admin can push text updates to all callers in their
+  // tenant. A LIVE update shows a persistent banner across all screens until
+  // resolved. Callers with no Telegram linked always see in-app updates;
+  // callers with Telegram also get a DM from the gateway bot.
+  await sql`CREATE TABLE IF NOT EXISTS panel_updates (
+    id SERIAL PRIMARY KEY,
+    tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    is_live BOOLEAN DEFAULT false,
+    posted_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    resolved_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`;
+  await sql`CREATE INDEX IF NOT EXISTS panel_updates_tenant ON panel_updates (tenant_id, created_at DESC)`;
+  // Per-user dismissals for non-live updates
+  await sql`CREATE TABLE IF NOT EXISTS panel_update_dismissals (
+    update_id INTEGER REFERENCES panel_updates(id) ON DELETE CASCADE,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    PRIMARY KEY (update_id, user_id)
+  )`;
+  // Username: unique within a tenant, used for display + Telegram linkage
+  const usernameAlters = [
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS username TEXT',
+    'ALTER TABLE tenants ADD COLUMN IF NOT EXISTS gateway_bot_token TEXT',
+    'ALTER TABLE tenants ADD COLUMN IF NOT EXISTS gateway_bot_username TEXT',
+    'ALTER TABLE settings ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE',
+  ];
+  for (const stmt of usernameAlters) {
+    await sql.unsafe(`DO $$ BEGIN ${stmt}; EXCEPTION WHEN OTHERS THEN NULL; END $$;`);
+  }
+
+    // Hard-delete expired disappearing messages every 30s. This actually removes the
   // rows from Postgres — not a soft-delete/hidden flag.
   if (!cleanupStarted) {
     cleanupStarted = true;

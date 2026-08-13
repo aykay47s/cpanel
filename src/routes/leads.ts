@@ -266,9 +266,11 @@ leads.get('/api/admin/dashboard', requireRole('admin'), async (c) => {
 
 // ================= FINISHING QUEUE (ADMIN) =================
 leads.get('/api/admin/finishing-queue', requireRole('admin'), async (c) => {
+  const user = c.get('user');
   const rows = await sql`
     SELECT leads.*, uf.name as finisher_name FROM leads LEFT JOIN users uf ON uf.id = leads.assigned_finisher_id
     WHERE leads.status IN ('ready_for_finishing','assigned_to_finisher') AND leads.merged_into_id IS NULL
+    AND leads.tenant_id = ${user.tenant_id}
     ORDER BY leads.updated_at ASC`;
   return c.json({ data: rows });
 });
@@ -277,7 +279,7 @@ leads.post('/api/admin/leads/:id/assign-finisher', requireRole('admin'), async (
   const user = c.get('user');
   const { finisherId } = await c.req.json().catch(() => ({}));
   if (!finisherId) return bad(c, 'finisherId required');
-  const [finisher] = await sql`SELECT id, name, role FROM users WHERE id = ${finisherId}`;
+  const [finisher] = await sql`SELECT id, name, role FROM users WHERE id = ${finisherId} AND tenant_id = ${user.tenant_id}`;
   if (!finisher || finisher.role !== 'finisher') return bad(c, 'Target user is not a finisher');
   const [lead] = await sql`SELECT status, assigned_finisher_id FROM leads WHERE id = ${c.req.param('id')}`;
   if (!lead) return bad(c, 'Not found', 404);
@@ -296,7 +298,7 @@ leads.post('/api/admin/leads/:id/assign-caller', requireRole('admin'), async (c)
   const user = c.get('user');
   const { callerId } = await c.req.json().catch(() => ({}));
   if (!callerId) return bad(c, 'callerId required');
-  const [caller] = await sql`SELECT id, name, role FROM users WHERE id = ${callerId}`;
+  const [caller] = await sql`SELECT id, name, role FROM users WHERE id = ${callerId} AND tenant_id = ${user.tenant_id}`;
   if (!caller || caller.role !== 'caller') return bad(c, 'Target user is not a caller');
   const [lead] = await sql`SELECT status, assigned_caller_id FROM leads WHERE id = ${c.req.param('id')}`;
   if (!lead) return bad(c, 'Not found', 404);
@@ -386,15 +388,21 @@ leads.post('/api/caller/leads/:id/end-call', requireRole('caller'), async (c) =>
 
 // Live note: callers can push notes WHILE still on the call, so admins see them
 // immediately rather than waiting for the final disposition.
-leads.post('/api/caller/leads/:id/note', requireRole('caller'), async (c) => {
+leads.post('/api/caller/leads/:id/note', requireRole('caller', 'finisher'), async (c) => {
   const user = c.get('user');
   const { note } = await c.req.json().catch(() => ({}));
   if (!note || !note.trim()) return bad(c, 'Note cannot be empty');
-  const [lead] = await sql`SELECT status, assigned_caller_id FROM leads WHERE id = ${c.req.param('id')}`;
+  const [lead] = await sql`SELECT status, assigned_caller_id, first_name, last_name FROM leads WHERE id = ${c.req.param('id')} AND tenant_id = ${user.tenant_id}`;
   if (!lead || lead.assigned_caller_id !== user.id) return bad(c, 'Not your lead', 403);
   const [noteRow] = await sql`INSERT INTO lead_notes (lead_id, author_id, content) VALUES (${c.req.param('id')}, ${user.id}, ${note.trim()}) RETURNING *`;
   await logEvent(c.req.param('id'), 'note_added', user, null, null, { note: note.trim() });
-  broadcast('lead_note', { leadId: Number(c.req.param('id')), note: { ...noteRow, author_name: user.name } });
+  // Broadcast the note live — admins and managers get a toast notification
+  broadcast('lead_note', {
+    leadId: Number(c.req.param('id')),
+    leadName: `${lead.first_name || ''} ${lead.last_name || ''}`.trim() || 'Lead',
+    tenantId: user.tenant_id,
+    note: { ...noteRow, author_name: user.name },
+  });
   await awardXp(user.id, 3, 'note_added', Number(c.req.param('id')));
   return c.json({ data: noteRow });
 });

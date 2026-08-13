@@ -40,57 +40,96 @@ let onActiveCallScreen = false;
 async function renderStaffHome() {
   const body = document.getElementById('staffBody');
   await loadCategoryCache();
-  const [meRes, goalRes, annRes, lbRes, callLogRes, scriptsRes] = await Promise.all([
-    api('/api/me'), api('/api/goal'), api('/api/announcements'), api('/api/leaderboard'), api('/api/caller/call-log'), api('/api/scripts'),
+  const [meRes, goalRes, annRes, lbRes, callLogRes, updateRes] = await Promise.all([
+    api('/api/me'), api('/api/goal'), api('/api/announcements'),
+    api('/api/leaderboard'), api('/api/caller/call-log'),
+    api('/api/updates/active').catch(() => ({ json: async () => ({ data: [] }) })),
   ]);
   const fresh = (await meRes.json()).data; me = { ...me, ...fresh }; localStorage.setItem('dispatch_me', JSON.stringify(me));
   const goal = (await goalRes.json()).data;
   const anns = (await annRes.json()).data;
   const lb = (await lbRes.json()).data;
   const callLog = (await callLogRes.json()).data;
-  const allScripts = (await scriptsRes.json()).data;
+  const updates = (await updateRes.json()).data || [];
   const myRank = (lb.findIndex(r => r.id === me.id) + 1) || '—';
   const myStat = lb.find(r => r.id === me.id) || { successful_calls: 0 };
   const li = levelInfo(me.xp);
   const rk = rankInfo(me.xp);
   const goalPct = Math.min(100, Math.round((goal.current / goal.target) * 100));
+  const nextRankTier = RANK_TIERS.find(t => t[3] > li.level);
+  const xpToNextRank = nextRankTier ? (() => {
+    let x = 0, cost = 100;
+    for (let l = 1; l < nextRankTier[3]; l++) { x += cost; cost = 100 + l * 60; }
+    return Math.max(0, x - me.xp);
+  })() : 0;
+
+  // Active in-app updates (non-Telegram)
+  const activeUpdate = updates.find(u => u.is_live) || updates[0] || null;
+  const updateBanner = activeUpdate ? \`<div style="margin-bottom:14px;padding:12px 16px;border-radius:14px;background:\${activeUpdate.is_live ? 'linear-gradient(135deg,rgba(239,68,68,.15),rgba(220,38,38,.1))' : 'linear-gradient(135deg,rgba(124,92,255,.12),rgba(79,140,255,.08))'};border:1px solid \${activeUpdate.is_live ? 'rgba(239,68,68,.4)' : 'rgba(124,92,255,.3)'};display:flex;gap:10px;align-items:flex-start;">
+    <span style="flex-shrink:0;font-size:16px;">\${activeUpdate.is_live ? '🔴' : '📣'}</span>
+    <div style="flex:1;min-width:0;"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:\${activeUpdate.is_live ? 'var(--danger)' : 'var(--violet-bright)'};margin-bottom:2px;">\${activeUpdate.is_live ? 'Live Update' : 'Update'}</div><div style="font-size:13px;font-weight:600;margin-bottom:2px;">\${esc(activeUpdate.title)}</div><div style="font-size:12px;color:var(--text-dim);line-height:1.4;">\${esc(activeUpdate.body)}</div></div>
+  </div>\` : '';
 
   body.innerHTML = \`
-    <div class="panel p fade-up" style="position:relative;overflow:hidden;">
-      <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px;">
-        <div style="flex-shrink:0;">\${rankEmblemHtml(rk, 56)}</div>
+    \${updateBanner}
+    <div class="panel p fade-up" style="background:linear-gradient(135deg,rgba(124,92,255,.08),rgba(79,140,255,.05));border-color:rgba(124,92,255,.2);">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:16px;">
+        <div style="flex-shrink:0;">\${rankEmblemHtml(rk, 52)}</div>
         <div style="flex:1;min-width:0;">
-          <div style="font-size:20px;font-weight:700;font-family:'Bricolage Grotesque',sans-serif;letter-spacing:-.01em;">\${esc(me.name)}</div>
-          <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center;">
-            \${statusBadge(me.role)}
-            <span class="rank-chip" style="color:\${rk.c1};border-color:\${rk.c1}55;">\${rk.label}</span>
+          <div style="font-size:19px;font-weight:800;font-family:'Bricolage Grotesque',sans-serif;letter-spacing:-.02em;line-height:1.1;">\${esc(me.name)}</div>
+          <div style="display:flex;gap:6px;margin-top:5px;flex-wrap:wrap;align-items:center;">
+            \${statusBadge(me.role === 'manager' ? 'Manager' : me.role)}
+            <span class="rank-chip" style="color:\${rk.c1};border-color:\${rk.c1}44;background:\${rk.c1}11;">\${rk.icon} \${rk.label}</span>
             <span class="lvl-chip">Lv \${li.level}</span>
-            <span class="badge not_called">#\${myRank}</span>
+            <span style="font-size:10px;font-weight:700;color:var(--text-dim);">Rank #\${myRank}</span>
           </div>
         </div>
+        <div style="text-align:right;flex-shrink:0;">
+          <div style="font-size:24px;font-weight:900;font-family:'Bricolage Grotesque',sans-serif;color:var(--violet-bright);">\${me.xp.toLocaleString()}</div>
+          <div style="font-size:10px;color:var(--text-faint);font-weight:600;letter-spacing:.06em;text-transform:uppercase;">XP</div>
+        </div>
       </div>
-      <div style="font-size:11px;color:var(--text-dim);margin-bottom:7px;display:flex;justify-content:space-between;"><span>\${li.into} / \${li.need} XP to level \${li.level + 1}</span><span class="mono">\${me.xp.toLocaleString()} total</span></div>
-      <div class="xp-bar" style="height:8px;"><i style="width:\${li.pct}%;"></i></div>
-    </div>
-    <div class="stat-grid" style="grid-template-columns:repeat(3,1fr);">
-      <div class="stat-box panel"><div class="num" data-count="\${myStat.successful_calls || 0}">0</div><div class="lbl">Successful</div></div>
-      <div class="stat-box panel"><div class="num" data-count="\${me.xp}">0</div><div class="lbl">XP</div></div>
-      <div class="stat-box panel"><div class="num" style="font-size:20px;">\${me.clocked_in ? 'On' : 'Off'}</div><div class="lbl">Shift</div></div>
-    </div>
-    <div class="panel p fade-up">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px;"><span style="font-size:11px;color:var(--text-dim);font-weight:700;text-transform:uppercase;letter-spacing:.5px;">\${esc(goal.label)}</span><span class="mono" style="font-size:14px;font-weight:700;color:var(--gold-bright);">\${goal.current}/\${goal.target}</span></div>
-      <div style="height:9px;border-radius:5px;background:var(--s3);overflow:hidden;"><div style="height:100%;width:\${goalPct}%;background:linear-gradient(90deg,var(--gold),var(--gold-bright));border-radius:5px;"></div></div>
-    </div>
-    <div class="section-title">Announcements</div>
-    \${anns.length ? anns.map(a => \`<div class="announcement panel \${a.important ? 'important' : ''} fade-up"><div><div class="txt">\${esc(a.content)}</div><div class="meta">\${a.author_name || 'Admin'} · \${timeAgo(a.created_at)}</div></div></div>\`).join('') : '<div style="color:var(--text-faint);font-size:13px;padding:10px 2px;">Nothing from admin yet.</div>'}
-    <div class="section-title" style="display:flex;justify-content:space-between;align-items:baseline;">Call Log \${callLog.length > 6 ? '<span id="callLogToggle" style="text-transform:none;letter-spacing:0;font-weight:600;font-size:12px;color:var(--gold-bright);cursor:pointer;" onclick="toggleCallLogExpanded()">Show all ' + callLog.length + '</span>' : ''}</div>
-    <div class="panel p fade-up">
-      <div id="callLogRows">\${callLog.length ? callLog.slice(0, 6).map(callLogRowHtml).join('') : '<div style="color:var(--text-dim);font-size:12.5px;">No calls logged yet.</div>'}</div>
+      <div style="font-size:11px;color:var(--text-dim);margin-bottom:6px;display:flex;justify-content:space-between;">
+        <span>Level \${li.level} → \${li.level + 1}</span>
+        <span class="mono">\${li.into} / \${li.need} XP\${nextRankTier ? ' · ' + xpToNextRank + ' to ' + nextRankTier[0] : ''}</span>
+      </div>
+      <div class="xp-bar"><i style="width:\${li.pct}%;"></i></div>
     </div>
 
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:4px;">
+      <div class="stat-box panel" style="padding:14px 12px;">
+        <div class="num" data-count="\${myStat.successful_calls || 0}" style="font-size:24px;color:var(--success);">0</div>
+        <div class="lbl" style="font-size:10px;">Successful</div>
+      </div>
+      <div class="stat-box panel" style="padding:14px 12px;">
+        <div class="num" data-count="\${callLog.length}" style="font-size:24px;">0</div>
+        <div class="lbl" style="font-size:10px;">Calls Today</div>
+      </div>
+      <div class="stat-box panel" style="padding:14px 12px;">
+        <div style="font-size:22px;font-weight:800;font-family:'Bricolage Grotesque',sans-serif;color:\${me.clocked_in ? 'var(--success)' : 'var(--text-faint)'};">\${me.clocked_in ? 'On' : 'Off'}</div>
+        <div class="lbl" style="font-size:10px;">Shift</div>
+      </div>
+    </div>
+
+    <div class="panel p fade-up" style="padding:14px 16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <span style="font-size:11px;color:var(--text-dim);font-weight:700;text-transform:uppercase;letter-spacing:.5px;">\${esc(goal.label)}</span>
+        <span class="mono" style="font-size:13px;font-weight:700;color:var(--gold-bright);">\${goal.current} / \${goal.target}</span>
+      </div>
+      <div class="xp-bar" style="height:8px;">
+        <i style="width:\${goalPct}%;background:linear-gradient(90deg,var(--gold),var(--gold-bright));"></i>
+      </div>
+      <div style="font-size:10.5px;color:var(--text-faint);margin-top:6px;text-align:right;">\${goalPct}% of team goal</div>
+    </div>
+
+    \${anns.length ? \`<div class="section-title">Announcements</div>\${anns.slice(0,3).map(a => \`<div class="announcement panel \${a.important ? 'important' : ''} fade-up" style="padding:14px 16px;margin-bottom:8px;"><div class="txt" style="font-size:13.5px;">\${esc(a.content)}</div><div class="meta" style="font-size:11px;margin-top:6px;">\${a.author_name || 'Admin'} · \${timeAgo(a.created_at)}</div></div>\`).join('')}\` : ''}
+
+    <div class="section-title" style="display:flex;justify-content:space-between;align-items:baseline;">Recent Calls \${callLog.length > 5 ? '<span style="text-transform:none;letter-spacing:0;font-weight:600;font-size:12px;color:var(--gold-bright);cursor:pointer;" onclick="toggleCallLogExpanded()">Show all ' + callLog.length + '</span>' : ''}</div>
+    <div class="panel p fade-up" style="padding:8px 16px;">
+      <div id="callLogRows">\${callLog.length ? callLog.slice(0, 5).map(callLogRowHtml).join('') : '<div style="color:var(--text-dim);font-size:12.5px;padding:8px 0;">No calls logged yet today.</div>'}</div>
+    </div>
   \`;
   animateCountUps(body);
-  window._allScripts = allScripts;
   window._allCallLog = callLog;
   callLogExpanded = false;
 }
@@ -282,41 +321,103 @@ async function renderActiveCall(body, lead, role) {
 
 function renderActiveCallShell(body, lead, role, scripts, template) {
   const isFinisher = role === 'finisher';
+  const statusColor = lead.status === 'active_call' ? 'var(--success)' : 'var(--violet-bright)';
+  const isOnCall = lead.status === 'active_call';
+
   body.innerHTML = \`
-    \${template && !isFinisher ? \`<div class="panel p fade-up" style="border-color:var(--gold-glow);"><div class="section-title" style="margin-top:0;">Call Guide</div><div style="font-size:13px;line-height:1.7;white-space:pre-wrap;color:var(--text);">\${esc(template)}</div></div>\` : ''}
-    <div class="panel call-card fade-up">
-      <div class="call-status-row" style="margin-bottom:14px;">\${statusBadge(lead.status)}<span class="call-timer-chip mono"><span class="tdot"></span><span id="callTimer">00:00</span></span></div>
-      <div style="margin-bottom:16px;">
-        <div class="call-lead-name">\${fullName(lead)}</div>
-        <div class="call-lead-sub"><span class="mono">\${lead.phone}</span>\${categoryBadgeHtml(lead.lead_type)}\${(lead.call_attempts||0) > 1 ? '<span class="badge not_called">Attempt ' + lead.call_attempts + '</span>' : ''}</div>
+    \${template && !isFinisher ? \`<div class="panel p fade-up" style="border-color:rgba(79,140,255,.25);background:rgba(79,140,255,.05);padding:16px 18px;margin-bottom:12px;">
+      <div style="font-size:10px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:var(--gold-bright);margin-bottom:8px;">Call Guide</div>
+      <div style="font-size:13px;line-height:1.75;white-space:pre-wrap;color:var(--text);">\${esc(template)}</div>
+    </div>\` : ''}
+
+    <div class="panel call-card fade-up" style="padding:20px;border-color:\${statusColor}33;background:linear-gradient(160deg,rgba(18,18,26,.9),rgba(12,12,18,.95));">
+
+      <!-- Status bar -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:100px;background:\${statusColor}18;border:1px solid \${statusColor}44;font-size:11px;font-weight:700;color:\${statusColor};">
+            \${isOnCall ? '<span style="width:7px;height:7px;border-radius:50%;background:var(--success);box-shadow:0 0 6px var(--success);display:inline-block;"></span> On Call' : '📞 Calling'}
+          </span>
+          \${(lead.call_attempts||0) > 1 ? '<span style="font-size:10px;color:var(--text-faint);background:rgba(255,255,255,.06);padding:3px 8px;border-radius:100px;">Attempt ' + lead.call_attempts + '</span>' : ''}
+        </div>
+        <span class="call-timer-chip mono" style="font-size:13px;font-weight:700;"><span class="tdot"></span><span id="callTimer">00:00</span></span>
       </div>
-      \${lead.email ? '<div class="info-row"><span class="k">Email</span><span class="v">' + lead.email + '</span></div>' : ''}
-      \${lead.address ? '<div class="info-row"><span class="k">Address</span><span class="v">' + esc(lead.address) + '</span></div>' : ''}
-      \${lead.notes ? '<div class="info-row"><span class="k">Notes</span><span class="v" style="white-space:pre-wrap;text-align:left;">' + esc(lead.notes) + '</span></div>' : ''}
-      \${lead.extra_info ? '<div class="info-row"><span class="k">Card on File</span><span class="v">' + esc(lead.extra_info) + '</span></div>' : ''}
-      \${!isFinisher ? \`<div class="call-action-row">
-        <a class="dial-btn" href="tel:\${lead.phone}">\${ICONS.phone} Dial</a>
-        \${lead.status === 'calling' ? '<button class="oncall-btn" onclick="connectCall(' + lead.id + ')">Mark On Call</button>' : '<button class="endcall-btn" style="grid-column:auto;" onclick="endCall(' + lead.id + ')">End Call</button>'}
-      </div>\` : \`<div class="call-action-row"><a class="dial-btn" href="tel:\${lead.phone}" style="grid-column:1/-1;">\${ICONS.phone} Dial \${lead.phone}</a></div>\`}
-      \${!isFinisher ? \`<div class="field" style="margin-top:4px;">
-        <label>Note for admin</label>
-        <p style="font-size:11px;color:var(--text-faint);margin:-4px 0 8px;line-height:1.4;">Anything worth flagging while it's fresh — what they said, a callback time, a concern. It shows up for admin instantly, separate from the lead's own details.</p>
-        <div style="display:flex;gap:8px;">
-          <input id="liveNoteInput" placeholder="e.g. asked for a callback tomorrow 3pm" onkeydown="if(event.key==='Enter') pushLiveNote(\${lead.id})" />
-          <button class="btn btn-ghost btn-sm" onclick="pushLiveNote(\${lead.id})">Add</button>
+
+      <!-- Lead info -->
+      <div style="margin-bottom:20px;">
+        <div class="call-lead-name" style="font-size:26px;margin-bottom:4px;">\${fullName(lead)}</div>
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          <span class="mono" style="font-size:13px;color:var(--text-dim);">\${lead.phone}</span>
+          \${categoryBadgeHtml(lead.lead_type)}
         </div>
-        <div id="noteConfirm" style="font-size:11px;color:var(--success);margin-top:6px;height:14px;"></div>
-      </div>\` : ''}
-      \${scripts.length ? \`<div class="scripts-toggle" onclick="this.nextElementSibling.classList.toggle('open')"><span>\${ICONS.doc || ''} Scripts (\${scripts.length})</span><span>▾</span></div><div class="scripts-panel">\${scripts.map(s => '<div class="script-item"><div class="title">' + esc(s.title) + '</div><div class="content">' + esc(s.content) + '</div></div>').join('')}</div>\` : ''}
-      \${!isFinisher ? renderOutcomeSection(lead) : ''}
-      \${isFinisher ? \`<div class="outcome-section">
-        <button class="win-btn" onclick="finisherOutcome(\${lead.id},'completed')">\${ICONS.check || ''} Mark Completed</button>
-        <div class="outcome-grid" style="grid-template-columns:1fr 1fr;">
-          <button class="review-btn" onclick="finisherOutcome(\${lead.id},'requires_review')">Requires Review</button>
-          <button class="fail-btn" onclick="finisherOutcome(\${lead.id},'failed')">Unsuccessful</button>
+        \${lead.email ? '<div style="font-size:12.5px;color:var(--text-dim);margin-top:6px;">✉ ' + esc(lead.email) + '</div>' : ''}
+        \${lead.address ? '<div style="font-size:12.5px;color:var(--text-dim);margin-top:3px;">📍 ' + esc(lead.address) + '</div>' : ''}
+        \${lead.notes ? '<div style="margin-top:10px;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid var(--border);font-size:12.5px;color:var(--text-dim);line-height:1.5;white-space:pre-wrap;">' + esc(lead.notes) + '</div>' : ''}
+      </div>
+
+      \${!isFinisher ? \`
+      <!-- Action buttons -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
+        <a class="dial-btn" href="tel:\${lead.phone}" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:16px;border-radius:14px;background:linear-gradient(135deg,var(--violet),rgba(124,92,255,.7));color:#fff;font-weight:700;font-size:15px;text-decoration:none;">
+          \${ICONS.phone} Dial
+        </a>
+        \${!isOnCall
+          ? '<button class="oncall-btn" onclick="connectCall(' + lead.id + ')" style="padding:16px;border-radius:14px;background:linear-gradient(135deg,var(--success),rgba(34,197,94,.7));color:#fff;font-weight:700;font-size:15px;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;"><span style=\\"font-size:18px;\\">✓</span>Mark On Call</button>'
+          : '<button class="endcall-btn" onclick="endCall(' + lead.id + ')" style="padding:16px;border-radius:14px;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);color:var(--danger);font-weight:700;font-size:14px;cursor:pointer;">End Call</button>'
+        }
+      </div>
+
+      \${!isOnCall ? \`
+      <!-- Pre-call: muted soft-connect hint + no-connect outcomes -->
+      <div style="padding:12px 14px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid var(--border);margin-bottom:14px;text-align:center;">
+        <div style="font-size:11.5px;color:var(--text-faint);line-height:1.5;">Dial, then tap <b style="color:var(--text);">Mark On Call</b> the moment they answer — that unlocks outcome buttons below.</div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+        <button class="outcome-btn" onclick="recordOutcome(\${lead.id},'voicemail')" style="padding:12px;border-radius:12px;background:rgba(255,255,255,.05);border:1px solid var(--border);color:var(--text-dim);font-size:13px;font-weight:600;cursor:pointer;">📬 Voicemail</button>
+        <button class="outcome-btn" onclick="recordOutcome(\${lead.id},'no_answer')" style="padding:12px;border-radius:12px;background:rgba(255,255,255,.05);border:1px solid var(--border);color:var(--text-dim);font-size:13px;font-weight:600;cursor:pointer;">🔇 No Answer</button>
+        <button class="outcome-btn" onclick="recordOutcome(\${lead.id},'busy')" style="padding:12px;border-radius:12px;background:rgba(255,255,255,.05);border:1px solid var(--border);color:var(--text-dim);font-size:13px;font-weight:600;cursor:pointer;">📵 Unavailable</button>
+        <button class="outcome-btn" onclick="recordOutcome(\${lead.id},'cancelled')" style="padding:12px;border-radius:12px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);color:var(--danger);font-size:13px;font-weight:600;cursor:pointer;">✕ Cancel</button>
+      </div>
+      \` : \`
+      <!-- On call: outcome buttons -->
+      <div style="margin-bottom:14px;">
+        <button onclick="recordOutcome(\${lead.id},'successful_call')" style="width:100%;padding:16px;border-radius:14px;background:linear-gradient(135deg,rgba(34,197,94,.2),rgba(34,197,94,.12));border:1px solid rgba(34,197,94,.4);color:var(--success);font-size:16px;font-weight:800;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:8px;">
+          ✓ Successful Call
+        </button>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+          <button onclick="recordOutcome(\${lead.id},'callback_requested')" style="padding:12px;border-radius:12px;background:rgba(250,204,21,.08);border:1px solid rgba(250,204,21,.3);color:#fbbf24;font-size:13px;font-weight:600;cursor:pointer;">📅 Callback</button>
+          <button onclick="recordOutcome(\${lead.id},'hung_up')" style="padding:12px;border-radius:12px;background:rgba(255,255,255,.05);border:1px solid var(--border);color:var(--text-dim);font-size:13px;font-weight:600;cursor:pointer;">📵 Hung Up</button>
+          <button onclick="recordOutcome(\${lead.id},'requires_review')" style="padding:12px;border-radius:12px;background:rgba(79,140,255,.08);border:1px solid rgba(79,140,255,.25);color:var(--gold-bright);font-size:13px;font-weight:600;cursor:pointer;">🔍 Review</button>
+          <button onclick="recordOutcome(\${lead.id},'failed')" style="padding:12px;border-radius:12px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);color:var(--danger);font-size:13px;font-weight:600;cursor:pointer;">✕ Unsuccessful</button>
         </div>
-      </div>\` : ''}
-    </div>\`;
+        <button onclick="recordOutcome(\${lead.id},'chopped_previously')" style="width:100%;padding:10px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid var(--border);color:var(--text-faint);font-size:12.5px;font-weight:600;cursor:pointer;">Already worked</button>
+      </div>
+
+      <!-- Live note -->
+      <div style="padding:14px;border-radius:14px;background:rgba(255,255,255,.03);border:1px solid var(--border);">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text-dim);margin-bottom:8px;">Quick Note for Admin</div>
+        <div style="display:flex;gap:8px;align-items:flex-end;">
+          <textarea id="liveNoteInput" placeholder="Callback Fri 2pm · keen but needs spouse · any flag worth mentioning…" style="flex:1;min-height:56px;max-height:120px;resize:vertical;font-size:12.5px;line-height:1.5;background:var(--s2);border:1px solid var(--border-2);border-radius:10px;padding:9px 11px;color:var(--text);font-family:inherit;" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();pushLiveNote(\${lead.id});}"></textarea>
+          <button onclick="pushLiveNote(\${lead.id})" style="padding:10px 14px;border-radius:10px;background:linear-gradient(135deg,var(--violet-bright),var(--gold));color:#fff;font-weight:700;font-size:13px;border:none;cursor:pointer;flex-shrink:0;">Send</button>
+        </div>
+        <div id="noteConfirm" style="font-size:11px;color:var(--success);margin-top:5px;height:14px;"></div>
+      </div>
+      \`}
+      \` : \`
+      <!-- Finisher actions -->
+      <div style="display:grid;gap:10px;margin-bottom:14px;">
+        <a class="dial-btn" href="tel:\${lead.phone}" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:16px;border-radius:14px;background:linear-gradient(135deg,var(--violet),rgba(124,92,255,.7));color:#fff;font-weight:700;font-size:15px;text-decoration:none;">\${ICONS.phone} Dial \${lead.phone}</a>
+        <button onclick="finisherOutcome(\${lead.id},'completed')" style="padding:16px;border-radius:14px;background:linear-gradient(135deg,rgba(34,197,94,.2),rgba(34,197,94,.12));border:1px solid rgba(34,197,94,.4);color:var(--success);font-size:16px;font-weight:800;cursor:pointer;">✓ Mark Completed</button>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <button onclick="finisherOutcome(\${lead.id},'requires_review')" style="padding:12px;border-radius:12px;background:rgba(79,140,255,.08);border:1px solid rgba(79,140,255,.25);color:var(--gold-bright);font-size:13px;font-weight:600;cursor:pointer;">Review</button>
+          <button onclick="finisherOutcome(\${lead.id},'failed')" style="padding:12px;border-radius:12px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);color:var(--danger);font-size:13px;font-weight:600;cursor:pointer;">Unsuccessful</button>
+        </div>
+      </div>
+      \`}
+
+      \${scripts.length ? \`<div class="scripts-toggle" data-toggle-next="1" style="cursor:pointer;padding:10px 0;display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--border);margin-top:6px;"><span style="font-size:12px;font-weight:700;color:var(--text-dim);">Scripts (\${scripts.length})</span><span style="color:var(--text-faint);">▾</span></div><div class="scripts-panel" style="margin-top:0;">\${scripts.map(s => '<div class="script-item"><div class="title">' + esc(s.title) + '</div><div class="content">' + esc(s.content) + '</div></div>').join('')}</div>\` : ''}
+    </div>
+  \`;
   if (!callStart) callStart = Date.now();
   startCallTimer();
 }

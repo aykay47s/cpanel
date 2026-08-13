@@ -1,6 +1,829 @@
 import { ADMIN_JS } from './adminJs';
 import { STAFF_JS } from './staffJs';
 
+export const MAIN_JS = `const CP_CHANNEL = 'https://t.me/+M-aK0jz4wDI5Nzdh';
+const CP_BOT = 'https://t.me/clearpanelotpbot';
+let me = JSON.parse(localStorage.getItem('dispatch_me') || 'null');
+let brandingData = null;
+async function applyBranding() {
+  try {
+    const res = await fetch('/api/branding');
+    const { data } = await res.json();
+    if (data && data.name) {
+      brandingData = data;
+      // Update login screen title
+      const loginTitle = document.querySelector('.login-title');
+      if (loginTitle) loginTitle.textContent = data.name;
+      // Update topbar brand
+      const topbarBrand = document.querySelector('.topbar .brand');
+      if (topbarBrand) topbarBrand.innerHTML = '<div class="brand-mark"></div>' + esc(data.name) + ' <span class="mono" style="color:var(--text-faint);font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;margin-left:6px;display:inline-flex;align-items:center;gap:5px;"><span style="width:5px;height:5px;border-radius:50%;background:var(--success);box-shadow:0 0 0 0 rgba(34,197,94,.55);animation:liveDotPulse 2.2s ease-out infinite;"></span>Control Room</span>';
+      // Update sidebar brand
+      const sidebarBrand = document.querySelector('.sidebar .brand');
+      if (sidebarBrand) sidebarBrand.textContent = data.name.split(' ')[0];
+      // Update document title
+      document.title = data.name;
+    }
+  } catch (e) {}
+}
+applyBranding();
+let pinBuffer = '';
+let es = null;
+let recentlyClaimedIds = new Set();
+let callTimerInterval = null, callStart = null;
+let staffTab = 'home';
+
+function authHeaders(extra) { return Object.assign({ 'x-user-id': me.id, 'x-user-pin': me.pin, 'Content-Type': 'application/json' }, extra || {}); }
+async function api(url, opts = {}) {
+  opts.headers = authHeaders(opts.headers);
+  let res;
+  try {
+    res = await fetch(url, opts);
+  } catch (netErr) {
+    return { ok: false, status: 0, json: async () => ({ error: 'Network error — check your connection' }) };
+  }
+  const clone = res.clone();
+  const originalJson = res.json.bind(res);
+  res.json = async () => {
+    try {
+      return await originalJson();
+    } catch (parseErr) {
+      let text = '';
+      try { text = await clone.text(); } catch {}
+      const friendly = res.status >= 500 ? 'Server error — please try again' : (text ? text.slice(0, 200) : ('Request failed (' + res.status + ')'));
+      return { error: friendly };
+    }
+  };
+  return res;
+}
+
+// ---------- Login ----------
+document.getElementById('keypad').addEventListener('click', (e) => {
+  const btn = e.target.closest('.key'); if (!btn) return;
+  const k = btn.dataset.k;
+  if (k === 'clear') pinBuffer = ''; else if (k === 'back') pinBuffer = pinBuffer.slice(0, -1);
+  else if (pinBuffer.length < 4) pinBuffer += k;
+  renderPinDots();
+  if (pinBuffer.length === 4) attemptLogin();
+});
+function renderPinDots() { document.querySelectorAll('.pin-dot').forEach((d, i) => { d.classList.remove('error'); d.classList.toggle('filled', i < pinBuffer.length); }); }
+async function attemptLogin() {
+  const errEl = document.getElementById('loginError');
+  const _cpSlug = document.getElementById('cp-slug')?.content || null;
+  const res = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pin: pinBuffer, slug: _cpSlug }) });
+  const data = await res.json();
+  if (!res.ok) {
+    errEl.textContent = data.error || 'Invalid PIN';
+    document.querySelectorAll('.pin-dot').forEach(d => d.classList.add('error'));
+    setTimeout(() => { pinBuffer = ''; renderPinDots(); errEl.textContent = ''; }, 500);
+    return;
+  }
+  me = data.data;
+  localStorage.setItem('dispatch_me', JSON.stringify(me));
+  enterApp();
+}
+function logout() {
+  if (me) api('/api/clock', { method: 'POST', body: JSON.stringify({ clockedIn: false }) });
+  if (es) { es.close(); es = null; }
+  if (typeof stopQueuePolling === 'function') stopQueuePolling();
+  localStorage.removeItem('dispatch_me'); me = null; pinBuffer = ''; renderPinDots();
+  document.getElementById('adminApp').classList.add('hidden');
+  document.getElementById('staffApp').classList.add('hidden');
+  document.getElementById('loginScreen').classList.remove('hidden');
+}
+async function enterApp() {
+  document.getElementById('loginScreen').classList.add('hidden');
+  const res = await api('/api/me'); const fresh = (await res.json()).data;
+  if (fresh) { me = { ...me, ...fresh }; localStorage.setItem('dispatch_me', JSON.stringify(me)); }
+  connectEvents();
+  refreshNotifBadge();
+  registerServiceWorker();
+  // Role quiz: if the user has never set a role (new account, role = 'caller'
+  // by default but they never confirmed it), show a one-time role picker.
+  const quizDone = localStorage.getItem('cp_role_confirmed_' + me.id);
+  if (!quizDone) {
+    showRoleQuiz();
+    return;
+  }
+  // Telegram gate
+  const gated = await maybeShowTelegramGate();
+  if (gated) return;
+  launchApp();
+}
+function launchApp() {
+  if (me.role === 'admin') {
+    document.getElementById('adminApp').classList.remove('hidden');
+    switchAdminTab('dashboard');
+  } else {
+    document.getElementById('staffApp').classList.remove('hidden');
+    updateClockBtn();
+    renderStaffNav();
+    switchStaffTab('home');
+    // Show active in-app updates banner
+    loadActivePanelUpdate();
+  }
+  checkFirstLoginTutorial();
+}
+function showRoleQuiz() {
+  const gate = document.createElement('div');
+  gate.id = 'roleQuiz';
+  gate.style.cssText = 'position:fixed;inset:0;z-index:400;display:flex;align-items:center;justify-content:center;padding:24px;background:radial-gradient(ellipse 80% 50% at 15% -10%,rgba(124,92,255,.15),transparent 55%),radial-gradient(ellipse 70% 50% at 100% 10%,rgba(79,140,255,.12),transparent 55%),var(--bg);';
+  gate.innerHTML = '<div class="panel p" style="max-width:480px;width:100%;padding:40px 36px;text-align:center;">'
+    + '<img src="/clearpanel-icon.png" style="width:64px;height:64px;border-radius:50%;margin:0 auto 20px;display:block;" />'
+    + '<div style="font-size:11px;letter-spacing:.28em;text-transform:uppercase;color:var(--violet-bright);font-weight:700;margin-bottom:8px;">Welcome to ClearPanel</div>'
+    + '<h2 style="font-size:22px;margin-bottom:10px;">What best describes you?</h2>'
+    + '<p style="font-size:13px;color:var(--text-dim);line-height:1.6;margin-bottom:28px;">Just so we point you to the right place. Your admin sets your actual access level.</p>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">'
+    +   '<div data-role-pick="caller" class="role-card" onclick="confirmRole(this)">'
+    +     '<div style="font-size:32px;margin-bottom:10px;">📞</div>'
+    +     '<div style="font-weight:700;font-size:15px;margin-bottom:6px;">Caller</div>'
+    +     '<div style="font-size:12px;color:var(--text-dim);line-height:1.5;">Dial leads, log outcomes, track your XP and rank on the floor.</div>'
+    +   '</div>'
+    +   '<div data-role-pick="admin" class="role-card" onclick="confirmRole(this)">'
+    +     '<div style="font-size:32px;margin-bottom:10px;">🗂</div>'
+    +     '<div style="font-weight:700;font-size:15px;margin-bottom:6px;">Manager / Admin</div>'
+    +     '<div style="font-size:12px;color:var(--text-dim);line-height:1.5;">Upload leads, manage the team, view dashboards and run the floor.</div>'
+    +   '</div>'
+    + '</div>'
+    + '<div style="font-size:11px;color:var(--text-faint);">Not sure? Pick Caller — your admin can adjust this anytime.</div>'
+    + '</div>';
+  document.body.appendChild(gate);
+}
+async function confirmRole(el) {
+  const role = el ? el.dataset.rolePick : 'caller';
+  localStorage.setItem('cp_role_confirmed_' + me.id, role || 'caller');
+  const quiz = document.getElementById('roleQuiz');
+  if (quiz) quiz.remove();
+  const gated = await maybeShowTelegramGate();
+  if (gated) return;
+  launchApp();
+}
+async function loadActivePanelUpdate() {
+  try {
+    const r = await api('/api/updates/active');
+    const data = (await r.json()).data;
+    if (!data || data.length === 0) return;
+    const latest = data[0];
+    // Check if dismissed (non-live only)
+    if (!latest.is_live && localStorage.getItem('cp_update_dismissed_' + latest.id)) return;
+    showUpdateBanner(latest);
+  } catch {}
+}
+function showUpdateBanner(update) {
+  const existing = document.getElementById('cpUpdateBanner');
+  if (existing) existing.remove();
+  const banner = document.createElement('div');
+  banner.id = 'cpUpdateBanner';
+  const isLive = update.is_live;
+  banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:250;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;'
+    + (isLive ? 'background:linear-gradient(135deg,rgba(239,68,68,.95),rgba(220,38,38,.95));animation:liveGlow 2s ease-in-out infinite;' : 'background:linear-gradient(135deg,rgba(124,92,255,.9),rgba(79,140,255,.85));')
+    + 'backdrop-filter:blur(12px);border-bottom:1px solid rgba(255,255,255,.15);';
+  if (isLive) {
+    const style = document.createElement('style');
+    style.textContent = '@keyframes liveGlow{0%,100%{box-shadow:0 4px 20px rgba(239,68,68,.4);}50%{box-shadow:0 4px 30px rgba(239,68,68,.7);}}';
+    document.head.appendChild(style);
+  }
+  banner.innerHTML = '<div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">'
+    + (isLive ? '<span style="background:rgba(255,255,255,.2);padding:2px 8px;border-radius:4px;font-size:10px;font-weight:800;letter-spacing:.1em;flex-shrink:0;">LIVE</span>' : '<span style="font-size:16px;flex-shrink:0;">📣</span>')
+    + '<span style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(update.title) + '</span>'
+    + '<span style="font-size:12.5px;opacity:.85;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:1;">' + esc(update.body) + '</span>'
+    + '</div>'
+    + (!isLive ? '<button onclick="dismissPanelUpdate(' + update.id + ')" style="background:rgba(255,255,255,.15);border:none;color:#fff;font-size:18px;width:28px;height:28px;border-radius:50%;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;line-height:1;">×</button>' : '');
+  document.body.appendChild(banner);
+}
+function dismissPanelUpdate(id) {
+  localStorage.setItem('cp_update_dismissed_' + id, '1');
+  const banner = document.getElementById('cpUpdateBanner');
+  if (banner) banner.remove();
+}
+// Returns true if the gate took over the screen (so caller stops).
+async function maybeShowTelegramGate() {
+  try {
+    const r = await api('/api/telegram/my-status');
+    const s = (await r.json()).data;
+    if (!s || !s.master_configured) return false;
+    if (s.verified_master) return false;
+    showTelegramGate(s);
+    return true;
+  } catch { return false; }
+}
+// ---- Telegram verification gate ----
+// Step A: user enters @username → we call start-verification
+//   → if needs_start: show "open Telegram, send /start" + poll /check-started
+//   → if code sent: advance to Step B
+// Step B: "Check your Telegram" + 6-digit OTP input → POST /confirm-code
+// Step C: welcome screen → enterApp()
+function showTelegramGate(status) {
+  const gate = document.createElement('div');
+  gate.id = 'tgGate';
+  gate.style.cssText = 'position:fixed;inset:0;z-index:400;display:flex;align-items:center;justify-content:center;padding:24px;background:radial-gradient(ellipse 80% 50% at 15% -10%,rgba(124,92,255,.15),transparent 55%),radial-gradient(ellipse 70% 50% at 100% 10%,rgba(79,140,255,.12),transparent 55%),var(--bg);';
+  gate.innerHTML = '<div class="panel p" style="max-width:420px;width:100%;padding:36px 32px;text-align:center;">'
+    + '<div style="font-size:11px;letter-spacing:.28em;text-transform:uppercase;color:var(--violet-bright);font-weight:700;margin-bottom:8px;">Quick verification</div>'
+    + '<h2 style="font-size:22px;margin-bottom:10px;">Link your Telegram</h2>'
+    + '<p style="font-size:13px;color:var(--text-dim);line-height:1.55;margin-bottom:22px;">We will send a code to your Telegram — enter it here to verify. Takes 30 seconds.</p>'
+    + '<div id="tgStepA">'
+    +   '<div class="field" style="text-align:left;"><label style="font-size:11px;color:var(--text-dim);font-weight:600;display:block;margin-bottom:6px;">Your Telegram username</label><input id="tgUname" placeholder="@yourname" value="' + esc(status.telegram_username ? '@' + status.telegram_username : '') + '" /></div>'
+    +   '<button class="btn btn-gold btn-block" onclick="tgStep1()" style="margin-top:14px;">Send me a code</button>'
+    +   '<div id="tgErrA" style="color:var(--danger);font-size:12px;min-height:16px;margin-top:8px;"></div>'
+    + '</div>'
+    + '<div id="tgStepOpen" style="display:none;">'
+    +   '<div style="font-size:48px;margin-bottom:10px;">✈️</div>'
+    +   '<p style="font-size:13.5px;font-weight:600;margin-bottom:6px;">Open Telegram first</p>'
+    +   '<p style="font-size:12.5px;color:var(--text-dim);line-height:1.55;margin-bottom:18px;">Message <b>/start</b> to the bot below — just once, to let it reach you. Then come straight back here.</p>'
+    +   '<a id="tgStartLink" class="btn btn-gold btn-block" target="_blank" rel="noopener" style="text-decoration:none;display:block;margin-bottom:14px;">Open @clearpanelotpbot</a>'
+    +   '<div style="font-size:11.5px;color:var(--violet-bright);" id="tgWaiting">Waiting for you to start the bot…</div>'
+    + '</div>'
+    + '<div id="tgStepB" style="display:none;">'
+    +   '<div style="font-size:48px;margin-bottom:10px;">📨</div>'
+    +   '<p style="font-size:13.5px;font-weight:600;margin-bottom:6px;">Check your Telegram</p>'
+    +   '<p style="font-size:12.5px;color:var(--text-dim);line-height:1.55;margin-bottom:16px;">Check your Telegram — a 6-digit code has been sent. Enter it below. Expires in <span id="tgCd">5:00</span>.</p>'
+    +   '<input id="tgOtp" placeholder="Enter OTP" class="mono" maxlength="7" data-otp-input="1" style="text-align:center;font-size:22px;font-weight:700;letter-spacing:.2em;" />'
+    +   '<button class="btn btn-gold btn-block" onclick="tgSubmitCode()" style="margin-top:12px;">Verify</button>'
+    +   '<button class="btn btn-ghost btn-block" onclick="tgStep1()" style="margin-top:8px;font-size:12px;">Resend code</button>'
+    +   '<div id="tgErrB" style="color:var(--danger);font-size:12px;min-height:16px;margin-top:8px;"></div>'
+    + '</div>'
+    + '<div id="tgStepC" style="display:none;">'
+    +   '<div style="font-size:56px;margin-bottom:14px;">🎉</div>'
+    +   '<h3 style="font-size:20px;margin-bottom:8px;" id="tgWelcomeName"></h3>'
+    +   '<p style="font-size:13px;color:var(--text-dim);line-height:1.55;margin-bottom:20px;">Your Telegram is now linked. A welcome message has been sent. Loading ClearPanel now.</p>'
+    +   '<a href="https://t.me/+M-aK0jz4wDI5Nzdh" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:8px;padding:10px 20px;border-radius:100px;background:rgba(124,92,255,.15);border:1px solid rgba(167,139,250,.35);color:var(--violet-bright);font-size:13px;font-weight:600;text-decoration:none;margin-bottom:18px;">📣 Join the ClearPanel updates channel</a>'
+    +   '<div class="xp-bar"><i id="tgWelcomeBar" style="width:0%;transition:width 1.2s var(--ease-smooth);"></i></div>'
+    + '</div>'
+    + '</div>';
+  document.body.appendChild(gate);
+}
+async function tgStep1() {
+  const uname = document.getElementById('tgUname') ? document.getElementById('tgUname').value.trim() : window._tgUname;
+  const errA = document.getElementById('tgErrA');
+  if (errA) errA.textContent = '';
+  if (!uname || uname.length < 3) { if (errA) errA.textContent = 'Enter your @username'; return; }
+  window._tgUname = uname;
+  const r = await api('/api/telegram/start-verification', { method:'POST', body: JSON.stringify({ username: uname, scope: 'master' })});
+  const data = await r.json();
+  if (!r.ok) { if (errA) errA.textContent = data.error || 'Failed'; return; }
+  if (data.data.needs_start) {
+    // Bot doesn't know them yet — show the "open bot" step and poll
+    tgShowOnly('tgStepOpen');
+    const link = document.getElementById('tgStartLink');
+    if (link) link.href = data.data.deep_link || ('https://t.me/' + (data.data.bot_username || 'clearpanelotpbot'));
+    tgPollStarted();
+  } else {
+    // Code was DM'd — show the OTP input
+    window._tgExpires = new Date(data.data.expires_at).getTime();
+    tgShowOnly('tgStepB');
+    startTgCd();
+  }
+}
+function tgShowOnly(id) {
+  ['tgStepA','tgStepOpen','tgStepB','tgStepC'].forEach(i => {
+    const el = document.getElementById(i);
+    if (el) el.style.display = i === id ? 'block' : 'none';
+  });
+}
+function tgPollStarted() {
+  clearInterval(window._tgPollI);
+  window._tgPollI = setInterval(async () => {
+    const r = await api('/api/telegram/check-started?scope=master');
+    const d = await r.json();
+    if (d.data && d.data.started) {
+      clearInterval(window._tgPollI);
+      const w = document.getElementById('tgWaiting');
+      if (w) { w.textContent = 'Got it! Sending your code…'; w.style.color = 'var(--success)'; }
+      setTimeout(() => tgStep1(), 600);
+    }
+  }, 2000);
+}
+async function tgSubmitCode() {
+  const raw = (document.getElementById('tgOtp').value || '').replace(/\D/g, '');
+  const errB = document.getElementById('tgErrB');
+  errB.textContent = '';
+  if (raw.length !== 6) { errB.textContent = 'Enter the 6-digit code from Telegram'; return; }
+  const r = await api('/api/telegram/confirm-code', { method:'POST', body: JSON.stringify({ code: raw, scope: 'master' })});
+  const data = await r.json();
+  if (!r.ok) { errB.textContent = data.error || 'Wrong code — try again'; return; }
+  clearInterval(window._tgCdI);
+  tgShowOnly('tgStepC');
+  const nameEl = document.getElementById('tgWelcomeName');
+  if (nameEl) nameEl.textContent = 'Welcome, ' + esc(data.data.name || 'there') + '!';
+  requestAnimationFrame(() => {
+    setTimeout(() => { const bar = document.getElementById('tgWelcomeBar'); if (bar) bar.style.width = '100%'; }, 80);
+  });
+  setTimeout(() => {
+    const gate = document.getElementById('tgGate');
+    if (gate) gate.remove();
+    enterApp();
+  }, 1800);
+}
+function startTgCd() {
+  clearInterval(window._tgCdI);
+  const tick = () => {
+    const left = Math.max(0, Math.floor((window._tgExpires - Date.now()) / 1000));
+    const m = Math.floor(left/60), sec = left%60;
+    const el = document.getElementById('tgCd');
+    if (el) el.textContent = m + ':' + String(sec).padStart(2,'0');
+    if (left <= 0) { clearInterval(window._tgCdI); if (el) el.style.color = 'var(--danger)'; }
+  };
+  tick();
+  window._tgCdI = setInterval(tick, 1000);
+}
+// Keep old names so nothing else breaks
+function tgStartVerify() { tgStep1(); }
+function tgCopyCode() {}
+function startTgCountdown() {}
+function startTgPoll() {}
+// Registered unconditionally on every login, not just when someone opts into push -
+// an active service worker is also what makes Chrome/Android treat this as a real
+// installable app in the first place, not just a bookmark.
+async function registerServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+  try { await navigator.serviceWorker.register('/sw.js'); } catch {}
+}
+function renderStaffNav() {
+  const nav = document.getElementById('staffNav');
+  const queueLabel = me.role === 'finisher' ? 'Queue' : 'Leads';
+  nav.innerHTML = \`
+    <button class="nav-btn active" data-tab="home" onclick="switchStaffTab('home')">\${ICONS.home}Home</button>
+    <button class="nav-btn" data-tab="queue" onclick="switchStaffTab('queue')" style="position:relative;">\${ICONS.radar}\${queueLabel}</button>
+    <button class="nav-btn" data-tab="chat" onclick="switchStaffTab('chat')" style="position:relative;">\${ICONS.chat}Chat</button>
+    <button class="nav-btn" data-tab="scripts" onclick="switchStaffTab('scripts')">\${ICONS.doc || ICONS.chat}Scripts</button>
+    <button class="nav-btn" data-tab="board" onclick="switchStaffTab('board')">\${ICONS.trophy}Board</button>
+    <button class="nav-btn" data-tab="profile" onclick="switchStaffTab('profile')">\${ICONS.gear}Profile</button>
+  \`;
+}
+
+// ---------- Realtime ----------
+function connectEvents() {
+  if (es) es.close();
+  es = new EventSource('/api/events?uid=' + me.id + '&pin=' + me.pin);
+  es.addEventListener('new_lead', () => { if (staffTab === 'queue' && !onActiveCallScreen) smoothRerender(renderStaffQueue); pingNav('queue'); if (me.role==='admin') maybeRefreshAdmin('leads'); });
+  es.addEventListener('center_closed', (e) => {
+    if (me.role === 'admin') return; // admins are exempt from the gate, nothing changes for them
+    const d = JSON.parse(e.data);
+    me.clocked_in = false;
+    localStorage.setItem('dispatch_me', JSON.stringify(me));
+    window._centerClosed = true;
+    window._centerClosedReason = d.reason || 'The call center is closed right now.';
+    updateClockBtn();
+    if (staffTab === 'queue') renderStaffQueue();
+  });
+  es.addEventListener('caller_identified', (e) => {
+    if (me.role !== 'admin') return;
+    const zone = document.getElementById('callerIdPopZone');
+    if (!zone) return; // not currently on the dashboard, no pop to show
+    const d = JSON.parse(e.data);
+    const lead = d.lead;
+    const name = [lead.first_name, lead.last_name].filter(Boolean).join(' ') || 'Unknown';
+    const card = document.createElement('div');
+    card.className = 'caller-id-pop fade-up';
+    card.innerHTML = '<div class="pop-badge">' + (d.provider || '').toUpperCase() + ' · Inbound Now</div>' +
+      '<div class="pop-name">' + esc(name) + '</div>' +
+      '<div class="pop-meta mono">' + esc(d.from || lead.phone || '') + (lead.lead_type ? ' · ' + esc(lead.lead_type) : '') + '</div>' +
+      (lead.notes ? '<div class="pop-notes">' + esc(lead.notes) + '</div>' : '') +
+      '<button class="btn btn-ghost btn-sm" onclick="this.closest(\\'.caller-id-pop\\').remove()">Dismiss</button>';
+    zone.prepend(card);
+    setTimeout(() => { if (card.parentNode) card.style.opacity = '0.001'; }, 45000);
+  });
+  es.addEventListener('lead_claimed', (e) => {
+    const d = JSON.parse(e.data);
+    const card = document.querySelector('[data-lead-id="' + d.id + '"]');
+    if (card) card.remove();
+    // A poll request that was already in flight when this claim happened can still
+    // land afterward with a stale response that includes this lead - remembering it
+    // was just claimed stops it from being silently re-added for a few seconds.
+    recentlyClaimedIds.add(d.id);
+    setTimeout(() => recentlyClaimedIds.delete(d.id), 15000);
+  });
+  es.addEventListener('lead_updated', () => { if (me.role === 'admin') maybeRefreshAdmin(['dashboard','leads','finishing']); });
+  es.addEventListener('announcement', () => { if (staffTab === 'home') renderStaffHome(); if (me.role==='admin') maybeRefreshAdmin('announcements'); });
+  es.addEventListener('chat_message', (e) => { const d = JSON.parse(e.data); if (staffTab === 'chat' || (me.role==='admin' && currentAdminTab==='chat')) appendChatMessage(d); else pingNav('chat'); });
+  es.addEventListener('notification', () => refreshNotifBadge());
+  es.addEventListener('lead_note', (e) => {
+    const d = JSON.parse(e.data);
+    if (me.role !== 'admin' && me.role !== 'manager') return;
+    showNoteToast(d);
+  });
+  es.onerror = () => setTimeout(() => { if (me) connectEvents(); }, 3000);
+}
+function pingNav(tab) {
+  const btn = document.querySelector('.nav-btn[data-tab="' + tab + '"]');
+  if (btn && !btn.querySelector('.nav-badge')) { const b = document.createElement('span'); b.className = 'nav-badge'; b.style.position='absolute'; b.style.top='2px'; b.style.right='22%'; btn.appendChild(b); }
+}
+function clearNavBadge(tab) { const btn = document.querySelector('.nav-btn[data-tab="' + tab + '"]'); const b = btn && btn.querySelector('.nav-badge'); if (b) b.remove(); }
+let currentAdminTab = 'dashboard';
+function maybeRefreshAdmin(tabs) { const arr = Array.isArray(tabs) ? tabs : [tabs]; if (arr.includes(currentAdminTab)) smoothRerender(() => renderAdminTab(currentAdminTab)); }
+// Background updates (triggered by other people's actions via SSE) shouldn't look
+// like the page reloading. Briefly dims the content, swaps it while invisible, then
+// fades back in — same content update, no jarring flash or re-triggered pop-in
+// animations on every background change.
+async function smoothRerender(renderFn) {
+  const el = document.getElementById(me.role === 'admin' ? 'adminContent' : 'staffBody');
+  if (!el) { await renderFn(); return; }
+  el.style.transition = 'opacity .15s ease';
+  el.style.opacity = '0.4';
+  await new Promise(r => setTimeout(r, 120));
+  await renderFn();
+  requestAnimationFrame(() => { el.style.opacity = '1'; });
+}
+
+async function refreshNotifBadge() {
+  const res = await api('/api/notifications/unread-count'); const { count } = (await res.json()).data;
+  ['notifBtn','notifBtnStaff'].forEach(id => {
+    const el = document.getElementById(id); if (!el) return;
+    let dot = el.querySelector('.dot');
+    if (count > 0 && !dot) { dot = document.createElement('span'); dot.className = 'dot'; el.appendChild(dot); }
+    if (count === 0 && dot) dot.remove();
+  });
+}
+async function toggleNotifPanel() {
+  const panel = document.getElementById('notifPanel');
+  const backdrop = document.getElementById('notifBackdrop');
+  if (!panel.classList.contains('hidden')) { closeNotifPanel(); return; }
+  await renderNotifList();
+  panel.classList.remove('hidden');
+  backdrop.classList.remove('hidden');
+}
+function closeNotifPanel() {
+  document.getElementById('notifPanel').classList.add('hidden');
+  document.getElementById('notifBackdrop').classList.add('hidden');
+}
+async function renderNotifList() {
+  const panel = document.getElementById('notifPanel');
+  const res = await api('/api/notifications');
+  const rows = (await res.json()).data;
+  panel.innerHTML = \`<div class="panel p fade-up">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <div class="section-title" style="margin:0;">Notifications</div>
+      <button class="icon-btn" style="width:28px;height:28px;" onclick="closeNotifPanel()">✕</button>
+    </div>
+    \${rows.length ? rows.map(n => \`<div class="clickable" style="padding:11px 0;border-bottom:1px solid var(--border);font-size:12.5px;\${n.read ? 'opacity:.5;' : ''}" onclick="markOneRead(\${n.id}, this)">
+      <div>\${esc(n.content)}</div><div style="font-size:10px;color:var(--text-faint);margin-top:3px;">\${timeAgo(n.created_at)}\${!n.read ? ' · <span style="color:var(--gold-bright);">tap to mark read</span>' : ''}</div>
+    </div>\`).join('') : '<div style="color:var(--text-dim);font-size:12.5px;padding:10px 0;">Nothing yet.</div>'}
+    \${rows.length ? '<button class="btn btn-sm btn-block" style="margin-top:12px;" onclick="markAllRead()">Mark all read</button>' : ''}
+  </div>\`;
+}
+async function markOneRead(id, el) {
+  await api('/api/notifications/' + id + '/read', { method: 'POST' });
+  el.style.opacity = '.5';
+  refreshNotifBadge();
+}
+async function markAllRead() {
+  await api('/api/notifications/read-all', { method: 'POST' });
+  refreshNotifBadge();
+  await renderNotifList();
+}
+
+// ---------- Clock ----------
+let clockDurationInterval;
+async function updateClockBtn() {
+  const btn = document.getElementById('clockBtn');
+  const label = document.getElementById('clockLabel');
+  clearInterval(clockDurationInterval);
+  if (me.clocked_in) {
+    btn.classList.add('on');
+    let clockedInAt;
+    try {
+      const res = await api('/api/clock/status');
+      const data = (await res.json()).data;
+      clockedInAt = data.clockedInAt ? new Date(data.clockedInAt).getTime() : Date.now();
+    } catch { clockedInAt = Date.now(); }
+    const tick = () => {
+      const s = Math.max(0, Math.floor((Date.now() - clockedInAt) / 1000));
+      const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60;
+      label.textContent = String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0') + ':' + String(ss).padStart(2, '0');
+    };
+    tick();
+    clockDurationInterval = setInterval(tick, 1000);
+  } else {
+    label.textContent = 'Clock In';
+    btn.classList.remove('on');
+  }
+}
+async function toggleClock() {
+  const wantClockedIn = !me.clocked_in;
+  const res = await api('/api/clock', { method: 'POST', body: JSON.stringify({ clockedIn: wantClockedIn }) });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    if (wantClockedIn) {
+      window._centerClosed = true;
+      window._centerClosedReason = data.error || 'The call center is closed right now.';
+    }
+    if (staffTab === 'queue') renderStaffQueue();
+    return;
+  }
+  me.clocked_in = wantClockedIn;
+  localStorage.setItem('dispatch_me', JSON.stringify(me));
+  updateClockBtn();
+  if (staffTab === 'queue') renderStaffQueue();
+}
+
+// Real motion on stat numbers instead of just appearing — counts up from 0 over
+// ~600ms with an eased curve, applied automatically to any element with data-count.
+function animateCountUps(container) {
+  const els = (container || document).querySelectorAll('[data-count]');
+  els.forEach(el => {
+    const target = parseInt(el.dataset.count, 10);
+    if (isNaN(target)) return;
+    const duration = 650;
+    const start = performance.now();
+    const tick = (now) => {
+      const progress = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      el.textContent = Math.round(target * eased);
+      if (progress < 1) requestAnimationFrame(tick);
+      else el.textContent = target;
+    };
+    requestAnimationFrame(tick);
+  });
+}
+
+// ---- Ranks: caller-based progression. XP flows naturally from dialling work.
+// Rank up reflects how experienced and consistent a caller is — not gaming tiers.
+// Each rank has a colour, an icon, and a min level to reach it.
+const RANK_TIERS = [
+  // [name, colour, darker shade, min level, icon emoji]
+  ['New Dialer',     '#94a3b8', '#64748b',  1, '📞'],
+  ['Dialer',         '#60a5fa', '#2563eb',  3, '📲'],
+  ['Active Dialer',  '#34d399', '#059669',  6, '⚡'],
+  ['Consistent',     '#fbbf24', '#d97706',  10, '🔥'],
+  ['Senior Dialer',  '#f97316', '#c2410c',  15, '💼'],
+  ['Top Dialer',     '#e879f9', '#a21caf',  20, '🎯'],
+  ['Elite Caller',   '#818cf8', '#4f46e5',  27, '💎'],
+  ['Legend',         '#fcd34d', '#b45309',  35, '👑'],
+];
+function rankInfo(xp) {
+  const li = levelInfo(xp);
+  let tier = RANK_TIERS[0];
+  for (const t of RANK_TIERS) if (li.level >= t[3]) tier = t;
+  const isTop = tier[0] === 'Legend';
+  return { tier: tier[0], div: '', c1: tier[1], c2: tier[2], icon: tier[4], label: tier[0], level: li.level, li, isTop };
+}
+function rankEmblemHtml(rk, size) {
+  const fs = Math.round(size * 0.46);
+  return '<div class="rank-emblem" style="--rc1:' + rk.c1 + ';--rc2:' + rk.c2 + ';width:' + size + 'px;height:' + size + 'px;border-radius:50%;"><span class="div" style="font-size:' + fs + 'px;">' + (rk.icon || '📞') + '</span></div>';
+}
+function rankChipHtml(rk) {
+  return '<span class="rank-chip" style="color:' + rk.c1 + ';border-color:' + rk.c1 + '55;">' + rankEmblemHtml(rk, 16) + rk.label + '</span>';
+}
+function showRankUp(rk) {
+  const el = document.createElement('div');
+  el.className = 'rankup-overlay';
+  el.style.setProperty('--rc1', rk.c1);
+  el.innerHTML = '<div class="big">' + rankEmblemHtml(rk, 110) + '</div><div class="t1">Rank Up</div><div class="t2" style="color:' + rk.c1 + ';">' + rk.label + '</div><div class="t3">Level ' + rk.level + ' — keep dialling</div>';
+  el.onclick = () => el.remove();
+  document.body.appendChild(el);
+}
+// ---- Bank directory: UK + international, name -> official domain. The favicon
+// service resolves a mark for any domain, so custom banks work the same way. ----
+const BANK_DIR = {
+  uk: [["Lloyds","lloydsbank.com"],["Barclays","barclays.co.uk"],["HSBC UK","hsbc.co.uk"],["NatWest","natwest.com"],["Santander UK","santander.co.uk"],["Halifax","halifax.co.uk"],["TSB","tsb.co.uk"],["Nationwide","nationwide.co.uk"],["RBS","rbs.co.uk"],["Metro Bank","metrobankonline.co.uk"],["Monzo","monzo.com"],["Starling","starlingbank.com"],["Revolut","revolut.com"],["First Direct","firstdirect.com"],["Co-operative Bank","co-operativebank.co.uk"],["Virgin Money","virginmoney.com"],["Bank of Scotland","bankofscotland.co.uk"],["Ulster Bank","ulsterbank.co.uk"],["Chase UK","chase.co.uk"],["Tesco Bank","tescobank.com"],["Sainsbury's Bank","sainsburysbank.co.uk"],["Danske Bank UK","danskebank.co.uk"],["Atom Bank","atombank.co.uk"],["Zopa","zopa.com"],["Shawbrook","shawbrook.co.uk"],["Aldermore","aldermore.co.uk"],["Paragon Bank","paragonbank.co.uk"],["Marcus","marcus.co.uk"],["Yorkshire BS","ybs.co.uk"],["Skipton BS","skipton.co.uk"],["Coventry BS","coventrybuildingsociety.co.uk"]],
+  intl: [["Chase","chase.com"],["Bank of America","bankofamerica.com"],["Wells Fargo","wellsfargo.com"],["Citibank","citi.com"],["Capital One","capitalone.com"],["US Bank","usbank.com"],["PNC","pnc.com"],["Goldman Sachs","goldmansachs.com"],["Morgan Stanley","morganstanley.com"],["TD Bank","td.com"],["RBC","rbc.com"],["Scotiabank","scotiabank.com"],["BMO","bmo.com"],["CIBC","cibc.com"],["Deutsche Bank","db.com"],["Commerzbank","commerzbank.com"],["BNP Paribas","bnpparibas.com"],["Societe Generale","societegenerale.com"],["Credit Agricole","credit-agricole.com"],["ING","ing.com"],["ABN AMRO","abnamro.com"],["Rabobank","rabobank.com"],["UBS","ubs.com"],["Santander","santander.com"],["BBVA","bbva.com"],["CaixaBank","caixabank.com"],["Intesa Sanpaolo","intesasanpaolo.com"],["UniCredit","unicredit.it"],["Nordea","nordea.com"],["Danske Bank","danskebank.com"],["SEB","seb.se"],["Swedbank","swedbank.com"],["HSBC","hsbc.com"],["Standard Chartered","sc.com"],["DBS","dbs.com"],["OCBC","ocbc.com"],["UOB","uob.com.sg"],["ANZ","anz.com"],["Commonwealth Bank","commbank.com.au"],["Westpac","westpac.com.au"],["NAB","nab.com.au"],["ICICI","icicibank.com"],["HDFC","hdfcbank.com"],["Axis Bank","axisbank.com"],["Emirates NBD","emiratesnbd.com"],["FAB","bankfab.com"],["QNB","qnb.com"],["N26","n26.com"],["Wise","wise.com"],["Bunq","bunq.com"]],
+};
+function bankLogoUrl(domain) { return 'https://www.google.com/s2/favicons?domain=' + domain + '&sz=64'; }
+// ---- Levels ----
+// Cost to clear level n grows by 60 XP per level: 100, 160, 220, ... so early
+// levels come fast (day one feels rewarding) and later ones are a real season.
+function levelInfo(xp) {
+  let lvl = 1, rem = Math.max(0, xp || 0), cost = 100;
+  while (rem >= cost) { rem -= cost; lvl++; cost = 100 + (lvl - 1) * 60; }
+  const bands = [[35,'Legend'],[27,'Elite Caller'],[20,'Top Dialer'],[15,'Senior Dialer'],[10,'Consistent'],[6,'Active Dialer'],[3,'Dialer'],[1,'New Dialer']];
+  const title = bands.find(b => lvl >= b[0])[1];
+  return { level: lvl, into: rem, need: cost, pct: Math.min(100, Math.round(rem / cost * 100)), title };
+}
+// Floating "+N XP" chip — fired whenever the server reports xp_awarded, so the
+// grind is visibly paying out in the moment, not just on the leaderboard later.
+function xpToast(amount, label) {
+  if (!amount) return;
+  const el = document.createElement('div');
+  el.className = 'xp-toast';
+  el.innerHTML = '⚡ +' + amount + ' XP' + (label ? ' <span style="font-weight:500;color:var(--text-dim);font-size:12px;">· ' + esc(label) + '</span>' : '');
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 1950);
+}
+function showNoteToast(d) {
+  // Live note toast shown to admins/managers when a caller submits a note
+  const existing = document.getElementById('noteToastEl');
+  if (existing) existing.remove();
+  const el = document.createElement('div');
+  el.id = 'noteToastEl';
+  el.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:300;max-width:320px;padding:14px 16px;border-radius:16px;background:rgba(18,18,26,.95);border:1px solid rgba(167,139,250,.4);backdrop-filter:blur(20px);box-shadow:0 8px 32px rgba(0,0,0,.4);animation:xpRise .6s cubic-bezier(.16,1,.3,1) both;cursor:pointer;';
+  const callerName = d.note && d.note.author_name ? esc(d.note.author_name) : 'A caller';
+  const noteText = d.note && d.note.content ? esc(d.note.content) : '';
+  const leadName = d.leadName ? esc(d.leadName) : 'a lead';
+  el.innerHTML = '<div style="display:flex;align-items:flex-start;gap:10px;">'
+    + '<span style="font-size:18px;flex-shrink:0;">📝</span>'
+    + '<div style="flex:1;min-width:0;">'
+    + '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--violet-bright);margin-bottom:3px;">Live Note · ' + callerName + '</div>'
+    + '<div style="font-size:12.5px;font-weight:600;color:var(--text);margin-bottom:3px);">' + leadName + '</div>'
+    + '<div style="font-size:12px;color:var(--text-dim);line-height:1.4;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;">' + noteText + '</div>'
+    + '</div>'
+    + '<button onclick="this.parentElement.parentElement.remove()" style="background:none;border:none;color:var(--text-faint);font-size:16px;cursor:pointer;flex-shrink:0;padding:0;line-height:1;">×</button>'
+    + '</div>';
+  el.onclick = (e) => { if (e.target.tagName === 'BUTTON') return; el.remove(); if (typeof switchAdminTab === 'function') switchAdminTab('leads'); };
+  document.body.appendChild(el);
+  setTimeout(() => { if (el.parentNode) el.remove(); }, 8000);
+}
+// ---- Leaderboard builders (shared by staff board and admin board) ----
+function lbSortKey(mode) { return mode === 'week' ? 'weekly_xp' : 'xp'; }
+function lbPodiumSlot(r, place, height, mode) {
+  if (!r) return '<div style="flex:1;"></div>';
+  const xpVal = mode === 'week' ? (r.weekly_xp || 0) : r.xp;
+  const li = levelInfo(r.xp);
+  const barColor = place === 1 ? 'linear-gradient(180deg,#fbbf24,#b8860b)' : place === 2 ? 'linear-gradient(180deg,#d1d5db,#9ca3af)' : 'linear-gradient(180deg,#d97706,#92400e)';
+  return '<div class="podium-slot">'
+    + (place === 1 ? '<div class="podium-crown">👑</div>' : '<div style="height:16px;"></div>')
+    + '<div class="podium-av' + (place === 1 ? ' first' : '') + '">' + avatarHtml(r, place === 1 ? 54 : 44) + '</div>'
+    + '<div style="font-size:11.5px;font-weight:700;text-align:center;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(r.name) + (typeof me !== 'undefined' && me && r.id === me.id ? ' <span style="color:var(--gold-bright);">(you)</span>' : '') + '</div>'
+    + '<span class="lvl-chip">Lv ' + li.level + ' · ' + li.title + '</span>'
+    + '<div class="mono" style="font-size:11px;color:var(--violet-bright);font-weight:700;" data-count="' + xpVal + '">0</div>'
+    + '<div class="podium-bar" style="height:' + height + 'px;background:' + barColor + ';">#' + place + '</div>'
+    + '</div>';
+}
+function lbRowHtml(r, rank, mode, delay) {
+  const xpVal = mode === 'week' ? (r.weekly_xp || 0) : r.xp;
+  const li = levelInfo(r.xp);
+  const isMe = typeof me !== 'undefined' && me && r.id === me.id;
+  return '<div class="lb-row' + (isMe ? ' me' : '') + '" style="animation-delay:' + (delay * 45) + 'ms;padding:11px 12px;">'
+    + '<div class="rank r' + rank + '">' + rank + '</div>' + avatarHtml(r, 32)
+    + '<div style="flex:1;min-width:0;margin-left:8px;">'
+    +   '<div class="lb-name">' + esc(r.name) + (isMe ? ' <span style="color:var(--gold-bright);">(you)</span>' : '') + ' <span class="lvl-chip" style="padding:2px 8px;font-size:9px;">Lv ' + li.level + '</span></div>'
+    +   '<div class="xp-bar" style="margin-top:6px;max-width:190px;"><i style="width:' + li.pct + '%;"></i></div>'
+    + '</div>'
+    + '<div class="lb-stats"><span><b>' + (r.successful_calls || 0) + '</b> wins</span><span style="color:var(--violet-bright);"><b class="mono" data-count="' + xpVal + '">0</b> xp</span></div>'
+    + '</div>';
+}
+function lbBoardHtml(rows, mode) {
+  const sorted = [...rows].sort((a, b) => (mode === 'week' ? (b.weekly_xp||0) - (a.weekly_xp||0) : b.xp - a.xp));
+  const [first, second, third] = sorted;
+  const rest = sorted.slice(3);
+  return (sorted.length ? '<div class="panel p fade-up" style="padding:24px 16px 0;">'
+      + '<div style="display:flex;align-items:flex-end;justify-content:center;gap:12px;max-width:420px;margin:0 auto;">'
+      + lbPodiumSlot(second, 2, 74, mode) + lbPodiumSlot(first, 1, 96, mode) + lbPodiumSlot(third, 3, 60, mode)
+      + '</div></div>' : '<div class="panel p" style="color:var(--text-dim);">No one on the board yet — XP starts counting from the first claimed lead.</div>')
+    + (rest.length ? '<div class="panel p fade-up">' + rest.map((r, i) => lbRowHtml(r, i + 4, mode, i)).join('') + '</div>' : '');
+}
+// How the whole economy works, in the app itself — no tribal knowledge needed.
+function xpGuideHtml() {
+  const rowsData = [['Claim a lead','+5'],['Mark on call','+10'],['Live note for admin','+3'],['Voicemail / no answer','+5'],['Callback booked','+15'],['Successful call','+100'],['Finisher: completed','+75']];
+  return "<div class='panel p fade-up'><div class='scripts-toggle' data-toggle-next='1' style='margin-bottom:0;'><span>⚡ How XP works</span><span>▾</span></div>"
+    + '<div class="scripts-panel"><div style="padding-top:12px;">'
+    + "<p style='font-size:12px;color:var(--text-dim);line-height:1.6;margin-bottom:10px;'>Every action pays XP the moment it lands — you will see it pop on screen. Levels cost more as you climb (100 XP for level 2, +60 more each level after). This Week is a rolling 7-day race; All Time keeps everything.</p>"
+    + rowsData.map(x => '<div style="display:flex;justify-content:space-between;padding:7px 2px;border-bottom:1px solid var(--border);font-size:12.5px;"><span>' + x[0] + '</span><b class="mono" style="color:var(--violet-bright);">' + x[1] + '</b></div>').join('')
+    + '</div></div></div>';
+}
+
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('[data-toggle-next]');
+  if (t && t.nextElementSibling) t.nextElementSibling.classList.toggle('open');
+});
+document.addEventListener('input', (e) => {
+  const t = e.target;
+  if (t && t.dataset && t.dataset.otpInput) t.value = t.value.replace(/[^0-9]/g, '');
+});
+function timeAgo(ts) {
+  const s = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
+  if (s < 60) return s + 's ago';
+  if (s < 3600) return Math.floor(s / 60) + 'm ago';
+  if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+  return Math.floor(s / 86400) + 'd ago';
+}
+function esc(s) { return (s || '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+function fullName(l) { return [l.first_name, l.last_name].filter(Boolean).join(' ') || 'Unknown'; }
+function titleCase(s) { return String(s || '').replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase()); }
+const STATUS_ICONS = {
+  successful_call: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12l5 5L19 7"/></svg>',
+  completed: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12l5 5L19 7"/></svg>',
+  failed: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  cancelled: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  chopped_previously: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 6l12 12M18 6L6 18"/></svg>',
+  not_called: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><circle cx="12" cy="12" r="8"/></svg>',
+  calling: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M6.6 10.8a15 15 0 006.6 6.6l2.2-2.2a1 1 0 011.1-.2 11 11 0 003.4.6 1 1 0 011 1V20a1 1 0 01-1 1A17 17 0 013 5a1 1 0 011-1h3.5a1 1 0 011 1 11 11 0 00.6 3.4 1 1 0 01-.2 1.1z"/></svg>',
+  active_call: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M6.6 10.8a15 15 0 006.6 6.6l2.2-2.2a1 1 0 011.1-.2 11 11 0 003.4.6 1 1 0 011 1V20a1 1 0 01-1 1A17 17 0 013 5a1 1 0 011-1h3.5a1 1 0 011 1 11 11 0 00.6 3.4 1 1 0 01-.2 1.1z"/></svg>',
+  call_ended: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>',
+  ready_for_finishing: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M9 11l3 3L22 4"/><path d="M21 12v6a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h11"/></svg>',
+  assigned_to_finisher: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M9 11l3 3L22 4"/><path d="M21 12v6a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h11"/></svg>',
+  requires_review: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L2.5 17a2 2 0 001.7 3h15.6a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg>',
+  voicemail: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>',
+  no_answer: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg>',
+  hung_up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg>',
+  busy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg>',
+  callback_requested: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>',
+  admin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6l8-4z"/></svg>',
+  caller: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.5-7 8-7s8 3 8 7"/></svg>',
+  finisher: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M9 11l3 3L22 4"/><path d="M21 12v6a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h11"/></svg>',
+};
+function statusBadge(status, extraClass) {
+  return '<span class="badge ' + status + (extraClass ? ' ' + extraClass : '') + '">' + titleCase(status) + '</span>';
+}
+function initials(name) {
+  const parts = (name || '').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return '?';
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+const AVATAR_PALETTE = ['#4f8cff','#2dd4bf','#a78bfa','#f59e0b','#ef4444','#10b981','#6366f1','#ec4899','#14b8a6','#f97316'];
+function avatarColor(seed) {
+  let hash = 0;
+  const s = String(seed || '');
+  for (let i = 0; i < s.length; i++) hash = (hash * 31 + s.charCodeAt(i)) | 0;
+  return AVATAR_PALETTE[Math.abs(hash) % AVATAR_PALETTE.length];
+}
+// Single shared avatar renderer used everywhere a person needs a picture: a real
+// uploaded photo when set, otherwise a colored initials circle — no emoji.
+function avatarHtml(person, size) {
+  if (person && person.pfp_data) return '<img src="' + person.pfp_data + '" style="width:' + size + 'px;height:' + size + 'px;border-radius:50%;object-fit:cover;flex-shrink:0;box-shadow:0 0 0 2px rgba(255,255,255,.08), 0 2px 6px rgba(0,0,0,.3);" />';
+  const name = person ? (person.name || fullName(person)) : '';
+  const color = avatarColor((person && person.id) || name);
+  const fontSize = Math.round(size * 0.4);
+  return '<div style="width:' + size + 'px;height:' + size + 'px;border-radius:50%;background:' + color + ';display:flex;align-items:center;justify-content:center;font-size:' + fontSize + 'px;font-weight:700;color:#fff;flex-shrink:0;letter-spacing:-.02em;box-shadow:0 0 0 2px rgba(255,255,255,.08), 0 2px 6px rgba(0,0,0,.3);">' + initials(name) + '</div>';
+}
+
+// Shared lead-category badge (used on both the admin leads table and caller-facing
+// lead cards). Bank categories render their real, publicly-hosted brand mark —
+// fetched by domain from a logo lookup service, never bytes we store or copy
+// ourselves — with the existing brand-color initial badge as an automatic
+// fallback if the image 404s or the category isn't a bank at all.
+const BANK_DOMAINS = {
+  'lloyds': 'lloydsbank.com', 'barclays': 'barclays.co.uk', 'hsbc': 'hsbc.co.uk',
+  'natwest': 'natwest.com', 'santander': 'santander.co.uk', 'halifax': 'halifax.co.uk',
+  'tsb': 'tsb.co.uk', 'nationwide': 'nationwide.co.uk', 'rbs': 'rbs.co.uk',
+  'metro bank': 'metrobankonline.co.uk', 'monzo': 'monzo.com', 'starling': 'starlingbank.com',
+};
+let sharedCategoryCache = null;
+async function loadCategoryCache() {
+  if (sharedCategoryCache) return sharedCategoryCache;
+  try {
+    const res = await api('/api/lead-categories');
+    sharedCategoryCache = (await res.json()).data;
+  } catch { sharedCategoryCache = []; }
+  return sharedCategoryCache;
+}
+function categoryBadgeHtml(leadType) {
+  if (!leadType || !sharedCategoryCache) return '';
+  const cat = sharedCategoryCache.find(c => c.name.toLowerCase() === String(leadType).toLowerCase());
+  const color = cat ? cat.color : '#8b8b93';
+  const domain = (cat && cat.domain) || BANK_DOMAINS[String(leadType).toLowerCase()];
+  const logoImg = domain
+    ? '<img src="https://www.google.com/s2/favicons?domain=' + domain + '&sz=64" alt="" style="width:15px;height:15px;border-radius:4px;object-fit:contain;flex-shrink:0;" onerror="this.remove()" />'
+    : '';
+  return '<span class="badge" style="background:' + color + '22;color:' + color + ';border:1px solid ' + color + '44;gap:5px;">' + logoImg + esc(leadType) + '</span>';
+}
+
+// ---------- Shared chat panel (used by both admin and staff shells) ----------
+async function renderChatInto(containerEl) {
+  const [msgsRes, presenceRes] = await Promise.all([api('/api/chat/messages'), api('/api/chat/presence')]);
+  const msgs = (await msgsRes.json()).data;
+  const presence = (await presenceRes.json()).data;
+  containerEl.innerHTML = \`
+    <div class="presence-strip">\${presence.map(p => '<div class="presence-chip ' + (p.clocked_in ? 'online' : '') + '"><span class="dot"></span>' + avatarHtml(p, 16) + ' ' + esc(p.name) + '</div>').join('')}</div>
+    <div class="chat-shell panel" style="padding:14px;">
+      <div class="chat-messages" id="chatMessages">\${msgs.map(chatMsgHtml).join('')}</div>
+      <div class="chat-input-row" style="flex-direction:column;gap:8px;">
+        <div style="display:flex;gap:8px;">
+          <input id="chatInput" placeholder="Message the team…" onkeydown="if(event.key==='Enter') sendChatMessage()" />
+          <button class="btn btn-gold" onclick="sendChatMessage()">Send</button>
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-dim);text-transform:none;letter-spacing:0;font-weight:500;">
+          <input type="checkbox" id="disappearToggle" style="width:auto;" /> Disappearing message
+          <select id="disappearDuration" style="width:auto;padding:4px 8px;font-size:11px;display:none;">
+            <option value="60">1 minute</option><option value="3600">1 hour</option><option value="86400" selected>24 hours</option><option value="604800">7 days</option>
+          </select>
+        </label>
+      </div>
+    </div>\`;
+  document.getElementById('disappearToggle').addEventListener('change', (e) => {
+    document.getElementById('disappearDuration').style.display = e.target.checked ? 'inline-block' : 'none';
+  });
+  const box = document.getElementById('chatMessages');
+  box.scrollTop = box.scrollHeight;
+  api('/api/chat/read', { method: 'POST', body: JSON.stringify({ lastReadMessageId: msgs.length ? msgs[msgs.length - 1].id : 0 }) });
+  clearNavBadge('chat');
+}
+function chatMsgHtml(m) {
+  const own = m.sender_id === me.id;
+  return \`<div class="chat-msg \${own ? 'own' : ''}" data-msg-id="\${m.id}">\${avatarHtml({ name: m.sender_name, pfp_data: m.sender_pfp_data }, 32)}
+    <div class="chat-bubble"><div class="chat-sender">\${esc(m.sender_name || 'Unknown')}\${m.sender_role === 'admin' ? ' <span class="badge admin" style="margin-left:4px;">admin</span>' : ''}\${m.expires_at ? ' <span title="Disappears ' + timeAgo(m.expires_at) + '" style="opacity:.6;font-size:9.5px;text-transform:uppercase;letter-spacing:.4px;">· expires \${timeAgo(m.expires_at)}</span>' : ''}</div>
+    <div class="chat-text">\${esc(m.content)}</div><div class="chat-time">\${timeAgo(m.created_at)}\${(own || me.role === 'admin') ? ' · <span style="cursor:pointer;text-decoration:underline;" onclick="deleteChatMessage(' + m.id + ')">delete</span>' : ''}</div></div></div>\`;
+}
+function appendChatMessage(m) {
+  const box = document.getElementById('chatMessages');
+  if (!box) return;
+  box.insertAdjacentHTML('beforeend', chatMsgHtml(m));
+  box.scrollTop = box.scrollHeight;
+}
+async function sendChatMessage() {
+  const input = document.getElementById('chatInput');
+  const content = input.value.trim();
+  if (!content) return;
+  const disappear = document.getElementById('disappearToggle');
+  const expiresInSeconds = disappear && disappear.checked ? Number(document.getElementById('disappearDuration').value) : undefined;
+  input.value = '';
+  await api('/api/chat/messages', { method: 'POST', body: JSON.stringify({ content, expiresInSeconds }) });
+}
+async function deleteChatMessage(id) {
+  await api('/api/chat/messages/' + id, { method: 'DELETE' });
+  const el = document.querySelector('[data-msg-id="' + id + '"]');
+  if (el) el.remove();
+}`;
+
 export const ICONS_SVG: Record<string, string> = {
   dashboard: '<svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>',
   list: '<svg class="ic" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r="1.2" fill="currentColor" stroke="none"/><circle cx="3.5" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="3.5" cy="18" r="1.2" fill="currentColor" stroke="none"/></svg>',
@@ -17,13 +840,14 @@ export const ICONS_SVG: Record<string, string> = {
   gear: '<svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>',
 };
 
-export const page = `<!DOCTYPE html>
+const _rawPage = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>Frap Ties</title>
 <link rel="manifest" href="/manifest.json">
+<script src="/icons.js"></script>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Frap Ties">
@@ -368,13 +1192,11 @@ tr.clickable:active{background:rgba(255,255,255,.05);}
 .script-item .title{font-weight:700;font-size:12.5px;margin-bottom:4px;color:var(--gold-bright);}
 .script-item .content{font-size:12.5px;color:var(--text-dim);line-height:1.5;white-space:pre-wrap;}
 
-/* leaderboard */
-/* ---- Siege-style rank emblems ---- */
-.rank-emblem{position:relative;display:flex;align-items:center;justify-content:center;clip-path:polygon(50% 0,100% 18%,100% 62%,50% 100%,0 62%,0 18%);background:linear-gradient(160deg,var(--rc2),var(--rc1) 60%);flex-shrink:0;}
-.rank-emblem::before{content:'';position:absolute;inset:2px;clip-path:polygon(50% 0,100% 18%,100% 62%,50% 100%,0 62%,0 18%);background:linear-gradient(200deg,rgba(255,255,255,.28),transparent 45%),linear-gradient(160deg,var(--rc1),var(--rc2));}
-.rank-emblem::after{content:'';position:absolute;inset:0;background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.4) 50%,transparent 68%);transform:translateX(-120%);animation:emblemSheen 4.5s ease-in-out infinite;}
+/* ---- Caller rank emblems — circular badges ---- */
+.rank-emblem{position:relative;display:flex;align-items:center;justify-content:center;border-radius:50%;background:linear-gradient(160deg,var(--rc2),var(--rc1) 60%);flex-shrink:0;box-shadow:0 0 12px var(--rc1)55;}
+.rank-emblem::after{content:'';position:absolute;inset:0;border-radius:50%;background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.35) 50%,transparent 68%);transform:translateX(-120%);animation:emblemSheen 4.5s ease-in-out infinite;}
 @keyframes emblemSheen{0%,60%{transform:translateX(-120%);}85%,100%{transform:translateX(120%);}}
-.rank-emblem .div{position:relative;z-index:1;font-family:'Bricolage Grotesque',sans-serif;font-weight:800;color:rgba(0,0,0,.62);text-shadow:0 1px 0 rgba(255,255,255,.25);}
+.rank-emblem .div{position:relative;z-index:1;line-height:1;}
 .rank-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 11px 4px 5px;border-radius:100px;background:rgba(255,255,255,.06);border:1px solid var(--border-2);font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;}
 /* ---- Rank-up moment ---- */
 .rankup-overlay{position:fixed;inset:0;z-index:300;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:rgba(5,5,9,.82);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);animation:fadeIn .3s ease both;cursor:pointer;}
@@ -407,6 +1229,9 @@ tr.clickable:active{background:rgba(255,255,255,.05);}
 .xp-bar > i{display:block;height:100%;border-radius:5px;background:linear-gradient(90deg,var(--violet),var(--gold-bright));position:relative;transition:width .8s cubic-bezier(.16,1,.3,1);}
 .xp-bar > i::after{content:'';position:absolute;inset:0;background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.35) 50%,transparent 70%);animation:xpBarSheen 2.6s ease-in-out infinite;}
 @keyframes xpBarSheen{0%{transform:translateX(-100%);}55%,100%{transform:translateX(100%);}}
+/* Role picker cards */
+.role-card{padding:24px 16px;border-radius:16px;background:rgba(255,255,255,.04);border:2px solid var(--border);cursor:pointer;transition:border-color .18s ease,background .18s ease,transform .18s ease;}
+.role-card:hover{border-color:var(--violet-bright);background:rgba(124,92,255,.08);transform:translateY(-2px);}
 /* ---- Segmented tabs (This Week / All Time) ---- */
 .seg-tabs{display:flex;gap:4px;padding:4px;border-radius:100px;background:rgba(255,255,255,.05);border:1px solid var(--border);width:fit-content;}
 .seg-tab{padding:7px 16px;border-radius:100px;font-size:11.5px;font-weight:700;color:var(--text-dim);background:transparent;transition:all .22s var(--ease-smooth);}
@@ -510,7 +1335,7 @@ tr.clickable:active{background:rgba(255,255,255,.05);}
 <div id="loginScreen">
   <div class="login-card panel fade-up">
     <div class="crest" id="loginCrest"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5"><path d="M12 2l7 4v6c0 5-3.5 8-7 10-3.5-2-7-5-7-10V6l7-4z"/></svg></div>
-    <div class="login-title" id="loginTitle">Frap Ties</div>
+    <div class="login-title" id="loginTitle">ClearPanel</div>
     <div class="login-sub" id="loginSub">Enter your PIN</div>
     <div class="pin-dots" id="pinDots"><div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div></div>
     <div class="keypad" id="keypad">
@@ -520,6 +1345,10 @@ tr.clickable:active{background:rgba(255,255,255,.05);}
       <button class="key wide" data-k="clear">Clear</button><button class="key" data-k="0">0</button><button class="key wide" data-k="back">⌫</button>
     </div>
     <div class="login-error" id="loginError"></div>
+    <div style="margin-top:18px;display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;">
+      <a href="https://t.me/+M-aK0jz4wDI5Nzdh" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--text-faint);text-decoration:none;padding:5px 12px;border-radius:100px;background:rgba(255,255,255,.04);border:1px solid var(--border);transition:color .15s;"><span>📣</span>Updates channel</a>
+      <a href="https://t.me/clearpanelotpbot" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--text-faint);text-decoration:none;padding:5px 12px;border-radius:100px;background:rgba(255,255,255,.04);border:1px solid var(--border);transition:color .15s;"><span>🤖</span>@clearpanelotpbot</a>
+    </div>
   </div>
 </div>
 
@@ -551,7 +1380,7 @@ tr.clickable:active{background:rgba(255,255,255,.05);}
     </div>
     <div class="admin-main">
       <div class="topbar">
-        <div class="brand"><div class="brand-mark"></div>Frap Ties <span class="mono" style="color:var(--text-faint);font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;margin-left:6px;display:inline-flex;align-items:center;gap:5px;"><span style="width:5px;height:5px;border-radius:50%;background:var(--success);box-shadow:0 0 0 0 rgba(34,197,94,.55);animation:liveDotPulse 2.2s ease-out infinite;"></span>Control Room</span></div>
+        <div class="brand"><div class="brand-mark"></div>ClearPanel <span class="mono" style="color:var(--text-faint);font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;margin-left:6px;display:inline-flex;align-items:center;gap:5px;"><span style="width:5px;height:5px;border-radius:50%;background:var(--success);box-shadow:0 0 0 0 rgba(34,197,94,.55);animation:liveDotPulse 2.2s ease-out infinite;"></span>Control Room</span></div>
         <div class="topbar-actions">
           <div class="icon-btn" onclick="toggleNotifPanel()" id="notifBtn">${ICONS_SVG.bell}</div>
         </div>
@@ -564,7 +1393,7 @@ tr.clickable:active{background:rgba(255,255,255,.05);}
 <!-- ===== STAFF SHELL (caller / finisher) ===== -->
 <div id="staffApp" class="hidden">
   <div class="topbar">
-    <div class="brand"><div class="brand-mark"></div>Frap Ties</div>
+    <div class="brand"><div class="brand-mark"></div>ClearPanel</div>
     <div class="topbar-actions">
       <div class="icon-btn" onclick="toggleNotifPanel()" id="notifBtnStaff">${ICONS_SVG.bell}</div>
       <button class="clock-toggle" id="clockBtn" onclick="toggleClock()"><span class="clock-dot"></span><span id="clockLabel">Clock In</span></button>
@@ -578,742 +1407,9 @@ tr.clickable:active{background:rgba(255,255,255,.05);}
 <div id="notifBackdrop" class="hidden" onclick="closeNotifPanel()" style="position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:199;"></div>
 <div id="notifPanel" class="hidden notif-panel" style="position:fixed;z-index:200;overflow-y:auto;-webkit-overflow-scrolling:touch;"></div>
 
-<script>
-const ICONS = {
-  check: '<svg class="ic" viewBox="0 0 24 24"><path d="M5 12l5 5L19 7"/></svg>',
-  dashboard: '<svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>',
-  list: '<svg class="ic" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r="1.2" fill="currentColor" stroke="none"/><circle cx="3.5" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="3.5" cy="18" r="1.2" fill="currentColor" stroke="none"/></svg>',
-  upload: '<svg class="ic" viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M4 20h16"/></svg>',
-  warn: '<svg class="ic" viewBox="0 0 24 24"><path d="M12 3l10 18H2L12 3z"/><path d="M12 10v4M12 17.5h.01"/></svg>',
-  flag: '<svg class="ic" viewBox="0 0 24 24"><path d="M5 21V4M5 5h13l-3 4 3 4H5"/></svg>',
-  users: '<svg class="ic" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><circle cx="17.5" cy="9" r="2.6"/><path d="M15.5 14.2c2.7.3 4.7 2.3 5.5 4.8"/></svg>',
-  chat: '<svg class="ic" viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4V5z"/></svg>',
-  megaphone: '<svg class="ic" viewBox="0 0 24 24"><path d="M3 10v4h3l6 4V6L6 10H3z"/><path d="M15 9a3 3 0 010 6M18 6a7 7 0 010 12"/></svg>',
-  target: '<svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/></svg>',
-  doc: '<svg class="ic" viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7V3z"/><path d="M14 3v5h5M9 12h6M9 16h6"/></svg>',
-  exit: '<svg class="ic" viewBox="0 0 24 24"><path d="M9 3H5a1 1 0 00-1 1v16a1 1 0 001 1h4M16 17l5-5-5-5M21 12H9"/></svg>',
-  bell: '<svg class="ic" viewBox="0 0 24 24"><path d="M6 10a6 6 0 1112 0c0 5 2 6 2 6H4s2-1 2-6z"/><path d="M10 20a2 2 0 004 0"/></svg>',
-  home: '<svg class="ic" viewBox="0 0 24 24"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h14V10"/></svg>',
-  radar: '<svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><path d="M12 12L18 7"/></svg>',
-  trophy: '<svg class="ic" viewBox="0 0 24 24"><path d="M7 4h10v5a5 5 0 01-10 0V4z"/><path d="M7 5H4a3 3 0 003 5M17 5h3a3 3 0 01-3 5M9 19h6M12 14v5"/></svg>',
-  gear: '<svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>',
-  phone: '<svg class="ic" viewBox="0 0 24 24"><path d="M4 4h4l2 6-3 2a13 13 0 006 6l2-3 6 2v4a2 2 0 01-2 2A17 17 0 012 6a2 2 0 012-2z"/></svg>',
-};
-
-let me = JSON.parse(localStorage.getItem('dispatch_me') || 'null');
-let brandingData = null;
-async function applyBranding() {
-  try {
-    const res = await fetch('/api/branding');
-    const { data } = await res.json();
-    if (data && data.name) {
-      brandingData = data;
-      // Update login screen title
-      const loginTitle = document.querySelector('.login-title');
-      if (loginTitle) loginTitle.textContent = data.name;
-      // Update topbar brand
-      const topbarBrand = document.querySelector('.topbar .brand');
-      if (topbarBrand) topbarBrand.innerHTML = '<div class="brand-mark"></div>' + esc(data.name) + ' <span class="mono" style="color:var(--text-faint);font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;margin-left:6px;display:inline-flex;align-items:center;gap:5px;"><span style="width:5px;height:5px;border-radius:50%;background:var(--success);box-shadow:0 0 0 0 rgba(34,197,94,.55);animation:liveDotPulse 2.2s ease-out infinite;"></span>Control Room</span>';
-      // Update sidebar brand
-      const sidebarBrand = document.querySelector('.sidebar .brand');
-      if (sidebarBrand) sidebarBrand.textContent = data.name.split(' ')[0];
-      // Update document title
-      document.title = data.name;
-    }
-  } catch (e) {}
-}
-applyBranding();
-let pinBuffer = '';
-let es = null;
-let recentlyClaimedIds = new Set();
-let callTimerInterval = null, callStart = null;
-let staffTab = 'home';
-
-function authHeaders(extra) { return Object.assign({ 'x-user-id': me.id, 'x-user-pin': me.pin, 'Content-Type': 'application/json' }, extra || {}); }
-async function api(url, opts = {}) {
-  opts.headers = authHeaders(opts.headers);
-  let res;
-  try {
-    res = await fetch(url, opts);
-  } catch (netErr) {
-    return { ok: false, status: 0, json: async () => ({ error: 'Network error — check your connection' }) };
-  }
-  const clone = res.clone();
-  const originalJson = res.json.bind(res);
-  res.json = async () => {
-    try {
-      return await originalJson();
-    } catch (parseErr) {
-      let text = '';
-      try { text = await clone.text(); } catch {}
-      const friendly = res.status >= 500 ? 'Server error — please try again' : (text ? text.slice(0, 200) : ('Request failed (' + res.status + ')'));
-      return { error: friendly };
-    }
-  };
-  return res;
-}
-
-// ---------- Login ----------
-document.getElementById('keypad').addEventListener('click', (e) => {
-  const btn = e.target.closest('.key'); if (!btn) return;
-  const k = btn.dataset.k;
-  if (k === 'clear') pinBuffer = ''; else if (k === 'back') pinBuffer = pinBuffer.slice(0, -1);
-  else if (pinBuffer.length < 4) pinBuffer += k;
-  renderPinDots();
-  if (pinBuffer.length === 4) attemptLogin();
-});
-function renderPinDots() { document.querySelectorAll('.pin-dot').forEach((d, i) => { d.classList.remove('error'); d.classList.toggle('filled', i < pinBuffer.length); }); }
-async function attemptLogin() {
-  const errEl = document.getElementById('loginError');
-  const res = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pin: pinBuffer, slug: typeof TENANT_SLUG !== 'undefined' ? TENANT_SLUG : null }) });
-  const data = await res.json();
-  if (!res.ok) {
-    errEl.textContent = data.error || 'Invalid PIN';
-    document.querySelectorAll('.pin-dot').forEach(d => d.classList.add('error'));
-    setTimeout(() => { pinBuffer = ''; renderPinDots(); errEl.textContent = ''; }, 500);
-    return;
-  }
-  me = data.data;
-  localStorage.setItem('dispatch_me', JSON.stringify(me));
-  enterApp();
-}
-function logout() {
-  if (me) api('/api/clock', { method: 'POST', body: JSON.stringify({ clockedIn: false }) });
-  if (es) { es.close(); es = null; }
-  if (typeof stopQueuePolling === 'function') stopQueuePolling();
-  localStorage.removeItem('dispatch_me'); me = null; pinBuffer = ''; renderPinDots();
-  document.getElementById('adminApp').classList.add('hidden');
-  document.getElementById('staffApp').classList.add('hidden');
-  document.getElementById('loginScreen').classList.remove('hidden');
-}
-async function enterApp() {
-  document.getElementById('loginScreen').classList.add('hidden');
-  const res = await api('/api/me'); const fresh = (await res.json()).data;
-  if (fresh) { me = { ...me, ...fresh }; localStorage.setItem('dispatch_me', JSON.stringify(me)); }
-  connectEvents();
-  refreshNotifBadge();
-  registerServiceWorker();
-  // Telegram gate: if the master bot is configured and this user hasn't linked
-  // yet, show the verification screen before the app. Skipping isn't allowed
-  // for the master bot when it's live, since operator broadcast reach is the
-  // point. Tenant-bot verification is checked separately, non-blocking.
-  const gated = await maybeShowTelegramGate();
-  if (gated) return;
-  if (me.role === 'admin') {
-    document.getElementById('adminApp').classList.remove('hidden');
-    switchAdminTab('dashboard');
-  } else {
-    document.getElementById('staffApp').classList.remove('hidden');
-    updateClockBtn();
-    renderStaffNav();
-    switchStaffTab('home');
-  }
-  checkFirstLoginTutorial();
-}
-// Returns true if the gate took over the screen (so caller stops).
-async function maybeShowTelegramGate() {
-  try {
-    const r = await api('/api/telegram/my-status');
-    const s = (await r.json()).data;
-    if (!s || !s.master_configured) return false;
-    if (s.verified_master) return false;
-    showTelegramGate(s);
-    return true;
-  } catch { return false; }
-}
-// ---- Telegram verification gate ----
-// Step A: user enters @username → we call start-verification
-//   → if needs_start: show "open Telegram, send /start" + poll /check-started
-//   → if code sent: advance to Step B
-// Step B: "Check your Telegram" + 6-digit OTP input → POST /confirm-code
-// Step C: welcome screen → enterApp()
-function showTelegramGate(status) {
-  const gate = document.createElement('div');
-  gate.id = 'tgGate';
-  gate.style.cssText = 'position:fixed;inset:0;z-index:400;display:flex;align-items:center;justify-content:center;padding:24px;background:radial-gradient(ellipse 80% 50% at 15% -10%,rgba(124,92,255,.15),transparent 55%),radial-gradient(ellipse 70% 50% at 100% 10%,rgba(79,140,255,.12),transparent 55%),var(--bg);';
-  gate.innerHTML = '<div class="panel p" style="max-width:420px;width:100%;padding:36px 32px;text-align:center;">'
-    + '<div style="font-size:11px;letter-spacing:.28em;text-transform:uppercase;color:var(--violet-bright);font-weight:700;margin-bottom:8px;">Quick verification</div>'
-    + '<h2 style="font-size:22px;margin-bottom:10px;">Link your Telegram</h2>'
-    + '<p style="font-size:13px;color:var(--text-dim);line-height:1.55;margin-bottom:22px;">We will send a code to your Telegram — enter it here to verify. Takes 30 seconds.</p>'
-    + '<div id="tgStepA">'
-    +   '<div class="field" style="text-align:left;"><label style="font-size:11px;color:var(--text-dim);font-weight:600;display:block;margin-bottom:6px;">Your Telegram username</label><input id="tgUname" placeholder="@yourname" value="' + esc(status.telegram_username ? '@' + status.telegram_username : '') + '" /></div>'
-    +   '<button class="btn btn-gold btn-block" onclick="tgStep1()" style="margin-top:14px;">Send me a code</button>'
-    +   '<div id="tgErrA" style="color:var(--danger);font-size:12px;min-height:16px;margin-top:8px;"></div>'
-    + '</div>'
-    + '<div id="tgStepOpen" style="display:none;">'
-    +   '<div style="font-size:48px;margin-bottom:10px;">✈️</div>'
-    +   '<p style="font-size:13.5px;font-weight:600;margin-bottom:6px;">Open Telegram first</p>'
-    +   '<p style="font-size:12.5px;color:var(--text-dim);line-height:1.55;margin-bottom:18px;">Message <b>/start</b> to the bot below — just once, to let it reach you. Then come straight back here.</p>'
-    +   '<a id="tgStartLink" class="btn btn-gold btn-block" target="_blank" rel="noopener" style="text-decoration:none;display:block;margin-bottom:14px;">Open @clearpanelotpbot</a>'
-    +   '<div style="font-size:11.5px;color:var(--violet-bright);" id="tgWaiting">Waiting for you to start the bot…</div>'
-    + '</div>'
-    + '<div id="tgStepB" style="display:none;">'
-    +   '<div style="font-size:48px;margin-bottom:10px;">📨</div>'
-    +   '<p style="font-size:13.5px;font-weight:600;margin-bottom:6px;">Check your Telegram</p>'
-    +   '<p style="font-size:12.5px;color:var(--text-dim);line-height:1.55;margin-bottom:16px;">Check your Telegram — a 6-digit code has been sent. Enter it below. Expires in <span id="tgCd">5:00</span>.</p>'
-    +   '<input id="tgOtp" placeholder="Enter code from Telegram" class="mono" maxlength="7" data-otp-input="1" style="text-align:center;font-size:22px;font-weight:700;letter-spacing:.2em;" />'
-    +   '<button class="btn btn-gold btn-block" onclick="tgSubmitCode()" style="margin-top:12px;">Verify</button>'
-    +   '<button class="btn btn-ghost btn-block" onclick="tgStep1()" style="margin-top:8px;font-size:12px;">Resend code</button>'
-    +   '<div id="tgErrB" style="color:var(--danger);font-size:12px;min-height:16px;margin-top:8px;"></div>'
-    + '</div>'
-    + '<div id="tgStepC" style="display:none;">'
-    +   '<div style="font-size:56px;margin-bottom:14px;">🎉</div>'
-    +   '<h3 style="font-size:20px;margin-bottom:8px;" id="tgWelcomeName"></h3>'
-    +   '<p style="font-size:13px;color:var(--text-dim);line-height:1.55;margin-bottom:20px;">Your Telegram is now linked. A welcome message has been sent. Loading ClearPanel…</p>'
-    +   '<div class="xp-bar"><i id="tgWelcomeBar" style="width:0%;transition:width 1.2s var(--ease-smooth);"></i></div>'
-    + '</div>'
-    + '</div>';
-  document.body.appendChild(gate);
-}
-async function tgStep1() {
-  const uname = document.getElementById('tgUname') ? document.getElementById('tgUname').value.trim() : window._tgUname;
-  const errA = document.getElementById('tgErrA');
-  if (errA) errA.textContent = '';
-  if (!uname || uname.length < 3) { if (errA) errA.textContent = 'Enter your @username'; return; }
-  window._tgUname = uname;
-  const r = await api('/api/telegram/start-verification', { method:'POST', body: JSON.stringify({ username: uname, scope: 'master' })});
-  const data = await r.json();
-  if (!r.ok) { if (errA) errA.textContent = data.error || 'Failed'; return; }
-  if (data.data.needs_start) {
-    // Bot doesn't know them yet — show the "open bot" step and poll
-    tgShowOnly('tgStepOpen');
-    const link = document.getElementById('tgStartLink');
-    if (link) link.href = data.data.deep_link || ('https://t.me/' + (data.data.bot_username || 'clearpanelotpbot'));
-    tgPollStarted();
-  } else {
-    // Code was DM'd — show the OTP input
-    window._tgExpires = new Date(data.data.expires_at).getTime();
-    tgShowOnly('tgStepB');
-    startTgCd();
-  }
-}
-function tgShowOnly(id) {
-  ['tgStepA','tgStepOpen','tgStepB','tgStepC'].forEach(i => {
-    const el = document.getElementById(i);
-    if (el) el.style.display = i === id ? 'block' : 'none';
-  });
-}
-function tgPollStarted() {
-  clearInterval(window._tgPollI);
-  window._tgPollI = setInterval(async () => {
-    const r = await api('/api/telegram/check-started?scope=master');
-    const d = await r.json();
-    if (d.data && d.data.started) {
-      clearInterval(window._tgPollI);
-      const w = document.getElementById('tgWaiting');
-      if (w) { w.textContent = 'Got it! Sending your code…'; w.style.color = 'var(--success)'; }
-      setTimeout(() => tgStep1(), 600);
-    }
-  }, 2000);
-}
-async function tgSubmitCode() {
-  const raw = (document.getElementById('tgOtp').value || '').replace(/\D/g, '');
-  const errB = document.getElementById('tgErrB');
-  errB.textContent = '';
-  if (raw.length !== 6) { errB.textContent = 'Enter the 6-digit code from Telegram'; return; }
-  const r = await api('/api/telegram/confirm-code', { method:'POST', body: JSON.stringify({ code: raw, scope: 'master' })});
-  const data = await r.json();
-  if (!r.ok) { errB.textContent = data.error || 'Wrong code — try again'; return; }
-  clearInterval(window._tgCdI);
-  tgShowOnly('tgStepC');
-  const nameEl = document.getElementById('tgWelcomeName');
-  if (nameEl) nameEl.textContent = 'Welcome, ' + esc(data.data.name || 'there') + '!';
-  requestAnimationFrame(() => {
-    setTimeout(() => { const bar = document.getElementById('tgWelcomeBar'); if (bar) bar.style.width = '100%'; }, 80);
-  });
-  setTimeout(() => {
-    const gate = document.getElementById('tgGate');
-    if (gate) gate.remove();
-    enterApp();
-  }, 1800);
-}
-function startTgCd() {
-  clearInterval(window._tgCdI);
-  const tick = () => {
-    const left = Math.max(0, Math.floor((window._tgExpires - Date.now()) / 1000));
-    const m = Math.floor(left/60), sec = left%60;
-    const el = document.getElementById('tgCd');
-    if (el) el.textContent = m + ':' + String(sec).padStart(2,'0');
-    if (left <= 0) { clearInterval(window._tgCdI); if (el) el.style.color = 'var(--danger)'; }
-  };
-  tick();
-  window._tgCdI = setInterval(tick, 1000);
-}
-// Keep old names so nothing else breaks
-function tgStartVerify() { tgStep1(); }
-function tgCopyCode() {}
-function startTgCountdown() {}
-function startTgPoll() {}
-// Registered unconditionally on every login, not just when someone opts into push -
-// an active service worker is also what makes Chrome/Android treat this as a real
-// installable app in the first place, not just a bookmark.
-async function registerServiceWorker() {
-  if (!('serviceWorker' in navigator)) return;
-  try { await navigator.serviceWorker.register('/sw.js'); } catch {}
-}
-function renderStaffNav() {
-  const nav = document.getElementById('staffNav');
-  const queueLabel = me.role === 'finisher' ? 'Queue' : 'Leads';
-  nav.innerHTML = \`
-    <button class="nav-btn active" data-tab="home" onclick="switchStaffTab('home')">\${ICONS.home}Home</button>
-    <button class="nav-btn" data-tab="queue" onclick="switchStaffTab('queue')" style="position:relative;">\${ICONS.radar}\${queueLabel}</button>
-    <button class="nav-btn" data-tab="chat" onclick="switchStaffTab('chat')" style="position:relative;">\${ICONS.chat}Chat</button>
-    <button class="nav-btn" data-tab="scripts" onclick="switchStaffTab('scripts')">\${ICONS.doc || ICONS.chat}Scripts</button>
-    <button class="nav-btn" data-tab="board" onclick="switchStaffTab('board')">\${ICONS.trophy}Board</button>
-    <button class="nav-btn" data-tab="profile" onclick="switchStaffTab('profile')">\${ICONS.gear}Profile</button>
-  \`;
-}
-
-// ---------- Realtime ----------
-function connectEvents() {
-  if (es) es.close();
-  es = new EventSource('/api/events?uid=' + me.id + '&pin=' + me.pin);
-  es.addEventListener('new_lead', () => { if (staffTab === 'queue' && !onActiveCallScreen) smoothRerender(renderStaffQueue); pingNav('queue'); if (me.role==='admin') maybeRefreshAdmin('leads'); });
-  es.addEventListener('center_closed', (e) => {
-    if (me.role === 'admin') return; // admins are exempt from the gate, nothing changes for them
-    const d = JSON.parse(e.data);
-    me.clocked_in = false;
-    localStorage.setItem('dispatch_me', JSON.stringify(me));
-    window._centerClosed = true;
-    window._centerClosedReason = d.reason || 'The call center is closed right now.';
-    updateClockBtn();
-    if (staffTab === 'queue') renderStaffQueue();
-  });
-  es.addEventListener('caller_identified', (e) => {
-    if (me.role !== 'admin') return;
-    const zone = document.getElementById('callerIdPopZone');
-    if (!zone) return; // not currently on the dashboard, no pop to show
-    const d = JSON.parse(e.data);
-    const lead = d.lead;
-    const name = [lead.first_name, lead.last_name].filter(Boolean).join(' ') || 'Unknown';
-    const card = document.createElement('div');
-    card.className = 'caller-id-pop fade-up';
-    card.innerHTML = '<div class="pop-badge">' + (d.provider || '').toUpperCase() + ' · Inbound Now</div>' +
-      '<div class="pop-name">' + esc(name) + '</div>' +
-      '<div class="pop-meta mono">' + esc(d.from || lead.phone || '') + (lead.lead_type ? ' · ' + esc(lead.lead_type) : '') + '</div>' +
-      (lead.notes ? '<div class="pop-notes">' + esc(lead.notes) + '</div>' : '') +
-      '<button class="btn btn-ghost btn-sm" onclick="this.closest(\\'.caller-id-pop\\').remove()">Dismiss</button>';
-    zone.prepend(card);
-    setTimeout(() => { if (card.parentNode) card.style.opacity = '0.001'; }, 45000);
-  });
-  es.addEventListener('lead_claimed', (e) => {
-    const d = JSON.parse(e.data);
-    const card = document.querySelector('[data-lead-id="' + d.id + '"]');
-    if (card) card.remove();
-    // A poll request that was already in flight when this claim happened can still
-    // land afterward with a stale response that includes this lead - remembering it
-    // was just claimed stops it from being silently re-added for a few seconds.
-    recentlyClaimedIds.add(d.id);
-    setTimeout(() => recentlyClaimedIds.delete(d.id), 15000);
-  });
-  es.addEventListener('lead_updated', () => { if (me.role === 'admin') maybeRefreshAdmin(['dashboard','leads','finishing']); });
-  es.addEventListener('announcement', () => { if (staffTab === 'home') renderStaffHome(); if (me.role==='admin') maybeRefreshAdmin('announcements'); });
-  es.addEventListener('chat_message', (e) => { const d = JSON.parse(e.data); if (staffTab === 'chat' || (me.role==='admin' && currentAdminTab==='chat')) appendChatMessage(d); else pingNav('chat'); });
-  es.addEventListener('notification', () => refreshNotifBadge());
-  es.onerror = () => setTimeout(() => { if (me) connectEvents(); }, 3000);
-}
-function pingNav(tab) {
-  const btn = document.querySelector('.nav-btn[data-tab="' + tab + '"]');
-  if (btn && !btn.querySelector('.nav-badge')) { const b = document.createElement('span'); b.className = 'nav-badge'; b.style.position='absolute'; b.style.top='2px'; b.style.right='22%'; btn.appendChild(b); }
-}
-function clearNavBadge(tab) { const btn = document.querySelector('.nav-btn[data-tab="' + tab + '"]'); const b = btn && btn.querySelector('.nav-badge'); if (b) b.remove(); }
-let currentAdminTab = 'dashboard';
-function maybeRefreshAdmin(tabs) { const arr = Array.isArray(tabs) ? tabs : [tabs]; if (arr.includes(currentAdminTab)) smoothRerender(() => renderAdminTab(currentAdminTab)); }
-// Background updates (triggered by other people's actions via SSE) shouldn't look
-// like the page reloading. Briefly dims the content, swaps it while invisible, then
-// fades back in — same content update, no jarring flash or re-triggered pop-in
-// animations on every background change.
-async function smoothRerender(renderFn) {
-  const el = document.getElementById(me.role === 'admin' ? 'adminContent' : 'staffBody');
-  if (!el) { await renderFn(); return; }
-  el.style.transition = 'opacity .15s ease';
-  el.style.opacity = '0.4';
-  await new Promise(r => setTimeout(r, 120));
-  await renderFn();
-  requestAnimationFrame(() => { el.style.opacity = '1'; });
-}
-
-async function refreshNotifBadge() {
-  const res = await api('/api/notifications/unread-count'); const { count } = (await res.json()).data;
-  ['notifBtn','notifBtnStaff'].forEach(id => {
-    const el = document.getElementById(id); if (!el) return;
-    let dot = el.querySelector('.dot');
-    if (count > 0 && !dot) { dot = document.createElement('span'); dot.className = 'dot'; el.appendChild(dot); }
-    if (count === 0 && dot) dot.remove();
-  });
-}
-async function toggleNotifPanel() {
-  const panel = document.getElementById('notifPanel');
-  const backdrop = document.getElementById('notifBackdrop');
-  if (!panel.classList.contains('hidden')) { closeNotifPanel(); return; }
-  await renderNotifList();
-  panel.classList.remove('hidden');
-  backdrop.classList.remove('hidden');
-}
-function closeNotifPanel() {
-  document.getElementById('notifPanel').classList.add('hidden');
-  document.getElementById('notifBackdrop').classList.add('hidden');
-}
-async function renderNotifList() {
-  const panel = document.getElementById('notifPanel');
-  const res = await api('/api/notifications');
-  const rows = (await res.json()).data;
-  panel.innerHTML = \`<div class="panel p fade-up">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
-      <div class="section-title" style="margin:0;">Notifications</div>
-      <button class="icon-btn" style="width:28px;height:28px;" onclick="closeNotifPanel()">✕</button>
-    </div>
-    \${rows.length ? rows.map(n => \`<div class="clickable" style="padding:11px 0;border-bottom:1px solid var(--border);font-size:12.5px;\${n.read ? 'opacity:.5;' : ''}" onclick="markOneRead(\${n.id}, this)">
-      <div>\${esc(n.content)}</div><div style="font-size:10px;color:var(--text-faint);margin-top:3px;">\${timeAgo(n.created_at)}\${!n.read ? ' · <span style="color:var(--gold-bright);">tap to mark read</span>' : ''}</div>
-    </div>\`).join('') : '<div style="color:var(--text-dim);font-size:12.5px;padding:10px 0;">Nothing yet.</div>'}
-    \${rows.length ? '<button class="btn btn-sm btn-block" style="margin-top:12px;" onclick="markAllRead()">Mark all read</button>' : ''}
-  </div>\`;
-}
-async function markOneRead(id, el) {
-  await api('/api/notifications/' + id + '/read', { method: 'POST' });
-  el.style.opacity = '.5';
-  refreshNotifBadge();
-}
-async function markAllRead() {
-  await api('/api/notifications/read-all', { method: 'POST' });
-  refreshNotifBadge();
-  await renderNotifList();
-}
-
-// ---------- Clock ----------
-let clockDurationInterval;
-async function updateClockBtn() {
-  const btn = document.getElementById('clockBtn');
-  const label = document.getElementById('clockLabel');
-  clearInterval(clockDurationInterval);
-  if (me.clocked_in) {
-    btn.classList.add('on');
-    let clockedInAt;
-    try {
-      const res = await api('/api/clock/status');
-      const data = (await res.json()).data;
-      clockedInAt = data.clockedInAt ? new Date(data.clockedInAt).getTime() : Date.now();
-    } catch { clockedInAt = Date.now(); }
-    const tick = () => {
-      const s = Math.max(0, Math.floor((Date.now() - clockedInAt) / 1000));
-      const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60;
-      label.textContent = String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0') + ':' + String(ss).padStart(2, '0');
-    };
-    tick();
-    clockDurationInterval = setInterval(tick, 1000);
-  } else {
-    label.textContent = 'Clock In';
-    btn.classList.remove('on');
-  }
-}
-async function toggleClock() {
-  const wantClockedIn = !me.clocked_in;
-  const res = await api('/api/clock', { method: 'POST', body: JSON.stringify({ clockedIn: wantClockedIn }) });
-  if (!res.ok) {
-    const data = await res.json().catch(() => ({}));
-    if (wantClockedIn) {
-      window._centerClosed = true;
-      window._centerClosedReason = data.error || 'The call center is closed right now.';
-    }
-    if (staffTab === 'queue') renderStaffQueue();
-    return;
-  }
-  me.clocked_in = wantClockedIn;
-  localStorage.setItem('dispatch_me', JSON.stringify(me));
-  updateClockBtn();
-  if (staffTab === 'queue') renderStaffQueue();
-}
-
-// Real motion on stat numbers instead of just appearing — counts up from 0 over
-// ~600ms with an eased curve, applied automatically to any element with data-count.
-function animateCountUps(container) {
-  const els = (container || document).querySelectorAll('[data-count]');
-  els.forEach(el => {
-    const target = parseInt(el.dataset.count, 10);
-    if (isNaN(target)) return;
-    const duration = 650;
-    const start = performance.now();
-    const tick = (now) => {
-      const progress = Math.min(1, (now - start) / duration);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      el.textContent = Math.round(target * eased);
-      if (progress < 1) requestAnimationFrame(tick);
-      else el.textContent = target;
-    };
-    requestAnimationFrame(tick);
-  });
-}
-
-// ---- Ranks: Siege-style tiers on top of levels — one division per level ----
-const RANK_TIERS = [
-  ['Copper',   '#b87550', '#7a4630', 1],
-  ['Bronze',   '#d09a52', '#8a5a24', 4],
-  ['Silver',   '#cdd3dc', '#8f97a3', 7],
-  ['Gold',     '#f5c744', '#b8860b', 10],
-  ['Platinum', '#7fd4d4', '#3d8f8f', 13],
-  ['Emerald',  '#3ddc84', '#1a7a46', 16],
-  ['Diamond',  '#7db8ff', '#3a6fd8', 19],
-  ['Champion', '#c084fc', '#7c3aed', 22],
-];
-function rankInfo(xp) {
-  const li = levelInfo(xp);
-  let tier = RANK_TIERS[0];
-  for (const t of RANK_TIERS) if (li.level >= t[3]) tier = t;
-  const isTop = tier[0] === 'Champion';
-  const div = isTop ? '' : ['III','II','I'][Math.min(2, li.level - tier[3])];
-  return { tier: tier[0], div, c1: tier[1], c2: tier[2], label: tier[0] + (div ? ' ' + div : ''), level: li.level, li };
-}
-function rankEmblemHtml(rk, size) {
-  const fs = Math.round(size * 0.3);
-  return '<div class="rank-emblem" style="--rc1:' + rk.c1 + ';--rc2:' + rk.c2 + ';width:' + size + 'px;height:' + Math.round(size * 1.08) + 'px;"><span class="div" style="font-size:' + fs + 'px;">' + (rk.div || '★') + '</span></div>';
-}
-function rankChipHtml(rk) {
-  return '<span class="rank-chip" style="color:' + rk.c1 + ';border-color:' + rk.c1 + '55;">' + rankEmblemHtml(rk, 16) + rk.label + '</span>';
-}
-function showRankUp(rk) {
-  const el = document.createElement('div');
-  el.className = 'rankup-overlay';
-  el.style.setProperty('--rc1', rk.c1);
-  el.innerHTML = '<div class="big">' + rankEmblemHtml(rk, 110) + '</div><div class="t1">Rank Up</div><div class="t2" style="color:' + rk.c1 + ';">' + rk.label + '</div><div class="t3">Level ' + rk.level + ' — tap to continue</div>';
-  el.onclick = () => el.remove();
-  document.body.appendChild(el);
-}
-// ---- Bank directory: UK + international, name -> official domain. The favicon
-// service resolves a mark for any domain, so custom banks work the same way. ----
-const BANK_DIR = {
-  uk: [["Lloyds","lloydsbank.com"],["Barclays","barclays.co.uk"],["HSBC UK","hsbc.co.uk"],["NatWest","natwest.com"],["Santander UK","santander.co.uk"],["Halifax","halifax.co.uk"],["TSB","tsb.co.uk"],["Nationwide","nationwide.co.uk"],["RBS","rbs.co.uk"],["Metro Bank","metrobankonline.co.uk"],["Monzo","monzo.com"],["Starling","starlingbank.com"],["Revolut","revolut.com"],["First Direct","firstdirect.com"],["Co-operative Bank","co-operativebank.co.uk"],["Virgin Money","virginmoney.com"],["Bank of Scotland","bankofscotland.co.uk"],["Ulster Bank","ulsterbank.co.uk"],["Chase UK","chase.co.uk"],["Tesco Bank","tescobank.com"],["Sainsbury's Bank","sainsburysbank.co.uk"],["Danske Bank UK","danskebank.co.uk"],["Atom Bank","atombank.co.uk"],["Zopa","zopa.com"],["Shawbrook","shawbrook.co.uk"],["Aldermore","aldermore.co.uk"],["Paragon Bank","paragonbank.co.uk"],["Marcus","marcus.co.uk"],["Yorkshire BS","ybs.co.uk"],["Skipton BS","skipton.co.uk"],["Coventry BS","coventrybuildingsociety.co.uk"]],
-  intl: [["Chase","chase.com"],["Bank of America","bankofamerica.com"],["Wells Fargo","wellsfargo.com"],["Citibank","citi.com"],["Capital One","capitalone.com"],["US Bank","usbank.com"],["PNC","pnc.com"],["Goldman Sachs","goldmansachs.com"],["Morgan Stanley","morganstanley.com"],["TD Bank","td.com"],["RBC","rbc.com"],["Scotiabank","scotiabank.com"],["BMO","bmo.com"],["CIBC","cibc.com"],["Deutsche Bank","db.com"],["Commerzbank","commerzbank.com"],["BNP Paribas","bnpparibas.com"],["Societe Generale","societegenerale.com"],["Credit Agricole","credit-agricole.com"],["ING","ing.com"],["ABN AMRO","abnamro.com"],["Rabobank","rabobank.com"],["UBS","ubs.com"],["Santander","santander.com"],["BBVA","bbva.com"],["CaixaBank","caixabank.com"],["Intesa Sanpaolo","intesasanpaolo.com"],["UniCredit","unicredit.it"],["Nordea","nordea.com"],["Danske Bank","danskebank.com"],["SEB","seb.se"],["Swedbank","swedbank.com"],["HSBC","hsbc.com"],["Standard Chartered","sc.com"],["DBS","dbs.com"],["OCBC","ocbc.com"],["UOB","uob.com.sg"],["ANZ","anz.com"],["Commonwealth Bank","commbank.com.au"],["Westpac","westpac.com.au"],["NAB","nab.com.au"],["ICICI","icicibank.com"],["HDFC","hdfcbank.com"],["Axis Bank","axisbank.com"],["Emirates NBD","emiratesnbd.com"],["FAB","bankfab.com"],["QNB","qnb.com"],["N26","n26.com"],["Wise","wise.com"],["Bunq","bunq.com"]],
-};
-function bankLogoUrl(domain) { return 'https://www.google.com/s2/favicons?domain=' + domain + '&sz=64'; }
-// ---- Levels ----
-// Cost to clear level n grows by 60 XP per level: 100, 160, 220, ... so early
-// levels come fast (day one feels rewarding) and later ones are a real season.
-function levelInfo(xp) {
-  let lvl = 1, rem = Math.max(0, xp || 0), cost = 100;
-  while (rem >= cost) { rem -= cost; lvl++; cost = 100 + (lvl - 1) * 60; }
-  const bands = [[20,'Legend'],[16,'Elite'],[12,'Veteran'],[8,'Operator'],[5,'Closer'],[3,'Dialer'],[1,'Rookie']];
-  const title = bands.find(b => lvl >= b[0])[1];
-  return { level: lvl, into: rem, need: cost, pct: Math.min(100, Math.round(rem / cost * 100)), title };
-}
-// Floating "+N XP" chip — fired whenever the server reports xp_awarded, so the
-// grind is visibly paying out in the moment, not just on the leaderboard later.
-function xpToast(amount, label) {
-  if (!amount) return;
-  const el = document.createElement('div');
-  el.className = 'xp-toast';
-  el.innerHTML = '⚡ +' + amount + ' XP' + (label ? ' <span style="font-weight:500;color:var(--text-dim);font-size:12px;">· ' + esc(label) + '</span>' : '');
-  document.body.appendChild(el);
-  setTimeout(() => el.remove(), 1950);
-}
-// ---- Leaderboard builders (shared by staff board and admin board) ----
-function lbSortKey(mode) { return mode === 'week' ? 'weekly_xp' : 'xp'; }
-function lbPodiumSlot(r, place, height, mode) {
-  if (!r) return '<div style="flex:1;"></div>';
-  const xpVal = mode === 'week' ? (r.weekly_xp || 0) : r.xp;
-  const li = levelInfo(r.xp);
-  const barColor = place === 1 ? 'linear-gradient(180deg,#fbbf24,#b8860b)' : place === 2 ? 'linear-gradient(180deg,#d1d5db,#9ca3af)' : 'linear-gradient(180deg,#d97706,#92400e)';
-  return '<div class="podium-slot">'
-    + (place === 1 ? '<div class="podium-crown">👑</div>' : '<div style="height:16px;"></div>')
-    + '<div class="podium-av' + (place === 1 ? ' first' : '') + '">' + avatarHtml(r, place === 1 ? 54 : 44) + '</div>'
-    + '<div style="font-size:11.5px;font-weight:700;text-align:center;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(r.name) + (typeof me !== 'undefined' && me && r.id === me.id ? ' <span style="color:var(--gold-bright);">(you)</span>' : '') + '</div>'
-    + '<span class="lvl-chip">Lv ' + li.level + ' · ' + li.title + '</span>'
-    + '<div class="mono" style="font-size:11px;color:var(--violet-bright);font-weight:700;" data-count="' + xpVal + '">0</div>'
-    + '<div class="podium-bar" style="height:' + height + 'px;background:' + barColor + ';">#' + place + '</div>'
-    + '</div>';
-}
-function lbRowHtml(r, rank, mode, delay) {
-  const xpVal = mode === 'week' ? (r.weekly_xp || 0) : r.xp;
-  const li = levelInfo(r.xp);
-  const isMe = typeof me !== 'undefined' && me && r.id === me.id;
-  return '<div class="lb-row' + (isMe ? ' me' : '') + '" style="animation-delay:' + (delay * 45) + 'ms;padding:11px 12px;">'
-    + '<div class="rank r' + rank + '">' + rank + '</div>' + avatarHtml(r, 32)
-    + '<div style="flex:1;min-width:0;margin-left:8px;">'
-    +   '<div class="lb-name">' + esc(r.name) + (isMe ? ' <span style="color:var(--gold-bright);">(you)</span>' : '') + ' <span class="lvl-chip" style="padding:2px 8px;font-size:9px;">Lv ' + li.level + '</span></div>'
-    +   '<div class="xp-bar" style="margin-top:6px;max-width:190px;"><i style="width:' + li.pct + '%;"></i></div>'
-    + '</div>'
-    + '<div class="lb-stats"><span><b>' + (r.successful_calls || 0) + '</b> wins</span><span style="color:var(--violet-bright);"><b class="mono" data-count="' + xpVal + '">0</b> xp</span></div>'
-    + '</div>';
-}
-function lbBoardHtml(rows, mode) {
-  const sorted = [...rows].sort((a, b) => (mode === 'week' ? (b.weekly_xp||0) - (a.weekly_xp||0) : b.xp - a.xp));
-  const [first, second, third] = sorted;
-  const rest = sorted.slice(3);
-  return (sorted.length ? '<div class="panel p fade-up" style="padding:24px 16px 0;">'
-      + '<div style="display:flex;align-items:flex-end;justify-content:center;gap:12px;max-width:420px;margin:0 auto;">'
-      + lbPodiumSlot(second, 2, 74, mode) + lbPodiumSlot(first, 1, 96, mode) + lbPodiumSlot(third, 3, 60, mode)
-      + '</div></div>' : '<div class="panel p" style="color:var(--text-dim);">No one on the board yet — XP starts counting from the first claimed lead.</div>')
-    + (rest.length ? '<div class="panel p fade-up">' + rest.map((r, i) => lbRowHtml(r, i + 4, mode, i)).join('') + '</div>' : '');
-}
-// How the whole economy works, in the app itself — no tribal knowledge needed.
-function xpGuideHtml() {
-  const rowsData = [['Claim a lead','+5'],['Mark on call','+10'],['Live note for admin','+3'],['Voicemail / no answer','+5'],['Callback booked','+15'],['Successful call','+100'],['Finisher: completed','+75']];
-  return "<div class='panel p fade-up'><div class='scripts-toggle' data-toggle-next='1' style='margin-bottom:0;'><span>⚡ How XP works</span><span>▾</span></div>"
-    + '<div class="scripts-panel"><div style="padding-top:12px;">'
-    + "<p style='font-size:12px;color:var(--text-dim);line-height:1.6;margin-bottom:10px;'>Every action pays XP the moment it lands — you will see it pop on screen. Levels cost more as you climb (100 XP for level 2, +60 more each level after). This Week is a rolling 7-day race; All Time keeps everything.</p>"
-    + rowsData.map(x => '<div style="display:flex;justify-content:space-between;padding:7px 2px;border-bottom:1px solid var(--border);font-size:12.5px;"><span>' + x[0] + '</span><b class="mono" style="color:var(--violet-bright);">' + x[1] + '</b></div>').join('')
-    + '</div></div></div>';
-}
-
-document.addEventListener('click', (e) => {
-  const t = e.target.closest('[data-toggle-next]');
-  if (t && t.nextElementSibling) t.nextElementSibling.classList.toggle('open');
-});
-document.addEventListener('input', (e) => {
-  const t = e.target;
-  if (t && t.dataset && t.dataset.otpInput) t.value = t.value.replace(/[^0-9]/g, '');
-});
-function timeAgo(ts) {
-  const s = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
-  if (s < 60) return s + 's ago';
-  if (s < 3600) return Math.floor(s / 60) + 'm ago';
-  if (s < 86400) return Math.floor(s / 3600) + 'h ago';
-  return Math.floor(s / 86400) + 'd ago';
-}
-function esc(s) { return (s || '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
-function fullName(l) { return [l.first_name, l.last_name].filter(Boolean).join(' ') || 'Unknown'; }
-function titleCase(s) { return String(s || '').replace(/_/g, ' ').replace(/\\b\\w/g, c => c.toUpperCase()); }
-const STATUS_ICONS = {
-  successful_call: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12l5 5L19 7"/></svg>',
-  completed: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12l5 5L19 7"/></svg>',
-  failed: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 6l12 12M18 6L6 18"/></svg>',
-  cancelled: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 6l12 12M18 6L6 18"/></svg>',
-  chopped_previously: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 6l12 12M18 6L6 18"/></svg>',
-  not_called: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><circle cx="12" cy="12" r="8"/></svg>',
-  calling: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M6.6 10.8a15 15 0 006.6 6.6l2.2-2.2a1 1 0 011.1-.2 11 11 0 003.4.6 1 1 0 011 1V20a1 1 0 01-1 1A17 17 0 013 5a1 1 0 011-1h3.5a1 1 0 011 1 11 11 0 00.6 3.4 1 1 0 01-.2 1.1z"/></svg>',
-  active_call: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M6.6 10.8a15 15 0 006.6 6.6l2.2-2.2a1 1 0 011.1-.2 11 11 0 003.4.6 1 1 0 011 1V20a1 1 0 01-1 1A17 17 0 013 5a1 1 0 011-1h3.5a1 1 0 011 1 11 11 0 00.6 3.4 1 1 0 01-.2 1.1z"/></svg>',
-  call_ended: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>',
-  ready_for_finishing: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M9 11l3 3L22 4"/><path d="M21 12v6a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h11"/></svg>',
-  assigned_to_finisher: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M9 11l3 3L22 4"/><path d="M21 12v6a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h11"/></svg>',
-  requires_review: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L2.5 17a2 2 0 001.7 3h15.6a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg>',
-  voicemail: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 7l9 6 9-6"/></svg>',
-  no_answer: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg>',
-  hung_up: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg>',
-  busy: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><circle cx="12" cy="12" r="9"/><path d="M9 9l6 6M15 9l-6 6"/></svg>',
-  callback_requested: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>',
-  admin: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M12 2l8 4v6c0 5-3.5 8-8 10-4.5-2-8-5-8-10V6l8-4z"/></svg>',
-  caller: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.5-7 8-7s8 3 8 7"/></svg>',
-  finisher: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M9 11l3 3L22 4"/><path d="M21 12v6a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h11"/></svg>',
-};
-function statusBadge(status, extraClass) {
-  return '<span class="badge ' + status + (extraClass ? ' ' + extraClass : '') + '">' + titleCase(status) + '</span>';
-}
-function initials(name) {
-  const parts = (name || '').trim().split(/\s+/).filter(Boolean);
-  if (!parts.length) return '?';
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-}
-const AVATAR_PALETTE = ['#4f8cff','#2dd4bf','#a78bfa','#f59e0b','#ef4444','#10b981','#6366f1','#ec4899','#14b8a6','#f97316'];
-function avatarColor(seed) {
-  let hash = 0;
-  const s = String(seed || '');
-  for (let i = 0; i < s.length; i++) hash = (hash * 31 + s.charCodeAt(i)) | 0;
-  return AVATAR_PALETTE[Math.abs(hash) % AVATAR_PALETTE.length];
-}
-// Single shared avatar renderer used everywhere a person needs a picture: a real
-// uploaded photo when set, otherwise a colored initials circle — no emoji.
-function avatarHtml(person, size) {
-  if (person && person.pfp_data) return '<img src="' + person.pfp_data + '" style="width:' + size + 'px;height:' + size + 'px;border-radius:50%;object-fit:cover;flex-shrink:0;box-shadow:0 0 0 2px rgba(255,255,255,.08), 0 2px 6px rgba(0,0,0,.3);" />';
-  const name = person ? (person.name || fullName(person)) : '';
-  const color = avatarColor((person && person.id) || name);
-  const fontSize = Math.round(size * 0.4);
-  return '<div style="width:' + size + 'px;height:' + size + 'px;border-radius:50%;background:' + color + ';display:flex;align-items:center;justify-content:center;font-size:' + fontSize + 'px;font-weight:700;color:#fff;flex-shrink:0;letter-spacing:-.02em;box-shadow:0 0 0 2px rgba(255,255,255,.08), 0 2px 6px rgba(0,0,0,.3);">' + initials(name) + '</div>';
-}
-
-// Shared lead-category badge (used on both the admin leads table and caller-facing
-// lead cards). Bank categories render their real, publicly-hosted brand mark —
-// fetched by domain from a logo lookup service, never bytes we store or copy
-// ourselves — with the existing brand-color initial badge as an automatic
-// fallback if the image 404s or the category isn't a bank at all.
-const BANK_DOMAINS = {
-  'lloyds': 'lloydsbank.com', 'barclays': 'barclays.co.uk', 'hsbc': 'hsbc.co.uk',
-  'natwest': 'natwest.com', 'santander': 'santander.co.uk', 'halifax': 'halifax.co.uk',
-  'tsb': 'tsb.co.uk', 'nationwide': 'nationwide.co.uk', 'rbs': 'rbs.co.uk',
-  'metro bank': 'metrobankonline.co.uk', 'monzo': 'monzo.com', 'starling': 'starlingbank.com',
-};
-let sharedCategoryCache = null;
-async function loadCategoryCache() {
-  if (sharedCategoryCache) return sharedCategoryCache;
-  try {
-    const res = await api('/api/lead-categories');
-    sharedCategoryCache = (await res.json()).data;
-  } catch { sharedCategoryCache = []; }
-  return sharedCategoryCache;
-}
-function categoryBadgeHtml(leadType) {
-  if (!leadType || !sharedCategoryCache) return '';
-  const cat = sharedCategoryCache.find(c => c.name.toLowerCase() === String(leadType).toLowerCase());
-  const color = cat ? cat.color : '#8b8b93';
-  const domain = (cat && cat.domain) || BANK_DOMAINS[String(leadType).toLowerCase()];
-  const logoImg = domain
-    ? '<img src="https://www.google.com/s2/favicons?domain=' + domain + '&sz=64" alt="" style="width:15px;height:15px;border-radius:4px;object-fit:contain;flex-shrink:0;" onerror="this.remove()" />'
-    : '';
-  return '<span class="badge" style="background:' + color + '22;color:' + color + ';border:1px solid ' + color + '44;gap:5px;">' + logoImg + esc(leadType) + '</span>';
-}
-
-// ---------- Shared chat panel (used by both admin and staff shells) ----------
-async function renderChatInto(containerEl) {
-  const [msgsRes, presenceRes] = await Promise.all([api('/api/chat/messages'), api('/api/chat/presence')]);
-  const msgs = (await msgsRes.json()).data;
-  const presence = (await presenceRes.json()).data;
-  containerEl.innerHTML = \`
-    <div class="presence-strip">\${presence.map(p => '<div class="presence-chip ' + (p.clocked_in ? 'online' : '') + '"><span class="dot"></span>' + avatarHtml(p, 16) + ' ' + esc(p.name) + '</div>').join('')}</div>
-    <div class="chat-shell panel" style="padding:14px;">
-      <div class="chat-messages" id="chatMessages">\${msgs.map(chatMsgHtml).join('')}</div>
-      <div class="chat-input-row" style="flex-direction:column;gap:8px;">
-        <div style="display:flex;gap:8px;">
-          <input id="chatInput" placeholder="Message the team…" onkeydown="if(event.key==='Enter') sendChatMessage()" />
-          <button class="btn btn-gold" onclick="sendChatMessage()">Send</button>
-        </div>
-        <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-dim);text-transform:none;letter-spacing:0;font-weight:500;">
-          <input type="checkbox" id="disappearToggle" style="width:auto;" /> Disappearing message
-          <select id="disappearDuration" style="width:auto;padding:4px 8px;font-size:11px;display:none;">
-            <option value="60">1 minute</option><option value="3600">1 hour</option><option value="86400" selected>24 hours</option><option value="604800">7 days</option>
-          </select>
-        </label>
-      </div>
-    </div>\`;
-  document.getElementById('disappearToggle').addEventListener('change', (e) => {
-    document.getElementById('disappearDuration').style.display = e.target.checked ? 'inline-block' : 'none';
-  });
-  const box = document.getElementById('chatMessages');
-  box.scrollTop = box.scrollHeight;
-  api('/api/chat/read', { method: 'POST', body: JSON.stringify({ lastReadMessageId: msgs.length ? msgs[msgs.length - 1].id : 0 }) });
-  clearNavBadge('chat');
-}
-function chatMsgHtml(m) {
-  const own = m.sender_id === me.id;
-  return \`<div class="chat-msg \${own ? 'own' : ''}" data-msg-id="\${m.id}">\${avatarHtml({ name: m.sender_name, pfp_data: m.sender_pfp_data }, 32)}
-    <div class="chat-bubble"><div class="chat-sender">\${esc(m.sender_name || 'Unknown')}\${m.sender_role === 'admin' ? ' <span class="badge admin" style="margin-left:4px;">admin</span>' : ''}\${m.expires_at ? ' <span title="Disappears ' + timeAgo(m.expires_at) + '" style="opacity:.6;font-size:9.5px;text-transform:uppercase;letter-spacing:.4px;">· expires \${timeAgo(m.expires_at)}</span>' : ''}</div>
-    <div class="chat-text">\${esc(m.content)}</div><div class="chat-time">\${timeAgo(m.created_at)}\${(own || me.role === 'admin') ? ' · <span style="cursor:pointer;text-decoration:underline;" onclick="deleteChatMessage(' + m.id + ')">delete</span>' : ''}</div></div></div>\`;
-}
-function appendChatMessage(m) {
-  const box = document.getElementById('chatMessages');
-  if (!box) return;
-  box.insertAdjacentHTML('beforeend', chatMsgHtml(m));
-  box.scrollTop = box.scrollHeight;
-}
-async function sendChatMessage() {
-  const input = document.getElementById('chatInput');
-  const content = input.value.trim();
-  if (!content) return;
-  const disappear = document.getElementById('disappearToggle');
-  const expiresInSeconds = disappear && disappear.checked ? Number(document.getElementById('disappearDuration').value) : undefined;
-  input.value = '';
-  await api('/api/chat/messages', { method: 'POST', body: JSON.stringify({ content, expiresInSeconds }) });
-}
-async function deleteChatMessage(id) {
-  await api('/api/chat/messages/' + id, { method: 'DELETE' });
-  const el = document.querySelector('[data-msg-id="' + id + '"]');
-  if (el) el.remove();
-}
-</script>
-<script>
-${ADMIN_JS}
-</script>
-<script>
-${STAFF_JS}
-</script>
+<script src="/js/main.js"></script>
+<script src="/js/admin.js"></script>
+<script src="/js/staff.js"></script>
 <script>
 // Shown once per device, the first time a caller/finisher logs in — walks them
 // through adding the app to their home screen so push notifications actually work.
@@ -1387,16 +1483,17 @@ document.addEventListener('visibilitychange', () => {
 
 if (me) enterApp();
 
-// Set up the login screen with context about which panel this is.
-// TENANT_SLUG is injected server-side per tenant (null for the operator's own panel).
-if (typeof TENANT_SLUG !== 'undefined' && TENANT_SLUG) {
-  // Tenant panel: show their own call center name prominently, not "Frap Ties"
-  // The page title is already replaced server-side, so document.title is correct.
-  const tenantName = document.title.replace(' - CCMP', '') || TENANT_SLUG;
-  const loginTitle = document.getElementById('loginTitle');
-  const loginSub = document.getElementById('loginSub');
-  if (loginTitle) loginTitle.textContent = tenantName;
-  if (loginSub) loginSub.textContent = 'Enter your team PIN to sign in';
-}</script>
+// Branding is now handled by applyBranding() + server-side name injection.
+// The slug is read from the cp-slug meta tag.
+</script>
 </body>
 </html>`;
+// Harden the page HTML: every </ inside a <script> block (other than the
+// closing </script> tag itself) is replaced with <\/ which the JS engine
+// treats as </  at runtime, while the HTML parser never sees a closing tag.
+// Simple global approach: replace all </ then restore </script>.
+// All JS is now served as external files (/js/main.js, /js/admin.js, /js/staff.js)
+// so there are no inline script blocks that could conflict with HTML parsing.
+// The _safeScripts post-processor is no longer needed.
+export const page = _rawPage;
+

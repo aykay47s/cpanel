@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { sql } from '../db';
-import { requireRole, authenticate, requireSuperAdmin } from '../auth';
+import { requireRole, authenticate, requireSuperAdmin, requireManager, requireAdmin, requireAnyStaff } from '../auth';
 import { registerClient, unregisterClient } from '../realtime';
 import { VAPID_PUBLIC_KEY, saveSubscription, removeSubscription } from '../push';
 import * as threecx from '../threecx';
@@ -22,12 +22,14 @@ export function signVonageJwt(applicationId: string, privateKey: string): string
 // data. This is what lets a super-admin's control panel pull live numbers from a
 // resold customer instance without needing that customer's admin credentials.
 misc.get('/api/tenant-stats', async (c) => {
-  const [callers] = await sql`SELECT COUNT(*)::int as n FROM users WHERE role = 'caller'`;
-  const [managers] = await sql`SELECT COUNT(*)::int as n FROM users WHERE role = 'admin'`;
-  const [finishers] = await sql`SELECT COUNT(*)::int as n FROM users WHERE role = 'finisher'`;
-  const [leads] = await sql`SELECT COUNT(*)::int as n FROM leads`;
-  const [successful] = await sql`SELECT COUNT(*)::int as n FROM leads WHERE status IN ('successful_call','completed')`;
-  const [onlineNow] = await sql`SELECT COUNT(*)::int as n FROM users WHERE clocked_in = true`;
+  const user = c.get('user');
+  const tid = user.tenant_id;
+  const [callers] = await sql`SELECT COUNT(*)::int as n FROM users WHERE role = 'caller' AND tenant_id = ${tid}`;
+  const [managers] = await sql`SELECT COUNT(*)::int as n FROM users WHERE role = 'admin' AND tenant_id = ${tid}`;
+  const [finishers] = await sql`SELECT COUNT(*)::int as n FROM users WHERE role = 'finisher' AND tenant_id = ${tid}`;
+  const [leads] = await sql`SELECT COUNT(*)::int as n FROM leads WHERE tenant_id = ${tid}`;
+  const [successful] = await sql`SELECT COUNT(*)::int as n FROM leads WHERE status IN ('successful_call','completed') AND tenant_id = ${tid}`;
+  const [onlineNow] = await sql`SELECT COUNT(*)::int as n FROM users WHERE clocked_in = true AND tenant_id = ${tid}`;
   const [brandRow] = await sql`SELECT value FROM settings WHERE key = 'panel_name'`;
   return c.json({
     data: {
@@ -346,15 +348,53 @@ misc.post('/api/admin/telephony-config/test-call', requireRole('admin'), async (
 });
 
 misc.get('/api/branding', async (c) => {
-  const rows = await sql`SELECT key, value FROM settings WHERE key IN ('panel_name', 'panel_logo')`;
-  const map = Object.fromEntries(rows.map((r: any) => [r.key, r.value]));
-  return c.json({ data: { name: map.panel_name || 'ClearPanel', logo: map.panel_logo || null } });
+  // Try to resolve the tenant from: 1) authenticated user, 2) slug header/query, 3) global default
+  let tenantName: string | null = null;
+  let tenantLogo: string | null = null;
+  // Check auth header for logged-in user
+  const userId = c.req.header('x-user-id');
+  const userPin = c.req.header('x-user-pin');
+  if (userId && userPin) {
+    const [u] = await sql`SELECT tenant_id FROM users WHERE id = ${userId} AND pin = ${userPin} LIMIT 1`;
+    if (u?.tenant_id) {
+      const [t] = await sql`SELECT panel_name, panel_logo FROM tenants WHERE id = ${u.tenant_id}`;
+      tenantName = t?.panel_name || null;
+      tenantLogo = t?.panel_logo || null;
+    }
+  }
+  // Also check slug from query param (used on login screen before auth)
+  const slug = c.req.query('slug');
+  if (!tenantName && slug) {
+    const [t] = await sql`SELECT panel_name, panel_logo FROM tenants WHERE slug = ${slug} LIMIT 1`;
+    tenantName = t?.panel_name || null;
+    tenantLogo = t?.panel_logo || null;
+  }
+  // Fall back to global setting
+  if (!tenantName) {
+    const [row] = await sql`SELECT value FROM settings WHERE key = 'panel_name'`;
+    tenantName = row?.value || 'ClearPanel';
+  }
+  if (!tenantLogo) {
+    const [row] = await sql`SELECT value FROM settings WHERE key = 'panel_logo'`;
+    tenantLogo = row?.value || null;
+  }
+  return c.json({ data: { name: tenantName, logo: tenantLogo } });
 });
-misc.post('/api/admin/branding', requireRole('admin'), async (c) => {
+misc.post('/api/admin/branding', requireManager, async (c) => {
+  const user = c.get('user');
   const { name, logo } = await c.req.json().catch(() => ({}));
   if (logo && logo.length > 550000) return c.json({ error: 'Logo image too large' }, 400);
-  if (name !== undefined) await sql`INSERT INTO settings (key, value) VALUES ('panel_name', ${name}) ON CONFLICT (key) DO UPDATE SET value = ${name}`;
-  if (logo !== undefined) await sql`INSERT INTO settings (key, value) VALUES ('panel_logo', ${logo}) ON CONFLICT (key) DO UPDATE SET value = ${logo}`;
+  if (name !== undefined) {
+    await sql`UPDATE tenants SET panel_name = ${name} WHERE id = ${user.tenant_id}`;
+    // Also update global setting for the self-tenant
+    const [self] = await sql`SELECT is_self FROM tenants WHERE id = ${user.tenant_id}`;
+    if (self?.is_self) await sql`INSERT INTO settings (key, value) VALUES ('panel_name', ${name}) ON CONFLICT (key) DO UPDATE SET value = ${name}`;
+  }
+  if (logo !== undefined) {
+    await sql`UPDATE tenants SET panel_logo = ${logo} WHERE id = ${user.tenant_id}`;
+    const [self] = await sql`SELECT is_self FROM tenants WHERE id = ${user.tenant_id}`;
+    if (self?.is_self) await sql`INSERT INTO settings (key, value) VALUES ('panel_logo', ${logo}) ON CONFLICT (key) DO UPDATE SET value = ${logo}`;
+  }
   return c.json({ ok: true });
 });
 
@@ -401,7 +441,8 @@ misc.post('/api/admin/call-template', requireRole('admin'), async (c) => {
 misc.get('/api/goal', async (c) => {
   const rows = await sql`SELECT key, value FROM settings WHERE key IN ('goal_target', 'goal_label')`;
   const map = Object.fromEntries(rows.map((r: any) => [r.key, r.value]));
-  const [{ count }] = await sql`SELECT COUNT(*)::int as count FROM leads WHERE status IN ('completed') OR outcome = 'successful_call'`;
+  const goalUser = c.get('user');
+  const [{ count }] = await sql`SELECT COUNT(*)::int as count FROM leads WHERE (status IN ('completed') OR outcome = 'successful_call') AND tenant_id = ${goalUser.tenant_id}`;
   return c.json({ data: { label: map.goal_label || 'Successful calls', target: Number(map.goal_target || 50), current: count } });
 });
 
@@ -431,4 +472,50 @@ misc.get('/api/events', async (c) => {
     }),
     { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', 'Connection': 'keep-alive' } }
   );
+});
+
+// ============ IN-APP UPDATES ============
+import { requireAdmin, requireAnyStaff } from '../auth';
+
+misc.get('/api/updates/active', requireAnyStaff, async (c) => {
+  const user = c.get('user');
+  const rows = await sql`
+    SELECT id, title, body, is_live, created_at FROM panel_updates
+    WHERE tenant_id = ${user.tenant_id} AND resolved_at IS NULL
+    ORDER BY is_live DESC, created_at DESC LIMIT 5`;
+  return c.json({ data: rows });
+});
+
+misc.get('/api/updates', requireAdmin, async (c) => {
+  const user = c.get('user');
+  const rows = await sql`
+    SELECT p.*, u.name as posted_by_name FROM panel_updates p
+    LEFT JOIN users u ON u.id = p.posted_by
+    WHERE p.tenant_id = ${user.tenant_id}
+    ORDER BY p.created_at DESC LIMIT 50`;
+  return c.json({ data: rows });
+});
+
+misc.post('/api/updates', requireAdmin, async (c) => {
+  const user = c.get('user');
+  const { title, body, is_live } = await c.req.json().catch(() => ({}));
+  if (!title || !body) return c.json({ error: 'Title and body required' }, 400);
+  const [row] = await sql`
+    INSERT INTO panel_updates (tenant_id, title, body, is_live, posted_by)
+    VALUES (${user.tenant_id}, ${title}, ${body}, ${!!is_live}, ${user.id})
+    RETURNING id, title, body, is_live, created_at`;
+  return c.json({ data: row });
+});
+
+misc.post('/api/updates/:id/resolve', requireAdmin, async (c) => {
+  const user = c.get('user');
+  await sql`UPDATE panel_updates SET resolved_at = now()
+    WHERE id = ${c.req.param('id')} AND tenant_id = ${user.tenant_id}`;
+  return c.json({ ok: true });
+});
+
+misc.delete('/api/updates/:id', requireAdmin, async (c) => {
+  const user = c.get('user');
+  await sql`DELETE FROM panel_updates WHERE id = ${c.req.param('id')} AND tenant_id = ${user.tenant_id}`;
+  return c.json({ ok: true });
 });
