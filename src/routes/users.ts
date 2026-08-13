@@ -89,6 +89,7 @@ users.post('/api/onboarding/complete', async (c) => {
   }
 });
 
+users.get('/api/me', async (c) => {
   c.header('Cache-Control', 'no-store, no-cache, must-revalidate');
   const user = await authenticate(c);
   if (!user) return bad(c, 'Unauthorized', 401);
