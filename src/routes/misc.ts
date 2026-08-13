@@ -479,14 +479,16 @@ misc.get('/api/branding', async (c) => {
 
   const userId = c.req.header('x-user-id');
   const userPin = c.req.header('x-user-pin');
+  let tenantSlug: string | null = null;
   if (userId && userPin) {
     const [u] = await sql`SELECT tenant_id FROM users WHERE id = ${userId} AND pin = ${userPin} LIMIT 1`;
     if (u?.tenant_id) {
-      const [t] = await sql`SELECT panel_name, panel_logo, name FROM tenants WHERE id = ${u.tenant_id}`;
+      const [t] = await sql`SELECT panel_name, panel_logo, name, slug, is_self FROM tenants WHERE id = ${u.tenant_id}`;
       if (t) {
         resolvedTenant = true;
         tenantName = t.panel_name || t.name || null;
         tenantLogo = t.panel_logo || null;
+        tenantSlug = t.is_self ? null : (t.slug || null);
       }
     }
   }
@@ -511,7 +513,7 @@ misc.get('/api/branding', async (c) => {
     tenantLogo = logoRow?.value || null;
   }
 
-  return c.json({ data: { name: tenantName, logo: tenantLogo } });
+  return c.json({ data: { name: tenantName, logo: tenantLogo, panel_code: tenantSlug } });
 });
 const BLOCKED_PANEL_NAMES = new Set(['niggers', 'nigger', 'nigga', 'niggas']);
 misc.post('/api/admin/branding', requireManager, async (c) => {

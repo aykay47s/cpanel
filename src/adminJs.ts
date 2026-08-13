@@ -888,6 +888,14 @@ async function renderAdminBranding(el) {
       <button class="btn btn-gold btn-block" onclick="saveBranding()">Save Branding</button>
       <div id="brandStatus" style="font-size:12px;margin-top:10px;"></div>
     </div>
+    \${b.panel_code ? \`<div class="panel p fade-up">
+      <div class="section-title" style="margin-top:0;">Panel Code</div>
+      <p style="font-size:12px;color:var(--text-dim);margin-bottom:12px;line-height:1.55;">Give this code to your callers. On the login screen they tap "Log into another panel", enter this code, and it takes them straight to your panel's login — no link needed.</p>
+      <div style="display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:12px;background:rgba(124,92,255,.08);border:1px solid rgba(124,92,255,.28);">
+        <code style="flex:1;font-size:16px;font-weight:700;color:var(--violet-bright);letter-spacing:.02em;">\${esc(b.panel_code)}</code>
+        <button class="btn btn-ghost btn-sm" onclick="copyPanelCode('\${esc(b.panel_code)}')">Copy</button>
+      </div>
+    </div>\` : ''}
     <div class="panel p fade-up">
       <div class="section-title" style="margin-top:0;">Your Telegram Bot (optional)</div>
       <p style="font-size:12px;color:var(--text-dim);margin-bottom:14px;line-height:1.55;">Connect your own bot to DM your team announcements, shift reminders, or urgent alerts. Create a bot via <a href="https://t.me/BotFather" target="_blank" style="color:var(--gold-bright);">@BotFather</a> on Telegram, then paste the token below. This is entirely separate from ClearPanel's master bot — your callers will still verify with ClearPanel first regardless.</p>
@@ -964,8 +972,12 @@ async function clearBrandLogo() {
   await api('/api/admin/branding', { method: 'POST', body: JSON.stringify({ logo: null }) });
   renderAdminTab('branding');
 }
-async function saveBranding() {
-  const name = document.getElementById('brandName').value.trim();
+function copyPanelCode(code) {
+  navigator.clipboard.writeText(code).then(() => {
+    if (typeof toast === 'function') toast('Panel code copied'); else alert('Copied: ' + code);
+  }).catch(() => alert('Copy this code: ' + code));
+}
+async function saveBranding() {  const name = document.getElementById('brandName').value.trim();
   const body = { name };
   if (pendingBrandLogo) body.logo = pendingBrandLogo;
   await api('/api/admin/branding', { method: 'POST', body: JSON.stringify(body) });

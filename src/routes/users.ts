@@ -145,6 +145,16 @@ users.get('/api/find-panel/:username', async (c) => {
   return c.json({ data: { panel_name: row.name, url: row.is_self ? '/' : `/${row.slug}` } });
 });
 
+// Look up a panel by its code (the tenant slug) so a caller can jump to another
+// company's panel login without knowing the full URL. Only returns active panels.
+users.get('/api/panel-by-code/:code', async (c) => {
+  const code = String(c.req.param('code') || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+  if (!code) return bad(c, 'Enter a panel code');
+  const [row] = await sql`SELECT slug, name, is_self, status FROM tenants WHERE lower(slug) = ${code} LIMIT 1`;
+  if (!row || row.status !== 'active') return bad(c, 'No active panel found with that code', 404);
+  return c.json({ data: { panel_name: row.name, url: row.is_self ? '/' : `/${row.slug}` } });
+});
+
 users.patch('/api/me/profile', async (c) => {
   const user = await authenticate(c);
   if (!user) return bad(c, 'Unauthorized', 401);

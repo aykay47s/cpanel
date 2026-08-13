@@ -129,6 +129,30 @@ function showFindPanel() {
   document.getElementById('findPanelResult').textContent = '';
   document.getElementById('findPanelInput').value = '';
 }
+function showJoinPanel() {
+  document.getElementById('joinPanelGate').classList.remove('hidden');
+  document.getElementById('joinPanelResult').textContent = '';
+  document.getElementById('joinPanelInput').value = '';
+  document.getElementById('joinPanelInput').focus();
+}
+async function joinPanel() {
+  const code = document.getElementById('joinPanelInput').value.trim().toLowerCase();
+  const resultEl = document.getElementById('joinPanelResult');
+  if (!code) { resultEl.textContent = 'Enter a panel code.'; resultEl.style.color = 'var(--danger)'; return; }
+  resultEl.textContent = 'Checking…'; resultEl.style.color = 'var(--text-dim)';
+  try {
+    const res = await fetch('/api/panel-by-code/' + encodeURIComponent(code));
+    const data = await res.json();
+    if (!res.ok) { resultEl.textContent = data.error || 'No panel found with that code.'; resultEl.style.color = 'var(--danger)'; return; }
+    resultEl.innerHTML = 'Found <b>' + esc(data.data.panel_name) + '</b> — taking you there…';
+    resultEl.style.color = 'var(--success)';
+    // Send them to that panel's own login URL; the slug drives branding + which
+    // tenant the PIN authenticates against.
+    setTimeout(() => { window.location.href = data.data.url; }, 700);
+  } catch {
+    resultEl.textContent = 'Network error — try again.'; resultEl.style.color = 'var(--danger)';
+  }
+}
 async function findMyPanel() {
   const val = document.getElementById('findPanelInput').value.trim();
   const resultEl = document.getElementById('findPanelResult');
@@ -1607,7 +1631,8 @@ tr.clickable:active{background:rgba(255,255,255,.05);}
       <button class="key wide" data-k="clear">Clear</button><button class="key" data-k="0">0</button><button class="key wide" data-k="back">⌫</button>
     </div>
     <div class="login-error" id="loginError"></div>
-    <div style="margin-top:14px;">
+    <div style="margin-top:14px;display:flex;flex-direction:column;gap:8px;align-items:center;">
+      <a href="javascript:void(0)" onclick="showJoinPanel()" style="font-size:11.5px;color:var(--gold-bright);text-decoration:underline;">Log into another panel</a>
       <a href="javascript:void(0)" onclick="showFindPanel()" style="font-size:11.5px;color:var(--text-faint);text-decoration:underline;">Forgot which panel you're on?</a>
     </div>
     <div style="margin-top:18px;display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;">
@@ -1647,6 +1672,17 @@ tr.clickable:active{background:rgba(255,255,255,.05);}
     <button class="btn btn-gold btn-block" onclick="findMyPanel()">Find My Panel</button>
     <div id="findPanelResult" style="font-size:13px;margin-top:14px;"></div>
     <button class="btn btn-ghost btn-block" style="margin-top:10px;" onclick="document.getElementById('findPanelGate').classList.add('hidden')">Close</button>
+  </div>
+</div>
+
+<div id="joinPanelGate" class="hidden" style="position:fixed;inset:0;z-index:400;display:flex;align-items:center;justify-content:center;padding:24px;background:rgba(5,5,9,.85);backdrop-filter:blur(10px);">
+  <div class="panel p" style="max-width:380px;width:100%;text-align:center;">
+    <h2 style="font-size:18px;margin-bottom:8px;">Log into another panel</h2>
+    <p style="font-size:12.5px;color:var(--text-dim);line-height:1.6;margin-bottom:18px;">Enter the panel code your admin gave you. We'll take you to that panel's login, where you enter the PIN for your account there.</p>
+    <input id="joinPanelInput" placeholder="panel code" maxlength="60" style="text-align:center;margin-bottom:10px;text-transform:lowercase;" onkeydown="if(event.key==='Enter') joinPanel()" />
+    <button class="btn btn-gold btn-block" onclick="joinPanel()">Continue</button>
+    <div id="joinPanelResult" style="font-size:13px;margin-top:14px;"></div>
+    <button class="btn btn-ghost btn-block" style="margin-top:10px;" onclick="document.getElementById('joinPanelGate').classList.add('hidden')">Close</button>
   </div>
 </div>
 
