@@ -120,6 +120,12 @@ app.get('/:slug', async (c) => {
   const slug = c.req.param('slug');
   const [tenant] = await sql`SELECT * FROM tenants WHERE slug = ${slug} AND status = 'active' AND is_self = false`;
   if (!tenant) return c.notFound();
+  // Also check expiry — expired tenants get a clean, clear page rather than a panel that
+  // partially loads then fails every API call with 401
+  if (tenant.expires_at && new Date(tenant.expires_at) < new Date()) {
+    await sql`UPDATE tenants SET status = 'expired' WHERE id = ${tenant.id}`;
+    return c.html(`<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Panel Expired</title><style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:-apple-system,sans-serif;background:#07070a;color:#eaeaec;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}div{text-align:center;max-width:360px;}h1{font-size:20px;margin-bottom:8px;}p{font-size:13px;color:#8f8f98;line-height:1.6;}</style></head><body><div><h1>Access Expired</h1><p>The access period for <strong>${String(tenant.name).replace(/&/g,'&amp;').replace(/</g,'&lt;')}</strong> has ended. Contact whoever set this up to renew your access.</p></div></body></html>`);
+  }
   c.header('Cache-Control', 'no-store, no-cache, must-revalidate');
   const html = page
     .split('Frap Ties').join(tenant.name)

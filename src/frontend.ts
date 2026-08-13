@@ -481,10 +481,9 @@ tr.clickable:active{background:rgba(255,255,255,.05);}
 <!-- ===== LOGIN ===== -->
 <div id="loginScreen">
   <div class="login-card panel fade-up">
-    <div class="crest"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5"><path d="M12 2l7 4v6c0 5-3.5 8-7 10-3.5-2-7-5-7-10V6l7-4z"/></svg></div>
-    <div class="login-title">Frap Ties</div>
-    <div class="login-sub" style="font-size:13px;color:var(--text-faint);letter-spacing:1px;text-transform:uppercase;margin-bottom:22px;">Est. Nowhere · Untraceable Since Day One</div>
-    <div class="login-sub">Enter your PIN</div>
+    <div class="crest" id="loginCrest"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5"><path d="M12 2l7 4v6c0 5-3.5 8-7 10-3.5-2-7-5-7-10V6l7-4z"/></svg></div>
+    <div class="login-title" id="loginTitle">Frap Ties</div>
+    <div class="login-sub" id="loginSub">Enter your PIN</div>
     <div class="pin-dots" id="pinDots"><div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div></div>
     <div class="keypad" id="keypad">
       <button class="key" data-k="1">1</button><button class="key" data-k="2">2</button><button class="key" data-k="3">3</button>
@@ -1151,6 +1150,17 @@ document.addEventListener('visibilitychange', () => {
 });
 
 if (me) enterApp();
-</script>
+
+// Set up the login screen with context about which panel this is.
+// TENANT_SLUG is injected server-side per tenant (null for the operator's own panel).
+if (typeof TENANT_SLUG !== 'undefined' && TENANT_SLUG) {
+  // Tenant panel: show their own call center name prominently, not "Frap Ties"
+  // The page title is already replaced server-side, so document.title is correct.
+  const tenantName = document.title.replace(' - CCMP', '') || TENANT_SLUG;
+  const loginTitle = document.getElementById('loginTitle');
+  const loginSub = document.getElementById('loginSub');
+  if (loginTitle) loginTitle.textContent = tenantName;
+  if (loginSub) loginSub.textContent = 'Enter your team PIN to sign in';
+}</script>
 </body>
 </html>`;
