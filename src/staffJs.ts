@@ -66,7 +66,7 @@ async function renderStaffHome() {
   // Active in-app updates (non-Telegram)
   const activeUpdate = updates.find(u => u.is_live) || updates[0] || null;
   const updateBanner = activeUpdate ? \`<div style="margin-bottom:14px;padding:12px 16px;border-radius:14px;background:\${activeUpdate.is_live ? 'linear-gradient(135deg,rgba(239,68,68,.15),rgba(220,38,38,.1))' : 'linear-gradient(135deg,rgba(124,92,255,.12),rgba(79,140,255,.08))'};border:1px solid \${activeUpdate.is_live ? 'rgba(239,68,68,.4)' : 'rgba(124,92,255,.3)'};display:flex;gap:10px;align-items:flex-start;">
-    <span style="flex-shrink:0;font-size:16px;">\${activeUpdate.is_live ? '🔴' : '📣'}</span>
+    <span style="flex-shrink:0;width:18px;height:18px;color:\${activeUpdate.is_live ? 'var(--danger)' : 'var(--violet-bright)'};display:inline-flex;">\${activeUpdate.is_live ? (ICONS.dot || '') : (ICONS.megaphone || '')}</span>
     <div style="flex:1;min-width:0;"><div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:\${activeUpdate.is_live ? 'var(--danger)' : 'var(--violet-bright)'};margin-bottom:2px;">\${activeUpdate.is_live ? 'Live Update' : 'Update'}</div><div style="font-size:13px;font-weight:600;margin-bottom:2px;">\${esc(activeUpdate.title)}</div><div style="font-size:12px;color:var(--text-dim);line-height:1.4;">\${esc(activeUpdate.body)}</div></div>
   </div>\` : '';
 
@@ -98,7 +98,7 @@ async function renderStaffHome() {
 
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:4px;">
       <div class="stat-tile panel">
-        <div class="icon-chip" style="background:rgba(34,197,94,.14);color:var(--success);">✓</div>
+        <div class="icon-chip" style="background:rgba(34,197,94,.14);color:var(--success);">\${ICONS.check || ''}</div>
         <div class="num" data-count="\${myStat.successful_calls || 0}" style="color:var(--success);">0</div>
         <div class="lbl">Successful</div>
       </div>
@@ -108,7 +108,7 @@ async function renderStaffHome() {
         <div class="lbl">Calls Today</div>
       </div>
       <div class="stat-tile panel">
-        <div class="icon-chip" style="background:\${me.clocked_in ? 'rgba(34,197,94,.14)' : 'rgba(255,255,255,.06)'};color:\${me.clocked_in ? 'var(--success)' : 'var(--text-faint)'};">\${me.clocked_in ? '●' : '○'}</div>
+        <div class="icon-chip" style="background:\${me.clocked_in ? 'rgba(34,197,94,.14)' : 'rgba(255,255,255,.06)'};color:\${me.clocked_in ? 'var(--success)' : 'var(--text-faint)'};">\${ICONS.dot || ''}</div>
         <div class="num" style="color:\${me.clocked_in ? 'var(--success)' : 'var(--text-faint)'};font-size:19px;">\${me.clocked_in ? 'On' : 'Off'}</div>
         <div class="lbl">Shift</div>
       </div>
@@ -116,7 +116,7 @@ async function renderStaffHome() {
 
     <div class="panel p fade-up" style="padding:16px 18px;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:9px;">
-        <span style="font-size:11px;color:var(--text-dim);font-weight:700;text-transform:uppercase;letter-spacing:.5px;display:flex;align-items:center;gap:6px;">🎯 \${esc(goal.label)}</span>
+        <span style="font-size:11px;color:var(--text-dim);font-weight:700;text-transform:uppercase;letter-spacing:.5px;display:flex;align-items:center;gap:6px;"><span style="width:14px;height:14px;display:inline-flex;color:var(--gold-bright);">\${ICONS.target || ''}</span> \${esc(goal.label)}</span>
         <span class="mono" style="font-size:13px;font-weight:700;color:var(--gold-bright);">\${goal.current} / \${goal.target}</span>
       </div>
       <div class="xp-bar" style="height:8px;">
