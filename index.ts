@@ -18,6 +18,11 @@ import { MAIN_JS } from './src/frontend';
 import { ADMIN_JS } from './src/adminJs';
 import { STAFF_JS } from './src/staffJs';
 import { page } from './src/frontend';
+
+// Panel name values that must never be rendered anywhere, regardless of where
+// they came from (corrupted historical data, a compromised admin session, a
+// deliberately malicious tenant name). Checked case-insensitively, trimmed.
+const BLOCKED_PANEL_NAMES = new Set(['niggers', 'nigger', 'nigga', 'niggas']);
 import * as threecx from './src/threecx';
 
 const app = new Hono();
@@ -120,8 +125,8 @@ app.get('/', async (c) => {
   c.header('Cache-Control', 'no-store, no-cache, must-revalidate');
   // Serve the self-tenant panel with its own branding. Fallback chain:
   // tenants.panel_name (new, per-tenant) -> settings.panel_name (legacy, pre-migration
-  // value like "Frap Ties") -> "ClearPanel" only as an absolute last resort for a
-  // genuinely fresh install with nothing configured anywhere.
+  // value) -> "ClearPanel" only as an absolute last resort for a genuinely
+  // fresh install with nothing configured anywhere.
   const [selfTenant] = await sql`SELECT * FROM tenants WHERE is_self = true LIMIT 1`;
   let tenantName = selfTenant?.panel_name;
   let tenantLogo = selfTenant?.panel_logo;
@@ -129,12 +134,16 @@ app.get('/', async (c) => {
     const [row] = await sql`SELECT value FROM settings WHERE key = 'panel_name'`;
     tenantName = row?.value || 'ClearPanel';
   }
+  // Defense-in-depth: never render a known-bad value even if it somehow
+  // survives the DB migration (e.g. this deploy hasn't run migrations yet).
+  if (BLOCKED_PANEL_NAMES.has(String(tenantName).trim().toLowerCase())) tenantName = 'ClearPanel';
   if (!tenantLogo) {
     const [row] = await sql`SELECT value FROM settings WHERE key = 'panel_logo'`;
     tenantLogo = row?.value || null;
   }
   const logoTag = tenantLogo ? `<img src="${tenantLogo}" style="width:100%;height:100%;object-fit:contain;border-radius:inherit;" />` : '';
   let html = page
+    .replace('<title>Frap Ties</title>', `<title>${tenantName}</title>`)
     .replace(/<meta name="apple-mobile-web-app-title"[^>]*>/, `<meta name="apple-mobile-web-app-title" content="${tenantName}">`)
     .replace('<div class="brand-mark"></div>', `<div class="brand-mark">${logoTag}</div>`)
     .replace('<div id="loginTitle">ClearPanel</div>', `<div id="loginTitle">${tenantName}</div>`);
@@ -159,7 +168,8 @@ app.get('/:slug', async (c) => {
     return c.html(`<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Panel Expired</title><style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:-apple-system,sans-serif;background:#07070a;color:#eaeaec;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}div{text-align:center;max-width:360px;}h1{font-size:20px;margin-bottom:8px;}p{font-size:13px;color:#8f8f98;line-height:1.6;}</style></head><body><div><h1>Access Expired</h1><p>The access period for <strong>${String(tenant.name).replace(/&/g,'&amp;').replace(/</g,'&lt;')}</strong> has ended. Contact whoever set this up to renew access.</p></div></body></html>`);
   }
   c.header('Cache-Control', 'no-store, no-cache, must-revalidate');
-  const tenantName = tenant.panel_name || tenant.name || 'ClearPanel';
+  let tenantName = tenant.panel_name || tenant.name || 'ClearPanel';
+  if (BLOCKED_PANEL_NAMES.has(String(tenantName).trim().toLowerCase())) tenantName = tenant.name || 'ClearPanel';
   // New/resold tenants that haven't uploaded their own logo yet get the
   // ClearPanel default mark so their panel looks finished immediately —
   // this never touches the self-tenant (Frap Ties), which is handled by the
@@ -167,6 +177,7 @@ app.get('/:slug', async (c) => {
   const tenantLogo = tenant.panel_logo || '/clearpanel-icon.png';
   const logoTag = `<img src="${tenantLogo}" style="width:100%;height:100%;object-fit:contain;border-radius:inherit;" />`;
   let html = page
+    .replace('<title>Frap Ties</title>', `<title>${tenantName}</title>`)
     .replace(/<meta name="apple-mobile-web-app-title"[^>]*>/, `<meta name="apple-mobile-web-app-title" content="${tenantName}">`)
     .replace('<div class="brand-mark"></div>', `<div class="brand-mark">${logoTag}</div>`)
     .replace('<div id="loginTitle">ClearPanel</div>', `<div id="loginTitle">${tenantName}</div>`);

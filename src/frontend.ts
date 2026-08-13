@@ -97,10 +97,9 @@ async function enterApp() {
   connectEvents();
   refreshNotifBadge();
   registerServiceWorker();
-  // Role quiz: if the user has never set a role (new account, role = 'caller'
-  // by default but they never confirmed it), show a one-time role picker.
-  const quizDone = localStorage.getItem('cp_role_confirmed_' + me.id);
-  if (!quizDone) {
+  // Role picker: server-side flag, not localStorage — survives a cleared cache,
+  // a new device, or reinstalling the PWA. Once confirmed, it never asks again.
+  if (!me.role_confirmed_at) {
     showRoleQuiz();
     return;
   }
@@ -149,10 +148,12 @@ function showRoleQuiz() {
   document.body.appendChild(gate);
 }
 async function confirmRole(el) {
-  const role = el ? el.dataset.rolePick : 'caller';
-  localStorage.setItem('cp_role_confirmed_' + me.id, role || 'caller');
   const quiz = document.getElementById('roleQuiz');
   if (quiz) quiz.remove();
+  // Persist server-side so this genuinely never asks again, on any device.
+  await api('/api/me/confirm-role', { method: 'POST' });
+  me.role_confirmed_at = new Date().toISOString();
+  localStorage.setItem('dispatch_me', JSON.stringify(me));
   const gated = await maybeShowTelegramGate();
   if (gated) return;
   launchApp();

@@ -17,6 +17,7 @@ import {
   getGatewayToken,
   GATEWAY_BOT_USERNAME,
   sendGatewayGroupMessage,
+  isSameBotAsGateway,
 } from '../telegram';
 
 export const telegram = new Hono();
@@ -228,22 +229,24 @@ telegram.post('/api/telegram/webhook/tenant/:secret', async (c) => {
   return c.json({ ok: true });
 });
 
-// The gateway bot's only job is posting into group chats (the announcements
-// group), not per-user DMs. Its webhook exists to auto-discover the numeric
-// chat_id of any group it's added to — Telegram's invite links never expose
-// that id, so the bot has to actually see a message in the group first. Once
-// it does, the group is saved to gateway_chats and shows up for an admin to
-// pick as "the announcements group" in Master Control.
+// The gateway bot always captures group chat_ids (for the announcements group).
+// When there's no separate master bot configured, this bot IS also the OTP/
+// verification bot — so its webhook also runs private DM messages through the
+// same verification flow the dedicated master webhook would normally handle.
 telegram.post('/api/telegram/webhook/gateway', async (c) => {
   if (!isGatewayBotConfigured()) return c.json({ ok: true });
   const update = await c.req.json().catch(() => null);
   if (!update) return c.json({ ok: true });
-  const msg = update.message || update.my_chat_member?.chat ? update.message : null;
   const chat = update.message?.chat || update.my_chat_member?.chat;
   if (chat?.id && (chat.type === 'group' || chat.type === 'supergroup')) {
     await sql`INSERT INTO gateway_chats (chat_id, title, chat_type, last_seen_at)
       VALUES (${chat.id}, ${chat.title || null}, ${chat.type}, now())
       ON CONFLICT (chat_id) DO UPDATE SET title = ${chat.title || null}, last_seen_at = now()`.catch(() => {});
+  }
+  // Private DM to this bot — if it's standing in as the OTP bot, run the same
+  // verification handling a dedicated master webhook would.
+  if (chat?.type === 'private' && isSameBotAsGateway()) {
+    handleTelegramUpdate(update, 'master', null, getGatewayToken()).catch(() => {});
   }
   return c.json({ ok: true });
 });

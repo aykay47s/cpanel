@@ -17,8 +17,8 @@
 
 import { sql } from './db';
 
-const MASTER_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
-export const MASTER_BOT_USERNAME = process.env.TELEGRAM_BOT_USERNAME || 'clearpanelotpbot';
+const MASTER_BOT_TOKEN_ENV = process.env.TELEGRAM_BOT_TOKEN || '';
+const MASTER_BOT_USERNAME_ENV = process.env.TELEGRAM_BOT_USERNAME || '';
 
 // The GATEWAY bot is separate from the master OTP bot — it's the one added to
 // the announcements group (https://t.me/+M-aK0jz4wDI5Nzdh) and used to post
@@ -31,6 +31,17 @@ export function isGatewayBotConfigured(): boolean {
 }
 export function getGatewayToken(): string {
   return GATEWAY_BOT_TOKEN;
+}
+
+// Consolidated: if a separate master/OTP bot token was never set up, run
+// verification through the gateway bot instead of requiring a second bot.
+// Explicit master config always wins when both are present.
+const MASTER_BOT_TOKEN = MASTER_BOT_TOKEN_ENV || GATEWAY_BOT_TOKEN;
+export const MASTER_BOT_USERNAME = MASTER_BOT_USERNAME_ENV || GATEWAY_BOT_USERNAME || 'clearpanelotpbot';
+// True when master and gateway resolve to the literal same bot — Telegram only
+// allows one active webhook per bot token, so boot only installs one in that case.
+export function isSameBotAsGateway(): boolean {
+  return !!MASTER_BOT_TOKEN_ENV === false && isGatewayBotConfigured();
 }
 
 export function isMasterBotConfigured(): boolean {
@@ -127,6 +138,11 @@ export async function setGatewayWebhook(publicBase: string): Promise<{ ok: boole
 
 export async function setMasterWebhook(publicBase: string): Promise<{ ok: boolean; error?: string }> {
   if (!isMasterBotConfigured()) return { ok: false, error: 'not_configured' };
+  // If there's no separate master token, the "master" bot IS the gateway bot —
+  // Telegram only allows one webhook per bot, and the gateway webhook already
+  // processes verification messages (see the gateway route), so installing a
+  // second webhook here would just silently overwrite it.
+  if (isSameBotAsGateway()) return { ok: true };
   const url = `${publicBase.replace(/\/$/, '')}/api/telegram/webhook/master`;
   const r = await tgApi(MASTER_BOT_TOKEN, 'setWebhook', { url, allowed_updates: ['message'] });
   return r.ok ? { ok: true } : { ok: false, error: r.error };

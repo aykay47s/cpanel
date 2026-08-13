@@ -39,8 +39,18 @@ users.post('/api/auth/login', async (c) => {
 users.get('/api/me', async (c) => {
   const user = await authenticate(c);
   if (!user) return bad(c, 'Unauthorized', 401);
-  const [fresh] = await sql`SELECT id, name, pin, role, avatar, pfp_data, xp, clocked_in, notif_prefs, is_super_admin FROM users WHERE id = ${user.id}`;
+  const [fresh] = await sql`SELECT id, name, pin, role, avatar, pfp_data, xp, clocked_in, notif_prefs, is_super_admin, role_confirmed_at FROM users WHERE id = ${user.id}`;
   return c.json({ data: fresh });
+});
+
+// One-time role confirmation, stored server-side so it genuinely never re-asks —
+// unlike localStorage, this survives a cleared cache, a new device, or reinstalling
+// the PWA. Once set, it's permanent; nothing in the app ever clears it again.
+users.post('/api/me/confirm-role', async (c) => {
+  const user = await authenticate(c);
+  if (!user) return bad(c, 'Unauthorized', 401);
+  await sql`UPDATE users SET role_confirmed_at = now() WHERE id = ${user.id} AND role_confirmed_at IS NULL`;
+  return c.json({ ok: true });
 });
 
 users.patch('/api/me/profile', async (c) => {

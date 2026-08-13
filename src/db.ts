@@ -447,6 +447,19 @@ export async function ensureDb() {
   // Backfill from settings so the operator's existing branding is preserved —
   // never silently replaced by the 'ClearPanel' fallback.
   const [selfBrand] = await sql`SELECT id, panel_name, panel_logo FROM tenants WHERE is_self = true`;
+  // URGENT DATA FIX: settings.panel_name / tenants.panel_name were found to
+  // contain offensive/corrupted content on the live instance (not something
+  // this app ever wrote — the value was already in the database and the
+  // backfill migration below faithfully copied whatever was there). Purge any
+  // known-bad value outright rather than silently propagating it forward.
+  const BLOCKED_PANEL_NAMES = ['niggers', 'nigger', 'nigga', 'niggas'];
+  const isBlockedName = (v: string | null | undefined) => !!v && BLOCKED_PANEL_NAMES.includes(v.trim().toLowerCase());
+  const [badSetting] = await sql`SELECT value FROM settings WHERE key = 'panel_name'`;
+  if (isBlockedName(badSetting?.value)) {
+    await sql`DELETE FROM settings WHERE key = 'panel_name'`;
+  }
+  await sql`UPDATE tenants SET panel_name = NULL WHERE panel_name IS NOT NULL AND lower(trim(panel_name)) = ANY(${BLOCKED_PANEL_NAMES})`;
+
   if (selfBrand && !selfBrand.panel_name) {
     const [nameRow] = await sql`SELECT value FROM settings WHERE key = 'panel_name'`;
     if (nameRow?.value) await sql`UPDATE tenants SET panel_name = ${nameRow.value} WHERE id = ${selfBrand.id}`;
@@ -497,6 +510,7 @@ export async function ensureDb() {
   // Username: unique within a tenant, used for display + Telegram linkage
   const usernameAlters = [
     'ALTER TABLE users ADD COLUMN IF NOT EXISTS username TEXT',
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS role_confirmed_at TIMESTAMPTZ',
     'ALTER TABLE tenants ADD COLUMN IF NOT EXISTS gateway_bot_token TEXT',
     'ALTER TABLE tenants ADD COLUMN IF NOT EXISTS gateway_bot_username TEXT',
     'ALTER TABLE settings ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE',

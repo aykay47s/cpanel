@@ -380,10 +380,14 @@ misc.get('/api/branding', async (c) => {
   }
   return c.json({ data: { name: tenantName, logo: tenantLogo } });
 });
+const BLOCKED_PANEL_NAMES = new Set(['niggers', 'nigger', 'nigga', 'niggas']);
 misc.post('/api/admin/branding', requireManager, async (c) => {
   const user = c.get('user');
   const { name, logo } = await c.req.json().catch(() => ({}));
   if (logo && logo.length > 550000) return c.json({ error: 'Logo image too large' }, 400);
+  if (name !== undefined && BLOCKED_PANEL_NAMES.has(String(name).trim().toLowerCase())) {
+    return c.json({ error: 'That name is not allowed' }, 400);
+  }
   if (name !== undefined) {
     await sql`UPDATE tenants SET panel_name = ${name} WHERE id = ${user.tenant_id}`;
     // Also update global setting for the self-tenant
@@ -438,18 +442,23 @@ misc.post('/api/admin/call-template', requireRole('admin'), async (c) => {
   return c.json({ ok: true });
 });
 
-misc.get('/api/goal', async (c) => {
-  const rows = await sql`SELECT key, value FROM settings WHERE key IN ('goal_target', 'goal_label')`;
-  const map = Object.fromEntries(rows.map((r: any) => [r.key, r.value]));
+misc.get('/api/goal', requireAnyStaff, async (c) => {
   const goalUser = c.get('user');
+  const labelKey = 'goal_label:' + goalUser.tenant_id;
+  const targetKey = 'goal_target:' + goalUser.tenant_id;
+  const rows = await sql`SELECT key, value FROM settings WHERE key IN (${labelKey}, ${targetKey})`;
+  const map = Object.fromEntries(rows.map((r: any) => [r.key, r.value]));
   const [{ count }] = await sql`SELECT COUNT(*)::int as count FROM leads WHERE (status IN ('completed') OR outcome = 'successful_call') AND tenant_id = ${goalUser.tenant_id}`;
-  return c.json({ data: { label: map.goal_label || 'Successful calls', target: Number(map.goal_target || 50), current: count } });
+  return c.json({ data: { label: map[labelKey] || 'Successful calls', target: Number(map[targetKey] || 50), current: count } });
 });
 
 misc.post('/api/admin/goal', requireRole('admin'), async (c) => {
+  const user = c.get('user');
   const { label, target } = await c.req.json().catch(() => ({}));
-  if (label !== undefined) await sql`INSERT INTO settings (key, value) VALUES ('goal_label', ${label}) ON CONFLICT (key) DO UPDATE SET value = ${label}`;
-  if (target !== undefined) await sql`INSERT INTO settings (key, value) VALUES ('goal_target', ${String(target)}) ON CONFLICT (key) DO UPDATE SET value = ${String(target)}`;
+  const labelKey = 'goal_label:' + user.tenant_id;
+  const targetKey = 'goal_target:' + user.tenant_id;
+  if (label !== undefined) await sql`INSERT INTO settings (key, value) VALUES (${labelKey}, ${label}) ON CONFLICT (key) DO UPDATE SET value = ${label}`;
+  if (target !== undefined) await sql`INSERT INTO settings (key, value) VALUES (${targetKey}, ${String(target)}) ON CONFLICT (key) DO UPDATE SET value = ${String(target)}`;
   return c.json({ ok: true });
 });
 
@@ -475,8 +484,6 @@ misc.get('/api/events', async (c) => {
 });
 
 // ============ IN-APP UPDATES ============
-import { requireAdmin, requireAnyStaff } from '../auth';
-
 misc.get('/api/updates/active', requireAnyStaff, async (c) => {
   const user = c.get('user');
   const rows = await sql`
