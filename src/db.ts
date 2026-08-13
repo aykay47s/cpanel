@@ -104,6 +104,19 @@ export async function ensureDb() {
   for (const stmt of telegramAlters) {
     await sql.unsafe(`DO $$ BEGIN ${stmt}; EXCEPTION WHEN OTHERS THEN NULL; END $$;`);
   }
+  // Before a user's chat_id is linked to a ClearPanel account we need somewhere
+  // to park it. When someone messages /start (or any message) to the bot we
+  // store username -> chat_id here. When they enter their @username in the app
+  // we look it up and DM the code directly — so the OTP is *received* in
+  // Telegram, not copied from the app.
+  await sql`CREATE TABLE IF NOT EXISTS telegram_chat_registry (
+    telegram_username TEXT PRIMARY KEY,
+    chat_id BIGINT NOT NULL,
+    scope TEXT NOT NULL DEFAULT 'master',
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`;
+  await sql`CREATE INDEX IF NOT EXISTS tcr_chat ON telegram_chat_registry (chat_id)`;
+
   // Pending verification codes — memory would work, but a table survives restarts
   // and lets multiple server instances agree. Rows self-clean via expires_at.
   await sql`CREATE TABLE IF NOT EXISTS telegram_verifications (

@@ -49,31 +49,85 @@ async function requireMaster(c: Context, next: Next) {
 // deep-link URL. The client shows both, plus a Copy button and an Open Telegram
 // button, and polls /status until the webhook confirms.
 
+// Step 1: user enters @username. We check if the bot already knows their chat_id
+// (they've messaged the bot before). If yes, we DM them the code immediately.
+// If no, we tell them to open the bot first (/start) and poll until they do.
 telegram.post('/api/telegram/start-verification', requireAnyStaff, async (c) => {
   const user = c.get('user');
   const { username, scope } = await c.req.json().catch(() => ({}));
   const cleanUsername = normalizeTelegramUsername(username || '');
   if (!cleanUsername || cleanUsername.length < 3) return c.json({ error: 'Enter a valid Telegram username' }, 400);
   const s = scope === 'tenant' ? 'tenant' : 'master';
-  if (s === 'master' && !isMasterBotConfigured()) return c.json({ error: 'ClearPanel bot not configured yet — set TELEGRAM_BOT_TOKEN.' }, 400);
-  let tenantBotUsername: string | null = null;
+  if (s === 'master' && !isMasterBotConfigured()) return c.json({ error: 'ClearPanel master bot not configured yet. Contact support.' }, 400);
+  let botToken = getMasterToken();
+  let botUsername = MASTER_BOT_USERNAME;
+  let tenantId: number | null = null;
+  if (s === 'tenant') {
+    const [t] = await sql`SELECT telegram_bot_token, telegram_bot_username, id FROM tenants WHERE id = ${user.tenant_id}`;
+    if (!t?.telegram_bot_token) return c.json({ error: "Your admin hasn't set up a Telegram bot yet." }, 400);
+    botToken = t.telegram_bot_token;
+    botUsername = t.telegram_bot_username || 'bot';
+    tenantId = t.id;
+  }
+  // Save the username against this user so we can look it up when the code lands.
+  await sql`UPDATE users SET telegram_username = ${cleanUsername} WHERE id = ${user.id}`;
+  // Check if this username has already started a chat with the bot.
+  const [reg] = await sql`SELECT chat_id FROM telegram_chat_registry WHERE telegram_username = ${cleanUsername} AND scope = ${s} LIMIT 1`;
+  if (!reg) {
+    // Bot doesn't know them yet — tell them to open it first.
+    return c.json({ data: { needs_start: true, bot_username: botUsername, deep_link: `https://t.me/${botUsername}` } });
+  }
+  // We have their chat_id — generate a code and DM it to them.
+  const { code, expiresAt } = await createVerification(user.id, cleanUsername, s, tenantId);
+  const dmText = `🔐 Your ClearPanel verification code:\n\n<b>${code.slice(0,3)} ${code.slice(3)}</b>\n\nEnter this in the app to link your Telegram. Expires in 5 minutes. If you didn't request this, ignore it.`;
+  const dmResult = await sendTelegramDM(botToken, reg.chat_id, dmText);
+  if (dmResult.status !== 'sent') return c.json({ error: 'Could not send your code. Make sure you have started the bot first.' }, 400);
+  return c.json({ data: { needs_start: false, expires_at: expiresAt.toISOString(), scope: s } });
+});
+
+// Step 1b: after being told to /start the bot, the frontend polls this until
+// the webhook has registered their chat_id.
+telegram.get('/api/telegram/check-started', requireAnyStaff, async (c) => {
+  const user = c.get('user');
+  const scope = c.req.query('scope') || 'master';
+  const [u] = await sql`SELECT telegram_username FROM users WHERE id = ${user.id}`;
+  if (!u?.telegram_username) return c.json({ data: { started: false } });
+  const [reg] = await sql`SELECT chat_id FROM telegram_chat_registry WHERE telegram_username = ${u.telegram_username} AND scope = ${scope} LIMIT 1`;
+  return c.json({ data: { started: !!reg } });
+});
+
+// Step 2: user enters the code they received via Telegram DM.
+telegram.post('/api/telegram/confirm-code', requireAnyStaff, async (c) => {
+  const user = c.get('user');
+  const { code, scope } = await c.req.json().catch(() => ({}));
+  const s = scope === 'tenant' ? 'tenant' : 'master';
+  const clean = String(code || '').replace(/\D/g, '');
+  if (clean.length !== 6) return c.json({ error: 'Enter the 6-digit code from Telegram' }, 400);
+  const consumed = await consumeVerificationCode(clean, s, s === 'tenant' ? user.tenant_id : null);
+  if (!consumed) return c.json({ error: 'Code is wrong or expired. Get a new one.' }, 400);
+  // Look up their chat_id from the registry to stamp it.
+  const [u] = await sql`SELECT telegram_username FROM users WHERE id = ${user.id}`;
+  const [reg] = await sql`SELECT chat_id FROM telegram_chat_registry WHERE telegram_username = ${u?.telegram_username} AND scope = ${s} LIMIT 1`;
+  const chatId = reg?.chat_id || null;
+  if (s === 'master') {
+    await sql`UPDATE users SET telegram_chat_id_master = ${chatId}, telegram_verified_master_at = now() WHERE id = ${user.id}`;
+  } else {
+    await sql`UPDATE users SET telegram_chat_id_tenant = ${chatId}, telegram_verified_tenant_at = now() WHERE id = ${user.id}`;
+  }
+  // Welcome DM
+  const [fresh] = await sql`SELECT name FROM users WHERE id = ${user.id}`;
+  let botToken = getMasterToken();
+  let botUsername = MASTER_BOT_USERNAME;
   if (s === 'tenant') {
     const [t] = await sql`SELECT telegram_bot_token, telegram_bot_username FROM tenants WHERE id = ${user.tenant_id}`;
-    if (!t?.telegram_bot_token) return c.json({ error: "Your tenant hasn't set up its own Telegram bot yet." }, 400);
-    tenantBotUsername = t.telegram_bot_username || null;
+    botToken = t?.telegram_bot_token || botToken;
+    botUsername = t?.telegram_bot_username || botUsername;
   }
-  const { code, expiresAt } = await createVerification(user.id, cleanUsername, s, s === 'tenant' ? user.tenant_id : null);
-  await sql`UPDATE users SET telegram_username = ${cleanUsername} WHERE id = ${user.id} AND (telegram_username IS NULL OR telegram_username = '')`;
-  const botUsername = s === 'master' ? MASTER_BOT_USERNAME : (tenantBotUsername || 'unknown');
-  return c.json({
-    data: {
-      code,
-      expires_at: expiresAt.toISOString(),
-      bot_username: botUsername,
-      deep_link: `https://t.me/${botUsername}?start=${code}`,
-      scope: s,
-    },
-  });
+  if (chatId) {
+    const welcome = `👋 Welcome to ClearPanel, <b>${fresh?.name || 'there'}</b>!\n\nYour Telegram is now linked to your account. We'll use this to send you shift alerts, announcements, and account updates. You're all set — head back to the app.`;
+    sendTelegramDM(botToken, chatId, welcome).catch(() => {});
+  }
+  return c.json({ data: { verified: true, name: fresh?.name || '' } });
 });
 
 // Polled by the verification screen every ~2s to auto-advance the moment the
@@ -99,30 +153,51 @@ async function handleTelegramUpdate(
 ): Promise<void> {
   const msg = update?.message;
   if (!msg || !msg.text) return;
-  const chatId = msg.chat?.id;
+  const chatId: number = msg.chat?.id;
   const fromUsername = (msg.from?.username || '').toLowerCase();
   const text = String(msg.text).trim();
-  // Accept either the raw code, "/start <code>" (deep link), or a code inside
-  // any longer message. First 6 consecutive digits wins.
-  const codeMatch = text.match(/\d{6}/);
-  if (!codeMatch) {
-    if (chatId) await sendTelegramDM(botToken, chatId, "Hey! I'm the ClearPanel verification bot. Paste your 6-digit code here to link your account.");
+  // Every message registers the sender's username->chat_id so start-verification
+  // can DM them the code without needing them to paste it back here.
+  if (fromUsername && chatId) {
+    await sql`INSERT INTO telegram_chat_registry (telegram_username, chat_id, scope, updated_at)
+      VALUES (${fromUsername}, ${chatId}, ${scope}, now())
+      ON CONFLICT (telegram_username) DO UPDATE SET chat_id = ${chatId}, updated_at = now()`;
+  }
+  const isStart = text.startsWith('/start');
+  if (isStart) {
+    // /start: just greet them and tell them to head back to the app.
+    await sendTelegramDM(botToken, chatId,
+      "👋 Hi! I'm the ClearPanel verification bot.\n\nHead back to the app — it will send your verification code here once you enter your Telegram username. Don't close this chat.");
     return;
   }
+  // Any non-/start message that has no 6-digit code gets a hint.
+  const codeMatch = text.match(/\d{6}/);
+  if (!codeMatch) {
+    await sendTelegramDM(botToken, chatId,
+      "Head back to ClearPanel and enter your @username — I'll DM you a code here to verify.");
+    return;
+  }
+  // If they somehow paste a code directly into the bot (old habit, copy-paste),
+  // handle it gracefully by consuming it and stamping their chat_id.
   const consumed = await consumeVerificationCode(codeMatch[0], scope, tenantId);
   if (!consumed) {
-    if (chatId) await sendTelegramDM(botToken, chatId, "That code isn't valid (or it expired). Head back to ClearPanel and generate a new one.");
+    await sendTelegramDM(botToken, chatId,
+      "That code isn't valid or has expired. Go back to ClearPanel and request a new one.");
     return;
   }
   if (scope === 'master') {
     await sql`UPDATE users SET telegram_chat_id_master = ${chatId}, telegram_verified_master_at = now(),
-      telegram_username = COALESCE(telegram_username, ${fromUsername || null}) WHERE id = ${consumed.userId}`;
-    await sendTelegramDM(botToken, chatId, `✅ Verified with ClearPanel. You'll hear from us here for account and product updates.`);
+      telegram_username = COALESCE(NULLIF(telegram_username,''), ${fromUsername || null}) WHERE id = ${consumed.userId}`;
   } else {
     await sql`UPDATE users SET telegram_chat_id_tenant = ${chatId}, telegram_verified_tenant_at = now(),
-      telegram_username = COALESCE(telegram_username, ${fromUsername || null}) WHERE id = ${consumed.userId}`;
-    await sendTelegramDM(botToken, chatId, `✅ Verified. Your call center admin can now reach you here for shift updates and announcements.`);
+      telegram_username = COALESCE(NULLIF(telegram_username,''), ${fromUsername || null}) WHERE id = ${consumed.userId}`;
   }
+  const [fresh] = await sql`SELECT name FROM users WHERE id = ${consumed.userId}`;
+  const name = fresh?.name || 'there';
+  const welcome = scope === 'master'
+    ? `👋 Welcome to ClearPanel, <b>${name}</b>!\n\nYour Telegram is linked. We'll use this for account updates and announcements. Head back to the app.`
+    : `👋 Verified, <b>${name}</b>! Your admin can now reach you here. Head back to the app.`;
+  await sendTelegramDM(botToken, chatId, welcome);
 }
 
 telegram.post('/api/telegram/webhook/master', async (c) => {

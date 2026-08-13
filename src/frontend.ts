@@ -721,88 +721,129 @@ async function maybeShowTelegramGate() {
     return true;
   } catch { return false; }
 }
+// ---- Telegram verification gate ----
+// Step A: user enters @username → we call start-verification
+//   → if needs_start: show "open Telegram, send /start" + poll /check-started
+//   → if code sent: advance to Step B
+// Step B: "Check your Telegram" + 6-digit OTP input → POST /confirm-code
+// Step C: welcome screen → enterApp()
 function showTelegramGate(status) {
   const gate = document.createElement('div');
   gate.id = 'tgGate';
   gate.style.cssText = 'position:fixed;inset:0;z-index:400;display:flex;align-items:center;justify-content:center;padding:24px;background:radial-gradient(ellipse 80% 50% at 15% -10%,rgba(124,92,255,.15),transparent 55%),radial-gradient(ellipse 70% 50% at 100% 10%,rgba(79,140,255,.12),transparent 55%),var(--bg);';
   gate.innerHTML = '<div class="panel p" style="max-width:420px;width:100%;padding:36px 32px;text-align:center;">'
-    + '<div style="font-size:11px;letter-spacing:.28em;text-transform:uppercase;color:var(--violet-bright);font-weight:700;margin-bottom:8px;">One quick step</div>'
+    + '<div style="font-size:11px;letter-spacing:.28em;text-transform:uppercase;color:var(--violet-bright);font-weight:700;margin-bottom:8px;">Quick verification</div>'
     + '<h2 style="font-size:22px;margin-bottom:10px;">Link your Telegram</h2>'
-    + '<p style="font-size:13px;color:var(--text-dim);line-height:1.55;margin-bottom:22px;">ClearPanel uses this to reach you for account updates and important announcements. Takes 15 seconds — one code, one paste.</p>'
-    + '<div id="tgStep1">'
-    +   '<div class="field" style="text-align:left;"><label style="font-size:11px;color:var(--text-dim);">Your Telegram username</label><input id="tgUname" placeholder="@yourname" value="' + esc(status.telegram_username ? '@' + status.telegram_username : '') + '" style="margin-top:6px;" /></div>'
-    +   '<button class="btn btn-gold btn-block" onclick="tgStartVerify()" style="margin-top:14px;">Get my code</button>'
-    +   '<div id="tgErr" style="color:var(--danger);font-size:12px;min-height:16px;margin-top:8px;"></div>'
+    + '<p style="font-size:13px;color:var(--text-dim);line-height:1.55;margin-bottom:22px;">We will send a code to your Telegram — enter it here to verify. Takes 30 seconds.</p>'
+    + '<div id="tgStepA">'
+    +   '<div class="field" style="text-align:left;"><label style="font-size:11px;color:var(--text-dim);font-weight:600;display:block;margin-bottom:6px;">Your Telegram username</label><input id="tgUname" placeholder="@yourname" value="' + esc(status.telegram_username ? '@' + status.telegram_username : '') + '" /></div>'
+    +   '<button class="btn btn-gold btn-block" onclick="tgStep1()" style="margin-top:14px;">Send me a code</button>'
+    +   '<div id="tgErrA" style="color:var(--danger);font-size:12px;min-height:16px;margin-top:8px;"></div>'
     + '</div>'
-    + '<div id="tgStep2" style="display:none;">'
-    +   '<div style="font-size:11px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.14em;font-weight:700;margin-bottom:10px;">Your code</div>'
-    +   '<div id="tgCode" class="mono" style="font-size:42px;font-weight:800;letter-spacing:.2em;padding:20px;border-radius:16px;background:rgba(124,92,255,.1);border:2px dashed rgba(167,139,250,.4);margin-bottom:14px;cursor:pointer;user-select:all;" onclick="tgCopyCode()"></div>'
-    +   '<div style="font-size:11.5px;color:var(--text-faint);margin-bottom:16px;">Tap the code to copy · Expires in <span id="tgCountdown">5:00</span></div>'
-    +   '<a id="tgOpenBtn" class="btn btn-gold btn-block" target="_blank" rel="noopener" style="text-decoration:none;display:block;">Open Telegram & paste code</a>'
-    +   '<div style="font-size:12px;color:var(--text-dim);margin-top:14px;line-height:1.5;">Message our bot with the code above. This screen will advance automatically the moment we see it land.</div>'
-    +   '<div id="tgPollStatus" style="font-size:11.5px;color:var(--violet-bright);margin-top:10px;min-height:16px;">Waiting for your message…</div>'
+    + '<div id="tgStepOpen" style="display:none;">'
+    +   '<div style="font-size:48px;margin-bottom:10px;">✈️</div>'
+    +   '<p style="font-size:13.5px;font-weight:600;margin-bottom:6px;">Open Telegram first</p>'
+    +   '<p style="font-size:12.5px;color:var(--text-dim);line-height:1.55;margin-bottom:18px;">Message <b>/start</b> to the bot below — just once, to let it reach you. Then come straight back here.</p>'
+    +   '<a id="tgStartLink" class="btn btn-gold btn-block" target="_blank" rel="noopener" style="text-decoration:none;display:block;margin-bottom:14px;">Open @clearpanelotpbot</a>'
+    +   '<div style="font-size:11.5px;color:var(--violet-bright);" id="tgWaiting">Waiting for you to start the bot…</div>'
+    + '</div>'
+    + '<div id="tgStepB" style="display:none;">'
+    +   '<div style="font-size:48px;margin-bottom:10px;">📨</div>'
+    +   '<p style="font-size:13.5px;font-weight:600;margin-bottom:6px;">Check your Telegram</p>'
+    +   '<p style="font-size:12.5px;color:var(--text-dim);line-height:1.55;margin-bottom:16px;">Check your Telegram — a 6-digit code has been sent. Enter it below. Expires in <span id="tgCd">5:00</span>.</p>'
+    +   '<input id="tgOtp" placeholder="Enter code from Telegram" class="mono" maxlength="7" data-otp-input="1" style="text-align:center;font-size:22px;font-weight:700;letter-spacing:.2em;" />'
+    +   '<button class="btn btn-gold btn-block" onclick="tgSubmitCode()" style="margin-top:12px;">Verify</button>'
+    +   '<button class="btn btn-ghost btn-block" onclick="tgStep1()" style="margin-top:8px;font-size:12px;">Resend code</button>'
+    +   '<div id="tgErrB" style="color:var(--danger);font-size:12px;min-height:16px;margin-top:8px;"></div>'
+    + '</div>'
+    + '<div id="tgStepC" style="display:none;">'
+    +   '<div style="font-size:56px;margin-bottom:14px;">🎉</div>'
+    +   '<h3 style="font-size:20px;margin-bottom:8px;" id="tgWelcomeName"></h3>'
+    +   '<p style="font-size:13px;color:var(--text-dim);line-height:1.55;margin-bottom:20px;">Your Telegram is now linked. A welcome message has been sent. Loading ClearPanel…</p>'
+    +   '<div class="xp-bar"><i id="tgWelcomeBar" style="width:0%;transition:width 1.2s var(--ease-smooth);"></i></div>'
     + '</div>'
     + '</div>';
   document.body.appendChild(gate);
 }
-async function tgStartVerify() {
-  const uname = document.getElementById('tgUname').value.trim();
-  const err = document.getElementById('tgErr');
-  err.textContent = '';
-  if (!uname || uname.length < 3) { err.textContent = 'Enter your @username'; return; }
+async function tgStep1() {
+  const uname = document.getElementById('tgUname') ? document.getElementById('tgUname').value.trim() : window._tgUname;
+  const errA = document.getElementById('tgErrA');
+  if (errA) errA.textContent = '';
+  if (!uname || uname.length < 3) { if (errA) errA.textContent = 'Enter your @username'; return; }
+  window._tgUname = uname;
   const r = await api('/api/telegram/start-verification', { method:'POST', body: JSON.stringify({ username: uname, scope: 'master' })});
   const data = await r.json();
-  if (!r.ok) { err.textContent = data.error || 'Failed'; return; }
-  document.getElementById('tgStep1').style.display = 'none';
-  document.getElementById('tgStep2').style.display = 'block';
-  document.getElementById('tgCode').textContent = data.data.code.replace(/(\d{3})(\d{3})/, '$1 $2');
-  document.getElementById('tgOpenBtn').href = data.data.deep_link;
-  window._tgCode = data.data.code;
-  window._tgExpires = new Date(data.data.expires_at).getTime();
-  startTgCountdown();
-  startTgPoll();
+  if (!r.ok) { if (errA) errA.textContent = data.error || 'Failed'; return; }
+  if (data.data.needs_start) {
+    // Bot doesn't know them yet — show the "open bot" step and poll
+    tgShowOnly('tgStepOpen');
+    const link = document.getElementById('tgStartLink');
+    if (link) link.href = data.data.deep_link || ('https://t.me/' + (data.data.bot_username || 'clearpanelotpbot'));
+    tgPollStarted();
+  } else {
+    // Code was DM'd — show the OTP input
+    window._tgExpires = new Date(data.data.expires_at).getTime();
+    tgShowOnly('tgStepB');
+    startTgCd();
+  }
 }
-function tgCopyCode() {
-  navigator.clipboard.writeText(window._tgCode || '').then(() => {
-    const el = document.getElementById('tgCode');
-    const orig = el.style.background;
-    el.style.background = 'rgba(34,197,94,.2)';
-    setTimeout(() => { el.style.background = orig; }, 400);
-  }).catch(()=>{});
+function tgShowOnly(id) {
+  ['tgStepA','tgStepOpen','tgStepB','tgStepC'].forEach(i => {
+    const el = document.getElementById(i);
+    if (el) el.style.display = i === id ? 'block' : 'none';
+  });
 }
-function startTgCountdown() {
-  const cd = document.getElementById('tgCountdown');
+function tgPollStarted() {
+  clearInterval(window._tgPollI);
+  window._tgPollI = setInterval(async () => {
+    const r = await api('/api/telegram/check-started?scope=master');
+    const d = await r.json();
+    if (d.data && d.data.started) {
+      clearInterval(window._tgPollI);
+      const w = document.getElementById('tgWaiting');
+      if (w) { w.textContent = 'Got it! Sending your code…'; w.style.color = 'var(--success)'; }
+      setTimeout(() => tgStep1(), 600);
+    }
+  }, 2000);
+}
+async function tgSubmitCode() {
+  const raw = (document.getElementById('tgOtp').value || '').replace(/\D/g, '');
+  const errB = document.getElementById('tgErrB');
+  errB.textContent = '';
+  if (raw.length !== 6) { errB.textContent = 'Enter the 6-digit code from Telegram'; return; }
+  const r = await api('/api/telegram/confirm-code', { method:'POST', body: JSON.stringify({ code: raw, scope: 'master' })});
+  const data = await r.json();
+  if (!r.ok) { errB.textContent = data.error || 'Wrong code — try again'; return; }
+  clearInterval(window._tgCdI);
+  tgShowOnly('tgStepC');
+  const nameEl = document.getElementById('tgWelcomeName');
+  if (nameEl) nameEl.textContent = 'Welcome, ' + esc(data.data.name || 'there') + '!';
+  requestAnimationFrame(() => {
+    setTimeout(() => { const bar = document.getElementById('tgWelcomeBar'); if (bar) bar.style.width = '100%'; }, 80);
+  });
+  setTimeout(() => {
+    const gate = document.getElementById('tgGate');
+    if (gate) gate.remove();
+    enterApp();
+  }, 1800);
+}
+function startTgCd() {
+  clearInterval(window._tgCdI);
   const tick = () => {
     const left = Math.max(0, Math.floor((window._tgExpires - Date.now()) / 1000));
-    const m = Math.floor(left/60), s = left%60;
-    if (cd) cd.textContent = m + ':' + String(s).padStart(2,'0');
-    if (left <= 0) {
-      clearInterval(window._tgCdI);
-      const status = document.getElementById('tgPollStatus');
-      if (status) status.textContent = 'Code expired — reload to get a new one.';
-      clearInterval(window._tgPollI);
-    }
+    const m = Math.floor(left/60), sec = left%60;
+    const el = document.getElementById('tgCd');
+    if (el) el.textContent = m + ':' + String(sec).padStart(2,'0');
+    if (left <= 0) { clearInterval(window._tgCdI); if (el) el.style.color = 'var(--danger)'; }
   };
   tick();
   window._tgCdI = setInterval(tick, 1000);
 }
-function startTgPoll() {
-  clearInterval(window._tgPollI);
-  window._tgPollI = setInterval(async () => {
-    const r = await api('/api/telegram/status');
-    const s = (await r.json()).data;
-    if (s && s.telegram_chat_id_master) {
-      clearInterval(window._tgPollI);
-      clearInterval(window._tgCdI);
-      const status = document.getElementById('tgPollStatus');
-      if (status) { status.textContent = '✅ Linked! Loading ClearPanel…'; status.style.color = 'var(--success)'; }
-      setTimeout(() => {
-        document.getElementById('tgGate').remove();
-        enterApp();
-      }, 900);
-    }
-  }, 2000);
-}
+// Keep old names so nothing else breaks
+function tgStartVerify() { tgStep1(); }
+function tgCopyCode() {}
+function startTgCountdown() {}
+function startTgPoll() {}
 // Registered unconditionally on every login, not just when someone opts into push -
 // an active service worker is also what makes Chrome/Android treat this as a real
 // installable app in the first place, not just a bookmark.
@@ -1116,6 +1157,10 @@ function xpGuideHtml() {
 document.addEventListener('click', (e) => {
   const t = e.target.closest('[data-toggle-next]');
   if (t && t.nextElementSibling) t.nextElementSibling.classList.toggle('open');
+});
+document.addEventListener('input', (e) => {
+  const t = e.target;
+  if (t && t.dataset && t.dataset.otpInput) t.value = t.value.replace(/[^0-9]/g, '');
 });
 function timeAgo(ts) {
   const s = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
