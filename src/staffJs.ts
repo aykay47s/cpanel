@@ -566,8 +566,6 @@ async function renderStaffProfile() {
           \${me.pfp_data ? '<button class="btn btn-danger btn-sm" onclick="removePfp()">Remove Photo</button>' : ''}
         </div>
       </div>
-      <div class="section-title">Display Name</div>
-      <div class="field"><input id="pfName" value="\${esc(me.name)}" /></div>
       <div class="section-title">Your Call-From Number</div>
       <p style="font-size:11.5px;color:var(--text-dim);margin-bottom:8px;">The number you're actually dialing from. Only admins can see this, and it's blurred by default.</p>
       <div class="field"><input id="pfPhone" value="\${esc(me.call_phone || '')}" placeholder="e.g. +44 7911 123456" /></div>
@@ -576,12 +574,21 @@ async function renderStaffProfile() {
     </div>
     <div class="panel p fade-up">
       <div class="section-title" style="margin-top:0;">Username</div>
-      <p style="font-size:11.5px;color:var(--text-dim);margin-bottom:10px;line-height:1.5;">Your PIN only works on this one panel — if you ever forget which one, a username lets you find your way back. \${me.username ? 'Yours is set below.' : 'Not set yet — pick one.'}</p>
+      <p style="font-size:11.5px;color:var(--text-dim);margin-bottom:10px;line-height:1.5;">This is how you're known across the panel and how you find your way back if you lose the link. \${me.username ? '' : 'Pick one to claim it.'}</p>
       <div style="display:flex;gap:8px;">
         <input id="pfUsername" value="\${esc(me.username || '')}" placeholder="e.g. sarah_m" maxlength="20" />
         <button class="btn btn-ghost" style="flex-shrink:0;" onclick="saveUsername()">\${me.username ? 'Update' : 'Claim'}</button>
       </div>
       <div id="usernameStatus" style="font-size:12px;margin-top:8px;"></div>
+    </div>
+    <div class="panel p fade-up">
+      <div class="section-title" style="margin-top:0;">Change Your PIN</div>
+      <p style="font-size:11.5px;color:var(--text-dim);margin-bottom:10px;line-height:1.5;">This changes the PIN you use to log into <b style="color:var(--text);">this panel</b>. Pick something only you know — 4 to 8 digits.</p>
+      <div class="field"><label>Current PIN</label><input id="pinCurrent" type="password" inputmode="numeric" maxlength="8" placeholder="••••" /></div>
+      <div class="field"><label>New PIN</label><input id="pinNew" type="password" inputmode="numeric" maxlength="8" placeholder="4–8 digits" /></div>
+      <div class="field"><label>Confirm New PIN</label><input id="pinConfirm" type="password" inputmode="numeric" maxlength="8" placeholder="repeat it" /></div>
+      <button class="btn btn-gold btn-block" onclick="changePin()">Update PIN</button>
+      <div id="pinStatus" style="font-size:12px;margin-top:8px;"></div>
     </div>
     <div class="panel p fade-up">
       <div class="section-title" style="margin-top:0;">Notification Preferences</div>
@@ -600,23 +607,32 @@ let pendingPfpData = null;
 function handlePfpUpload(event) {
   const file = event.target.files[0];
   if (!file) return;
+  const preview = document.getElementById('pfpPreview');
+  if (preview) preview.innerHTML = '<div style="width:64px;height:64px;border-radius:50%;background:rgba(255,255,255,.06);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--text-faint);">…</div>';
   const img = new Image();
   const reader = new FileReader();
   reader.onload = (e) => {
     img.onload = () => {
-      const size = 256;
+      const size = 240;
       const canvas = document.createElement('canvas');
       canvas.width = size; canvas.height = size;
       const ctx = canvas.getContext('2d');
       const scale = Math.max(size / img.width, size / img.height);
       const w = img.width * scale, h = img.height * scale;
       ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
-      pendingPfpData = canvas.toDataURL('image/jpeg', 0.82);
+      // Compress progressively until the base64 is comfortably under the server cap,
+      // so a large photo can never silently fail the size check.
+      let quality = 0.82;
+      let out = canvas.toDataURL('image/jpeg', quality);
+      while (out.length > 180000 && quality > 0.4) { quality -= 0.12; out = canvas.toDataURL('image/jpeg', quality); }
+      pendingPfpData = out;
       pendingRemovePfp = false;
-      document.getElementById('pfpPreview').innerHTML = '<img src="' + pendingPfpData + '" style="width:64px;height:64px;border-radius:50%;object-fit:cover;" />';
+      if (preview) preview.innerHTML = '<img src="' + pendingPfpData + '" style="width:64px;height:64px;border-radius:50%;object-fit:cover;" />';
     };
+    img.onerror = () => { if (preview) preview.innerHTML = '<div style="width:64px;height:64px;border-radius:50%;background:rgba(239,68,68,.12);display:flex;align-items:center;justify-content:center;font-size:9px;color:#ff8f8a;text-align:center;">bad<br>image</div>'; };
     img.src = e.target.result;
   };
+  reader.onerror = () => { if (preview) preview.innerHTML = avatarHtml(me, 64); };
   reader.readAsDataURL(file);
 }
 async function removePfp() {
@@ -625,9 +641,8 @@ async function removePfp() {
   renderStaffProfile();
 }
 async function saveProfile() {
-  const name = document.getElementById('pfName').value.trim();
   const call_phone = document.getElementById('pfPhone').value.trim();
-  const body = { name, call_phone };
+  const body = { call_phone };
   if (pendingPfpData) body.pfp_data = pendingPfpData;
   const statusEl = document.getElementById('profileStatus');
   statusEl.textContent = 'Saving…'; statusEl.style.color = 'var(--text-dim)';
@@ -661,6 +676,24 @@ async function saveUsername() {
 async function saveNotifPrefs() {
   await api('/api/me/notif-prefs', { method: 'PATCH', body: JSON.stringify({ lead_assigned: document.getElementById('prefLead').checked, chat: document.getElementById('prefChat').checked, announcements: document.getElementById('prefAnn').checked }) });
   alert('Preferences saved');
+}
+async function changePin() {
+  const current = document.getElementById('pinCurrent').value.trim();
+  const next = document.getElementById('pinNew').value.trim();
+  const confirm = document.getElementById('pinConfirm').value.trim();
+  const s = document.getElementById('pinStatus');
+  if (!current || !next || !confirm) { s.textContent = 'Fill in all three fields.'; s.style.color = 'var(--danger)'; return; }
+  if (!/^[0-9]{4,8}$/.test(next)) { s.textContent = 'New PIN must be 4–8 digits.'; s.style.color = 'var(--danger)'; return; }
+  if (next !== confirm) { s.textContent = 'The new PINs don\\'t match.'; s.style.color = 'var(--danger)'; return; }
+  s.textContent = 'Updating…'; s.style.color = 'var(--text-dim)';
+  const res = await api('/api/me/change-pin', { method: 'POST', body: JSON.stringify({ current_pin: current, new_pin: next }) });
+  const data = await res.json();
+  if (!res.ok) { s.textContent = data.error || 'Could not update PIN.'; s.style.color = 'var(--danger)'; return; }
+  // The PIN is the login credential — update the stored session so the user
+  // isn't logged out on their next request.
+  me.pin = next; localStorage.setItem('dispatch_me', JSON.stringify(me));
+  document.getElementById('pinCurrent').value = ''; document.getElementById('pinNew').value = ''; document.getElementById('pinConfirm').value = '';
+  s.textContent = 'PIN updated ✓'; s.style.color = 'var(--success)';
 }
 
 // ---------- Real push notifications (arrive even with the app closed) ----------

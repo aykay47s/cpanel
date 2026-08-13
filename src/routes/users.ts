@@ -165,7 +165,22 @@ users.post('/api/me/remove-pfp', async (c) => {
   const user = await authenticate(c);
   if (!user) return bad(c, 'Unauthorized', 401);
   const [row] = await sql`UPDATE users SET pfp_data = NULL WHERE id = ${user.id} RETURNING id, name, pin, role, avatar, pfp_data, xp, clocked_in, call_phone`;
-  return c.json({ data: row });
+  return c.json({ data: row });});
+
+// Change your own login PIN, scoped to your own tenant. Verifies the current PIN,
+// enforces 4-8 digits, and guarantees the new PIN stays unique within the panel
+// (PINs are the per-tenant login credential, so a duplicate would break login).
+users.post('/api/me/change-pin', async (c) => {
+  const user = await authenticate(c);
+  if (!user) return bad(c, 'Unauthorized', 401);
+  const { current_pin, new_pin } = await c.req.json().catch(() => ({}));
+  if (!current_pin || !new_pin) return bad(c, 'Current and new PIN required');
+  if (String(current_pin) !== String(user.pin)) return bad(c, 'Your current PIN is incorrect');
+  if (!/^[0-9]{4,8}$/.test(String(new_pin))) return bad(c, 'New PIN must be 4-8 digits');
+  const [clash] = await sql`SELECT id FROM users WHERE tenant_id = ${user.tenant_id} AND pin = ${String(new_pin)} AND id != ${user.id}`;
+  if (clash) return bad(c, 'That PIN is already used by someone on this panel — pick another');
+  await sql`UPDATE users SET pin = ${String(new_pin)} WHERE id = ${user.id}`;
+  return c.json({ ok: true });
 });
 
 users.patch('/api/me/notif-prefs', async (c) => {
