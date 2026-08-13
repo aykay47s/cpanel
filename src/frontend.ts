@@ -497,7 +497,7 @@ function connectEvents() {
       '<div class="pop-name">' + esc(name) + '</div>' +
       '<div class="pop-meta mono">' + esc(d.from || lead.phone || '') + (lead.lead_type ? ' · ' + esc(lead.lead_type) : '') + '</div>' +
       (lead.notes ? '<div class="pop-notes">' + esc(lead.notes) + '</div>' : '') +
-      '<button class="btn btn-ghost btn-sm" onclick="this.closest(\\'.caller-id-pop\\').remove()">Dismiss</button>';
+      '<button class="btn btn-ghost btn-sm" onclick="this.parentNode.remove()">Dismiss</button>';
     zone.prepend(card);
     setTimeout(() => { if (card.parentNode) card.style.opacity = '0.001'; }, 45000);
   });
@@ -1118,13 +1118,9 @@ body{
     var(--bg);
   font-size:14px;line-height:1.5;letter-spacing:-.006em;
 }
-/* Fine film-grain texture over the whole viewport — the single biggest "designed
-   vs flat" lift on dark UIs. Barely visible, but it kills the plasticky flatness
-   and reads as a premium, considered surface. Fixed, non-interactive, on top. */
-body::before{
-  content:''; position:fixed; inset:0; z-index:9999; pointer-events:none; opacity:.035; mix-blend-mode:overlay;
-  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
+/* (Removed the full-viewport fractal-noise grain overlay — mix-blend-mode over
+   the whole screen forced a full-page composite every frame and was a major
+   source of jank on mobile. The gradients below carry the depth on their own.) */
 .app-shell{
   position:relative; margin:18px; border-radius:var(--r-xl); overflow:hidden;
   background:
@@ -1135,13 +1131,13 @@ body::before{
   box-shadow:inset 0 1px 0 rgba(255,255,255,.04), 0 2px 8px rgba(0,0,0,.3), 0 24px 64px rgba(0,0,0,.5), 0 0 120px rgba(124,92,255,.05);
   min-height:calc(100vh - 36px); min-height:calc(100dvh - 36px);
 }
-/* Faint animated aurora drifting behind the whole shell — the one place motion
-   is ambient rather than reactive, so the app never sits perfectly still. */
+/* Static ambient glow behind the shell — no animation. A continuously animating
+   full-shell gradient with will-change kept the compositor busy every frame for
+   a purely decorative drift; the static version looks the same at a glance. */
 .app-shell::before{
-  content:''; position:absolute; inset:-20%; z-index:0; pointer-events:none; opacity:.55;
+  content:''; position:absolute; inset:-20%; z-index:0; pointer-events:none; opacity:.5;
   background:radial-gradient(circle at 30% 20%, rgba(147,112,255,.10), transparent 42%),
              radial-gradient(circle at 78% 68%, rgba(79,140,255,.08), transparent 45%);
-  animation:aurora 30s ease-in-out infinite alternate;will-change:transform;
 }
 @keyframes aurora{
   0%{transform:translate(0,0) scale(1);}
@@ -1181,10 +1177,12 @@ a{color:inherit;text-decoration:none;}
 
 button{font-family:'Geist',sans-serif;cursor:pointer;border:none;outline:none;transition:transform .12s ease, background .12s ease, color .12s ease, border-color .12s ease, box-shadow .15s ease;}
 .panel{
-  position:relative; transform:translateZ(0);
-  background:linear-gradient(155deg, var(--glass-bg-elevated), var(--glass-bg) 62%);
-  backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-sat));
-  -webkit-backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-sat));
+  position:relative;
+  /* No backdrop-filter here: many panels render at once (the dashboard has 10+),
+     and each blur is a separate GPU layer re-blurring the background every frame —
+     the main cause of the dashboard lag. The shell behind is near-solid, so a
+     slightly more opaque fill looks the same at zero cost. */
+  background:linear-gradient(155deg, rgba(30,27,45,.92), rgba(20,19,30,.94) 62%);
   border:1px solid var(--border-2); border-radius:var(--r-xl);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.10), inset 0 0 48px rgba(147,112,255,.035), 0 2px 4px rgba(0,0,0,.3), 0 16px 40px rgba(0,0,0,.4);
   transition:border-color .2s var(--ease-smooth), box-shadow .2s var(--ease-smooth), transform .2s var(--ease-smooth);
@@ -1228,7 +1226,7 @@ input.toggle-switch:checked::after{transform:translateX(18px);}
 input:focus,select:focus,textarea:focus{border-color:var(--gold);background:rgba(255,255,255,.05);box-shadow:inset 0 1px 2px rgba(0,0,0,.12), 0 0 0 3px var(--gold-glow);}
 label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.7px;display:block;margin-bottom:7px;font-weight:600;}
 .field{margin-bottom:15px;}
-.badge{position:relative;padding:5px 11px 5px 9px;font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;display:inline-flex;align-items:center;gap:6px;border-radius:100px;line-height:1.3;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);backdrop-filter:blur(6px);transition:transform .18s var(--ease-spring), box-shadow .18s ease;}
+.badge{position:relative;padding:5px 11px 5px 9px;font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;display:inline-flex;align-items:center;gap:6px;border-radius:100px;line-height:1.3;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);transition:transform .18s var(--ease-spring), box-shadow .18s ease;}
 .badge:hover{transform:translateY(-1px);}
 .badge::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0;box-shadow:0 0 7px currentColor, 0 0 1px currentColor;}
 .badge-ic{display:none;}
@@ -1269,14 +1267,14 @@ label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spa
 .pin-dot.error{border-color:var(--danger);animation:shake .4s;}
 @keyframes shake{0%,100%{transform:translateX(0);}25%{transform:translateX(-6px);}75%{transform:translateX(6px);}}
 .keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
-.key{aspect-ratio:1;border-radius:20px;font-size:23px;font-weight:600;background:linear-gradient(160deg,rgba(255,255,255,.055),rgba(255,255,255,.02) 60%);border:1px solid var(--border-2);color:var(--text);font-family:'Geist Mono',monospace;position:relative;overflow:hidden;transition:transform .14s var(--ease-spring), background .14s ease, border-color .14s ease, box-shadow .18s ease;box-shadow:inset 0 1px 0 rgba(255,255,255,.08), 0 1px 2px rgba(0,0,0,.3), 0 4px 12px rgba(0,0,0,.22);backdrop-filter:blur(8px);}
+.key{aspect-ratio:1;border-radius:20px;font-size:23px;font-weight:600;background:linear-gradient(160deg,rgba(255,255,255,.055),rgba(255,255,255,.02) 60%);border:1px solid var(--border-2);color:var(--text);font-family:'Geist Mono',monospace;position:relative;overflow:hidden;transition:transform .14s var(--ease-spring), background .14s ease, border-color .14s ease, box-shadow .18s ease;box-shadow:inset 0 1px 0 rgba(255,255,255,.08), 0 1px 2px rgba(0,0,0,.3), 0 4px 12px rgba(0,0,0,.22);}
 .key:hover{background:linear-gradient(160deg,rgba(255,255,255,.09),rgba(255,255,255,.03) 60%);border-color:rgba(255,255,255,.2);box-shadow:inset 0 1px 0 rgba(255,255,255,.1), 0 2px 4px rgba(0,0,0,.3), 0 8px 20px rgba(0,0,0,.3);transform:translateY(-1px);}
 .key:active{transform:scale(.9);background:linear-gradient(140deg,var(--violet-bright),var(--gold));color:#fff;border-color:transparent;box-shadow:0 4px 20px var(--gold-glow), inset 0 1px 0 rgba(255,255,255,.4);}
 .key.wide{font-size:12px;color:var(--text-dim);}
 .login-error{color:var(--danger);font-size:12.5px;margin-top:12px;min-height:16px;}
 
 /* ---------- Shell layout ---------- */
-.topbar{position:sticky;top:0;z-index:60;display:flex;justify-content:space-between;align-items:center;padding:calc(16px + env(safe-area-inset-top)) 22px 16px;background:linear-gradient(180deg, rgba(147,112,255,.07), rgba(255,255,255,.02) 70%, transparent);backdrop-filter:blur(18px) saturate(1.6);-webkit-backdrop-filter:blur(18px) saturate(1.6);border-bottom:1px solid rgba(255,255,255,.08);box-shadow:0 1px 0 rgba(255,255,255,.03);}
+.topbar{position:sticky;top:0;z-index:60;display:flex;justify-content:space-between;align-items:center;padding:calc(16px + env(safe-area-inset-top)) 22px 16px;background:linear-gradient(180deg, rgba(147,112,255,.07), rgba(255,255,255,.02) 70%, transparent);backdrop-filter:blur(8px) saturate(1.3);-webkit-backdrop-filter:blur(8px) saturate(1.3);border-bottom:1px solid rgba(255,255,255,.08);box-shadow:0 1px 0 rgba(255,255,255,.03);}
 .brand{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:15.5px;display:flex;align-items:center;gap:10px;letter-spacing:-.02em;}
 .brand-mark{width:22px;height:22px;border-radius:7px;background:linear-gradient(135deg,var(--violet-bright),var(--gold));position:relative;flex-shrink:0;overflow:hidden;box-shadow:0 2px 10px rgba(124,92,255,.4), inset 0 1px 0 rgba(255,255,255,.3);}
 .brand-mark::after{content:'';position:absolute;inset:0;background:linear-gradient(115deg,transparent 40%,rgba(255,255,255,.45) 50%,transparent 60%);transform:translateX(-140%);animation:brandShine 5.5s var(--ease-smooth) infinite;}
@@ -1297,7 +1295,7 @@ label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spa
 
 /* Admin: sidebar */
 .admin-shell{display:flex;min-height:100vh;min-height:100dvh;}
-.admin-sidebar{width:236px;flex-shrink:0;background:linear-gradient(180deg, rgba(147,112,255,.035), rgba(255,255,255,.015));backdrop-filter:blur(12px) saturate(1.35);-webkit-backdrop-filter:blur(12px) saturate(1.35);border-right:1px solid rgba(255,255,255,.09);padding:20px 14px;position:sticky;top:0;height:100vh;height:100dvh;overflow-y:auto;-webkit-overflow-scrolling:touch;}
+.admin-sidebar{width:236px;flex-shrink:0;background:linear-gradient(180deg, rgba(147,112,255,.035), rgba(255,255,255,.015));border-right:1px solid rgba(255,255,255,.09);padding:20px 14px;position:sticky;top:0;height:100vh;height:100dvh;overflow-y:auto;-webkit-overflow-scrolling:touch;}
 .side-link{display:flex;align-items:center;gap:11px;padding:9px 12px;border-radius:var(--r-sm);font-size:13px;font-weight:500;color:var(--text-dim);cursor:pointer;margin-bottom:1px;position:relative;transition:background .15s ease, color .15s ease, padding-left .2s cubic-bezier(.34,1.56,.64,1);}
 .side-link:hover{padding-left:16px;color:var(--text);background:rgba(255,255,255,.03);}
 .side-link .ic{transition:transform .25s cubic-bezier(.34,1.56,.64,1);}
@@ -1322,7 +1320,7 @@ label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spa
   position:fixed;bottom:0;left:0;right:0;z-index:70;
   display:flex;align-items:stretch;
   background:linear-gradient(180deg, rgba(20,18,30,.72), rgba(12,12,18,.86));
-  backdrop-filter:blur(24px) saturate(1.7);-webkit-backdrop-filter:blur(24px) saturate(1.7);
+  backdrop-filter:blur(10px) saturate(1.4);-webkit-backdrop-filter:blur(10px) saturate(1.4);
   border-top:1px solid rgba(255,255,255,.10);
   box-shadow:0 -1px 0 rgba(255,255,255,.04), 0 -12px 32px rgba(0,0,0,.36);
   padding:8px 8px calc(8px + env(safe-area-inset-bottom));
@@ -1370,7 +1368,7 @@ label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spa
 table{width:100%;border-collapse:collapse;font-size:13px;}
 .table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;}
 /* ---- Lead Vault: a genuine two-pane workspace, not a stack of generic panels ---- */
-.vault-workspace{display:flex;gap:0;align-items:flex-start;background:linear-gradient(155deg, var(--glass-bg-elevated), var(--glass-bg) 60%);backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-sat));-webkit-backdrop-filter:blur(var(--glass-blur)) saturate(var(--glass-sat));border:1px solid var(--border-2);border-radius:var(--r-xl);box-shadow:inset 0 1px 0 rgba(255,255,255,.06), 0 2px 4px rgba(0,0,0,.3), 0 14px 32px rgba(0,0,0,.35);overflow:hidden;min-height:520px;}
+.vault-workspace{display:flex;gap:0;align-items:flex-start;background:linear-gradient(155deg, rgba(30,27,45,.92), rgba(20,19,30,.94) 60%);border:1px solid var(--border-2);border-radius:var(--r-xl);box-shadow:inset 0 1px 0 rgba(255,255,255,.06), 0 2px 4px rgba(0,0,0,.3), 0 14px 32px rgba(0,0,0,.35);overflow:hidden;min-height:520px;}
 .vault-rail{width:240px;flex-shrink:0;border-right:1px solid var(--border);padding:var(--sp-5);display:flex;flex-direction:column;gap:var(--sp-5);background:rgba(0,0,0,.14);}
 .vault-rail-title{font-family:'Bricolage Grotesque',sans-serif;font-weight:700;font-size:15px;letter-spacing:-.01em;}
 .vault-rail-sub{font-size:11.5px;color:var(--text-dim);line-height:1.6;margin-top:6px;}
@@ -1432,7 +1430,7 @@ tr.clickable:active{background:rgba(255,255,255,.05);}
 .waiting-sub{color:var(--text-dim);font-size:12.5px;}
 
 /* offer / call cards */
-.offer-card{position:relative;padding:24px;border-radius:20px;margin-bottom:14px;overflow:hidden;background:rgba(255,255,255,.045);backdrop-filter:blur(24px) saturate(1.4);-webkit-backdrop-filter:blur(24px) saturate(1.4);border:1px solid rgba(255,255,255,.09);box-shadow:inset 0 1px 0 rgba(255,255,255,.07), 0 2px 4px rgba(0,0,0,.3), 0 12px 28px rgba(0,0,0,.3);}
+.offer-card{position:relative;padding:24px;border-radius:20px;margin-bottom:14px;overflow:hidden;background:rgba(28,26,40,.9);border:1px solid rgba(255,255,255,.09);box-shadow:inset 0 1px 0 rgba(255,255,255,.07), 0 2px 4px rgba(0,0,0,.3), 0 12px 28px rgba(0,0,0,.3);}
 .pulse-dot{position:absolute;top:20px;right:20px;width:9px;height:9px;border-radius:50%;background:var(--success);box-shadow:0 0 0 0 rgba(34,197,94,.55);animation:liveDotPulse 1.8s ease-out infinite;}
 .offer-label{font-size:10.5px;color:var(--text-faint);text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:10px;}
 .offer-name{font-size:20px;font-weight:700;font-family:'Bricolage Grotesque',sans-serif;letter-spacing:-.01em;margin-bottom:4px;}
