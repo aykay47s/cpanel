@@ -17,8 +17,12 @@ users.post('/api/auth/login', async (c) => {
   // own instance, exactly like before multi-tenancy existed.
   let tenantId: number | null = null;
   if (slug) {
-    const [tenant] = await sql`SELECT id, expires_at, name FROM tenants WHERE slug = ${slug} AND status = 'active'`;
+    const [tenant] = await sql`SELECT id, expires_at, name, status, termination_reason FROM tenants WHERE slug = ${slug}`;
     if (!tenant) return bad(c, 'This call center panel could not be found', 404);
+    if (tenant.status === 'terminated') {
+      return bad(c, tenant.termination_reason ? `This panel has been terminated: ${tenant.termination_reason}` : 'This panel has been terminated. Contact whoever set this up.', 403);
+    }
+    if (tenant.status !== 'active') return bad(c, 'This call center panel could not be found', 404);
     // This is what actually enforces "access for X days" from a redeemed key -
     // once expires_at has passed, the panel stops being reachable at all, not just
     // visually marked as expired somewhere in Master Control.

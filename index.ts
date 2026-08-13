@@ -14,6 +14,7 @@ import { telegram } from './src/routes/telegram';
 import { STORE_PAGE } from './src/store';
 import { REDEEM_PAGE } from './src/redeem';
 import { MASTER_PAGE } from './src/master';
+import { AFFILIATE_PAGE } from './src/affiliate';
 import { MAIN_JS } from './src/frontend';
 import { ADMIN_JS } from './src/adminJs';
 import { STAFF_JS } from './src/staffJs';
@@ -76,9 +77,35 @@ app.get('/control', (c) => {
 
 app.get('/store', async (c) => {
   c.header('Cache-Control', 'no-store, no-cache, must-revalidate');
-  const [row] = await sql`SELECT value FROM settings WHERE key = 'store_checkout_url'`;
-  const checkoutUrl = row?.value || 'https://t.me/+M-aK0jz4wDI5Nzdh';
-  return c.html(STORE_PAGE(checkoutUrl));
+  const settingRows = await sql`SELECT key, value FROM settings WHERE key IN (
+    'store_checkout_url',
+    'price_3day', 'price_7day', 'price_14day', 'price_30day',
+    'buy_url_3day', 'buy_url_7day', 'buy_url_14day', 'buy_url_30day'
+  )`;
+  const s: Record<string, string> = {};
+  for (const r of settingRows) s[r.key] = r.value;
+  const checkoutUrl = s['store_checkout_url'] || 'https://t.me/+M-aK0jz4wDI5Nzdh';
+  const cfg = {
+    checkoutUrl,
+    prices: {
+      d3: s['price_3day'] || '130',
+      d7: s['price_7day'] || '300',
+      d14: s['price_14day'] || '600',
+      d30: s['price_30day'] || '1250',
+    },
+    buyUrls: {
+      d3: s['buy_url_3day'] || checkoutUrl,
+      d7: s['buy_url_7day'] || checkoutUrl,
+      d14: s['buy_url_14day'] || checkoutUrl,
+      d30: s['buy_url_30day'] || checkoutUrl,
+    },
+  };
+  return c.html(STORE_PAGE(cfg));
+});
+
+app.get('/affiliate', (c) => {
+  c.header('Cache-Control', 'no-store, no-cache, must-revalidate');
+  return c.html(AFFILIATE_PAGE);
 });
 
 app.get('/redeem', (c) => {

@@ -436,6 +436,11 @@ export async function ensureDb() {
   if (!goalRow) {
     await sql`INSERT INTO settings (key, value) VALUES ('goal_target', '50'), ('goal_label', 'Successful calls this week') ON CONFLICT (key) DO NOTHING`;
   }
+  // Default store pricing ladder (linear, 30d = £1250). Operator can change any
+  // of these in Master → Store. Only inserted if absent, never overwrites edits.
+  await sql`INSERT INTO settings (key, value) VALUES
+    ('price_3day','130'), ('price_7day','300'), ('price_14day','600'), ('price_30day','1250')
+    ON CONFLICT (key) DO NOTHING`;
   const [templateRow] = await sql`SELECT 1 FROM settings WHERE key = 'call_template'`;
   if (!templateRow) {
     await sql`INSERT INTO settings (key, value) VALUES ('call_template', ${DEFAULT_CALL_TEMPLATE}) ON CONFLICT (key) DO NOTHING`;
@@ -634,6 +639,52 @@ export async function ensureDb() {
       try { await sql`DELETE FROM chat_messages WHERE expires_at IS NOT NULL AND expires_at < now()`; } catch {}
     }, 30000);
   }
+
+  // === Panel termination (master can kill a tenant and record why) ===
+  const terminationAlters = [
+    `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS terminated_at TIMESTAMPTZ`,
+    `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS termination_reason TEXT`,
+  ];
+  for (const stmt of terminationAlters) {
+    await sql.unsafe(`DO $$ BEGIN ${stmt}; EXCEPTION WHEN OTHERS THEN NULL; END $$;`);
+  }
+
+  // === Affiliate / referral system ===
+  // An affiliate has a unique code. When that code is entered at key redemption,
+  // a referral row is created crediting the affiliate 10% of the sale price.
+  // This is tracking only — it never reduces what the buyer pays.
+  await sql`CREATE TABLE IF NOT EXISTS affiliates (
+    id SERIAL PRIMARY KEY,
+    code TEXT UNIQUE NOT NULL,
+    name TEXT,
+    telegram_username TEXT,
+    payout_wallet TEXT,
+    payout_currency TEXT DEFAULT 'USDT',
+    commission_pct NUMERIC NOT NULL DEFAULT 10,
+    access_pin TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`;
+  await sql`CREATE INDEX IF NOT EXISTS affiliates_code_lookup ON affiliates (lower(code))`;
+
+  // One row per referred sale. amount = sale price, commission = affiliate's cut.
+  await sql`CREATE TABLE IF NOT EXISTS affiliate_referrals (
+    id SERIAL PRIMARY KEY,
+    affiliate_id INTEGER NOT NULL REFERENCES affiliates(id) ON DELETE CASCADE,
+    license_key_id INTEGER REFERENCES license_keys(id) ON DELETE SET NULL,
+    tenant_id INTEGER REFERENCES tenants(id) ON DELETE SET NULL,
+    tenant_name TEXT,
+    sale_amount NUMERIC NOT NULL DEFAULT 0,
+    commission_amount NUMERIC NOT NULL DEFAULT 0,
+    commission_pct NUMERIC NOT NULL DEFAULT 10,
+    paid_out BOOLEAN NOT NULL DEFAULT false,
+    paid_out_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`;
+  await sql`CREATE INDEX IF NOT EXISTS affiliate_referrals_aff ON affiliate_referrals (affiliate_id)`;
+
+  // Let a redeemed key remember which affiliate code was used, so the master
+  // history and per-tenant view can show the referral source.
+  await sql.unsafe(`DO $$ BEGIN ALTER TABLE license_keys ADD COLUMN IF NOT EXISTS referral_code TEXT; EXCEPTION WHEN OTHERS THEN NULL; END $$;`);
 
   // Runs last: both need the tenants table populated (self-tenant is created
   // further up in this function), and the category seed needs the unique index

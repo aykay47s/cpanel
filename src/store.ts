@@ -3,8 +3,24 @@
 // configures in their admin panel (Settings → Store Contact URL).
 // Operator never changes this file; they change the DB setting.
 
-export function STORE_PAGE(contactUrl: string): string {
-  const cta = contactUrl || 'https://t.me/clearpanelotpbot';
+// ClearPanel store — marketing/pricing page for reselling call-centre panels.
+// Prices and per-tier buy links are configured by the operator in the DB
+// (settings: price_3day/7day/14day/30day, buy_url_*). Operator never edits this file.
+
+export interface StoreConfig {
+  checkoutUrl: string;
+  prices: { d3: string; d7: string; d14: string; d30: string };
+  buyUrls: { d3: string; d7: string; d14: string; d30: string };
+}
+
+export function STORE_PAGE(cfg: StoreConfig | string): string {
+  // Back-compat: if called with a bare string, treat it as the checkout URL.
+  const config: StoreConfig = typeof cfg === 'string'
+    ? { checkoutUrl: cfg, prices: { d3: '130', d7: '300', d14: '600', d30: '1250' }, buyUrls: { d3: cfg, d7: cfg, d14: cfg, d30: cfg } }
+    : cfg;
+  const cta = config.checkoutUrl || 'https://t.me/clearpanelotpbot';
+  const P = config.prices;
+  const B = config.buyUrls;
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -158,17 +174,17 @@ footer{border-top:1px solid var(--border);padding:40px clamp(20px,5vw,80px);disp
     <a href="#pricing">Pricing</a>
     <a href="#faq">FAQ</a>
   </div>
-  <a href="${cta}" target="_blank" class="nav-cta">Get Access</a>
+  <a href="#pricing" class="nav-cta">Get Your Panel</a>
 </nav>
 
 <div class="hero">
   <div class="hero-bg"></div>
   <div class="hero-content">
-    <div class="hero-badge">CCMP — Call Centre Management Platform · <a href="https://t.me/clearpanelotpbot" target="_blank" style="color:inherit;text-decoration:underline;opacity:.8;">@clearpanelotpbot</a></div>
-    <h1>Run your sales floor.<br>Without the chaos.</h1>
-    <p class="hero-sub">ClearPanel gives your calling team a live lead pipeline, real-time scripts, call tracking, and a leaderboard that actually motivates. Purpose-built for outbound sales teams.</p>
+    <div class="hero-badge">CCMP — Your own Call Centre Management Platform · <a href="https://t.me/clearpanelotpbot" target="_blank" style="color:inherit;text-decoration:underline;opacity:.8;">@clearpanelotpbot</a></div>
+    <h1>Your own call centre.<br>Fully branded. Yours.</h1>
+    <p class="hero-sub">ClearPanel isn't a tool you rent a seat on — you get your <b>own</b> fully-branded panel: your name, your logo, your subdomain, your team. Live lead pipeline, real-time scripts, call tracking, and a leaderboard that actually drives the floor. Redeem a key and you're running in minutes.</p>
     <div class="hero-actions">
-      <a href="${cta}" target="_blank" class="btn-primary">Get in touch</a>
+      <a href="#pricing" class="btn-primary">See pricing</a>
       <a href="#features" class="btn-ghost">See what's included</a>
     </div>
     <div class="hero-stats">
@@ -276,75 +292,85 @@ footer{border-top:1px solid var(--border);padding:40px clamp(20px,5vw,80px);disp
 
 <section id="pricing">
   <div class="section-tag">Pricing</div>
-  <h2 class="section-title">Straightforward.<br>No hidden fees.</h2>
-  <p class="section-sub">Every tier includes the full platform. Higher tiers add more callers, more features, and priority support. Get in touch to discuss what fits.</p>
+  <h2 class="section-title">Your own panel.<br>One flat price.</h2>
+  <p class="section-sub">This isn't a subscription to someone else's tool — you get your <b>own fully-branded call centre panel</b>: your name, your logo, your subdomain, your team. Pick how long you want access. Every tier is the complete platform — no features held back, no per-caller fees.</p>
   <div class="tiers-grid">
     <div class="tier">
       <div class="tier-head">
-        <div class="tier-name">Starter</div>
-        <div class="tier-price">Talk to us<span></span></div>
-        <div class="tier-desc">For small teams getting started with structured outbound calling.</div>
+        <div class="tier-name">3 Days</div>
+        <div class="tier-price">£${P.d3}<span></span></div>
+        <div class="tier-desc">Run a short campaign or trial the full platform with your whole team.</div>
       </div>
       <div class="tier-body">
         <ul class="tier-features">
-          <li>Up to 10 callers</li>
-          <li>Live lead pipeline</li>
-          <li>Script library</li>
-          <li>XP and leaderboard</li>
-          <li>Team chat</li>
-          <li>Telegram verification</li>
-          <li class="no">3CX inbound integration</li>
-          <li class="no">Twilio IVR</li>
-          <li class="no">Custom branding</li>
+          <li>Your own branded panel</li>
+          <li>Unlimited callers</li>
+          <li>Live lead pipeline &amp; vault</li>
+          <li>Scripts, XP, leaderboard</li>
+          <li>Team chat &amp; Telegram</li>
+          <li>3CX &amp; Twilio ready</li>
         </ul>
-        <a href="${cta}" target="_blank" class="tier-cta ghost">Get in touch</a>
-      </div>
-    </div>
-    <div class="tier featured">
-      <div class="tier-badge">Most popular</div>
-      <div class="tier-head">
-        <div class="tier-name">Professional</div>
-        <div class="tier-price">Talk to us<span></span></div>
-        <div class="tier-desc">For established teams that need inbound routing and full custom branding.</div>
-      </div>
-      <div class="tier-body">
-        <ul class="tier-features">
-          <li>Up to 40 callers</li>
-          <li>Live lead pipeline</li>
-          <li>Script library</li>
-          <li>XP, ranks and leaderboard</li>
-          <li>Team chat with announcements</li>
-          <li>Telegram DM broadcasts</li>
-          <li>3CX inbound integration</li>
-          <li>Twilio IVR routing</li>
-          <li>Full custom branding</li>
-          <li>Finishing queue</li>
-          <li class="no">Dedicated support</li>
-        </ul>
-        <a href="${cta}" target="_blank" class="tier-cta primary">Get in touch</a>
+        <a href="${B.d3}" target="_blank" class="tier-cta ghost">Get 3-day access</a>
       </div>
     </div>
     <div class="tier">
       <div class="tier-head">
-        <div class="tier-name">Enterprise</div>
-        <div class="tier-price">Talk to us<span></span></div>
-        <div class="tier-desc">For large floors, multiple teams, or custom integration requirements.</div>
+        <div class="tier-name">7 Days</div>
+        <div class="tier-price">£${P.d7}<span></span></div>
+        <div class="tier-desc">A full week to run your floor at full capacity.</div>
       </div>
       <div class="tier-body">
         <ul class="tier-features">
+          <li>Your own branded panel</li>
           <li>Unlimited callers</li>
-          <li>Everything in Professional</li>
-          <li>Multiple tenant panels</li>
-          <li>Priority onboarding</li>
-          <li>Dedicated support channel</li>
-          <li>Custom feature requests</li>
-          <li>SLA guarantees</li>
-          <li>Admin analytics dashboard</li>
+          <li>Live lead pipeline &amp; vault</li>
+          <li>Scripts, XP, leaderboard</li>
+          <li>Team chat &amp; Telegram</li>
+          <li>3CX &amp; Twilio ready</li>
         </ul>
-        <a href="${cta}" target="_blank" class="tier-cta ghost">Get in touch</a>
+        <a href="${B.d7}" target="_blank" class="tier-cta ghost">Get 7-day access</a>
+      </div>
+    </div>
+    <div class="tier featured">
+      <div class="tier-badge">Best value</div>
+      <div class="tier-head">
+        <div class="tier-name">30 Days</div>
+        <div class="tier-price">£${P.d30}<span></span></div>
+        <div class="tier-desc">A full month running your own call centre, top to bottom.</div>
+      </div>
+      <div class="tier-body">
+        <ul class="tier-features">
+          <li>Your own branded panel</li>
+          <li>Unlimited callers</li>
+          <li>Live lead pipeline &amp; vault</li>
+          <li>Scripts, XP, leaderboard</li>
+          <li>Team chat &amp; Telegram DMs</li>
+          <li>3CX inbound &amp; Twilio IVR</li>
+          <li>Priority setup support</li>
+        </ul>
+        <a href="${B.d30}" target="_blank" class="tier-cta primary">Get 30-day access</a>
+      </div>
+    </div>
+    <div class="tier">
+      <div class="tier-head">
+        <div class="tier-name">14 Days</div>
+        <div class="tier-price">£${P.d14}<span></span></div>
+        <div class="tier-desc">Two weeks of full access for a sustained push.</div>
+      </div>
+      <div class="tier-body">
+        <ul class="tier-features">
+          <li>Your own branded panel</li>
+          <li>Unlimited callers</li>
+          <li>Live lead pipeline &amp; vault</li>
+          <li>Scripts, XP, leaderboard</li>
+          <li>Team chat &amp; Telegram</li>
+          <li>3CX &amp; Twilio ready</li>
+        </ul>
+        <a href="${B.d14}" target="_blank" class="tier-cta ghost">Get 14-day access</a>
       </div>
     </div>
   </div>
+  <p style="text-align:center;color:var(--faint);font-size:12.5px;margin-top:28px;">Access is delivered as a one-time key you redeem at <b>/redeem</b> to spin up your panel instantly.</p>
 </section>
 
 <section>
@@ -419,9 +445,12 @@ footer{border-top:1px solid var(--border);padding:40px clamp(20px,5vw,80px);disp
 </section>
 
 <div class="cta-section">
-  <h2>Ready to run a tighter floor?</h2>
-  <p>Message us on Telegram and we'll have your team set up and dialling the same day.</p>
-  <a href="${cta}" target="_blank" class="btn-primary" style="font-size:16px;padding:18px 44px;">Get in touch</a>
+  <h2>Ready to run your own floor?</h2>
+  <p>Pick a plan, redeem your key, and your fully-branded panel is live in minutes. Questions first? Message us on Telegram.</p>
+  <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+    <a href="#pricing" class="btn-primary" style="font-size:16px;padding:18px 44px;">See pricing</a>
+    <a href="${cta}" target="_blank" class="btn-ghost" style="font-size:15px;padding:18px 36px;">Talk to us first</a>
+  </div>
 </div>
 
 <footer>
