@@ -351,7 +351,7 @@ function renderActiveCallShell(body, lead, role, scripts, template) {
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
         <div style="display:flex;align-items:center;gap:8px;">
           <span style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:100px;background:\${statusColor}18;border:1px solid \${statusColor}44;font-size:11px;font-weight:700;color:\${statusColor};">
-            \${isOnCall ? '<span style="width:7px;height:7px;border-radius:50%;background:var(--success);box-shadow:0 0 6px var(--success);display:inline-block;"></span> On Call' : '📞 Calling'}
+            \${isOnCall ? '<span style="width:7px;height:7px;border-radius:50%;background:var(--success);box-shadow:0 0 6px var(--success);display:inline-block;"></span> On Call' : iconInline(ICONS.phone) + ' Calling'}
           </span>
           \${(lead.call_attempts||0) > 1 ? '<span style="font-size:10px;color:var(--text-faint);background:rgba(255,255,255,.06);padding:3px 8px;border-radius:100px;">Attempt ' + lead.call_attempts + '</span>' : ''}
         </div>
@@ -365,8 +365,8 @@ function renderActiveCallShell(body, lead, role, scripts, template) {
           <span class="mono" style="font-size:13px;color:var(--text-dim);">\${lead.phone}</span>
           \${categoryBadgeHtml(lead.lead_type)}
         </div>
-        \${lead.email ? '<div style="font-size:12.5px;color:var(--text-dim);margin-top:6px;">✉ ' + esc(lead.email) + '</div>' : ''}
-        \${lead.address ? '<div style="font-size:12.5px;color:var(--text-dim);margin-top:3px;">📍 ' + esc(lead.address) + '</div>' : ''}
+        \${lead.email ? '<div style="font-size:12.5px;color:var(--text-dim);margin-top:6px;">' + iconInline(ICONS.mail) + ' ' + esc(lead.email) + '</div>' : ''}
+        \${lead.address ? '<div style="font-size:12.5px;color:var(--text-dim);margin-top:3px;">' + iconInline(ICONS.pin) + ' ' + esc(lead.address) + '</div>' : ''}
         \${lead.notes ? '<div style="margin-top:10px;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid var(--border);font-size:12.5px;color:var(--text-dim);line-height:1.5;white-space:pre-wrap;">' + esc(lead.notes) + '</div>' : ''}
       </div>
 
@@ -388,9 +388,9 @@ function renderActiveCallShell(body, lead, role, scripts, template) {
         <div style="font-size:11.5px;color:var(--text-faint);line-height:1.5;">Dial, then tap <b style="color:var(--text);">Mark On Call</b> the moment they answer — that unlocks outcome buttons below.</div>
       </div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
-        <button class="outcome-btn" onclick="recordOutcome(\${lead.id},'voicemail')" style="padding:12px;border-radius:12px;background:rgba(255,255,255,.05);border:1px solid var(--border);color:var(--text-dim);font-size:13px;font-weight:600;cursor:pointer;">📬 Voicemail</button>
-        <button class="outcome-btn" onclick="recordOutcome(\${lead.id},'no_answer')" style="padding:12px;border-radius:12px;background:rgba(255,255,255,.05);border:1px solid var(--border);color:var(--text-dim);font-size:13px;font-weight:600;cursor:pointer;">🔇 No Answer</button>
-        <button class="outcome-btn" onclick="recordOutcome(\${lead.id},'busy')" style="padding:12px;border-radius:12px;background:rgba(255,255,255,.05);border:1px solid var(--border);color:var(--text-dim);font-size:13px;font-weight:600;cursor:pointer;">📵 Unavailable</button>
+        <button class="outcome-btn" onclick="recordOutcome(\${lead.id},'voicemail')" style="padding:12px;border-radius:12px;background:rgba(255,255,255,.05);border:1px solid var(--border);color:var(--text-dim);font-size:13px;font-weight:600;cursor:pointer;">\${iconInline(ICONS.mailbox)} Voicemail</button>
+        <button class="outcome-btn" onclick="recordOutcome(\${lead.id},'no_answer')" style="padding:12px;border-radius:12px;background:rgba(255,255,255,.05);border:1px solid var(--border);color:var(--text-dim);font-size:13px;font-weight:600;cursor:pointer;">\${iconInline(ICONS.mute)} No Answer</button>
+        <button class="outcome-btn" onclick="recordOutcome(\${lead.id},'busy')" style="padding:12px;border-radius:12px;background:rgba(255,255,255,.05);border:1px solid var(--border);color:var(--text-dim);font-size:13px;font-weight:600;cursor:pointer;">\${iconInline(ICONS.phoneOff)} Unavailable</button>
         <button class="outcome-btn" onclick="recordOutcome(\${lead.id},'cancelled')" style="padding:12px;border-radius:12px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);color:var(--danger);font-size:13px;font-weight:600;cursor:pointer;">✕ Cancel</button>
       </div>
       \` : \`
@@ -400,9 +400,9 @@ function renderActiveCallShell(body, lead, role, scripts, template) {
           ✓ Successful Call
         </button>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
-          <button onclick="recordOutcome(\${lead.id},'callback_requested')" style="padding:12px;border-radius:12px;background:rgba(250,204,21,.08);border:1px solid rgba(250,204,21,.3);color:#fbbf24;font-size:13px;font-weight:600;cursor:pointer;">📅 Callback</button>
-          <button onclick="recordOutcome(\${lead.id},'hung_up')" style="padding:12px;border-radius:12px;background:rgba(255,255,255,.05);border:1px solid var(--border);color:var(--text-dim);font-size:13px;font-weight:600;cursor:pointer;">📵 Hung Up</button>
-          <button onclick="recordOutcome(\${lead.id},'requires_review')" style="padding:12px;border-radius:12px;background:rgba(79,140,255,.08);border:1px solid rgba(79,140,255,.25);color:var(--gold-bright);font-size:13px;font-weight:600;cursor:pointer;">🔍 Review</button>
+          <button onclick="recordOutcome(\${lead.id},'callback_requested')" style="padding:12px;border-radius:12px;background:rgba(250,204,21,.08);border:1px solid rgba(250,204,21,.3);color:#fbbf24;font-size:13px;font-weight:600;cursor:pointer;">\${iconInline(ICONS.calendar)} Callback</button>
+          <button onclick="recordOutcome(\${lead.id},'hung_up')" style="padding:12px;border-radius:12px;background:rgba(255,255,255,.05);border:1px solid var(--border);color:var(--text-dim);font-size:13px;font-weight:600;cursor:pointer;">\${iconInline(ICONS.phoneOff)} Hung Up</button>
+          <button onclick="recordOutcome(\${lead.id},'requires_review')" style="padding:12px;border-radius:12px;background:rgba(79,140,255,.08);border:1px solid rgba(79,140,255,.25);color:var(--gold-bright);font-size:13px;font-weight:600;cursor:pointer;">\${iconInline(ICONS.search)} Review</button>
           <button onclick="recordOutcome(\${lead.id},'failed')" style="padding:12px;border-radius:12px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);color:var(--danger);font-size:13px;font-weight:600;cursor:pointer;">✕ Unsuccessful</button>
         </div>
         <button onclick="recordOutcome(\${lead.id},'chopped_previously')" style="width:100%;padding:10px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid var(--border);color:var(--text-faint);font-size:12.5px;font-weight:600;cursor:pointer;">Already worked</button>

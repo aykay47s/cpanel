@@ -205,47 +205,47 @@ footer{border-top:1px solid var(--border);padding:40px clamp(20px,5vw,80px);disp
   <p class="section-sub">No bloat. No generic CRM. ClearPanel is built from the ground up for outbound calling teams who need speed, visibility, and motivation built in.</p>
   <div class="features-grid">
     <div class="feat">
-      <div class="feat-icon" style="background:rgba(124,92,255,.15);">📋</div>
+      <div class="feat-icon" style="background:rgba(124,92,255,.15);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4V3a1 1 0 011-1h4a1 1 0 011 1v1M9 11h6M9 15h4"/></svg></div>
       <h4>Live Lead Pipeline</h4>
       <p>Every lead tracked from first dial to completion. Callers see exactly what to work, admins see exactly what's happening — in real time, no refresh needed.</p>
     </div>
     <div class="feat">
-      <div class="feat-icon" style="background:rgba(79,140,255,.15);">📞</div>
+      <div class="feat-icon" style="background:rgba(79,140,255,.15);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4f8cff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h4l2 6-3 2a13 13 0 006 6l2-3 6 2v4a2 2 0 01-2 2A17 17 0 012 6a2 2 0 012-2z"/></svg></div>
       <h4>3CX Inbound Integration</h4>
       <p>Connect your 3CX PBX and route inbound calls directly to available agents. Call control, hold, transfer — managed from inside the panel.</p>
     </div>
     <div class="feat">
-      <div class="feat-icon" style="background:rgba(244,114,182,.15);">🔀</div>
+      <div class="feat-icon" style="background:rgba(244,114,182,.15);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f472b6" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg></div>
       <h4>Twilio IVR Routing</h4>
       <p>Build intelligent IVR menus that route callers to the right agent or queue. Configure digits, hold music, and ring behaviour from the admin panel.</p>
     </div>
     <div class="feat">
-      <div class="feat-icon" style="background:rgba(34,197,94,.15);">📝</div>
+      <div class="feat-icon" style="background:rgba(34,197,94,.15);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></div>
       <h4>Script Library</h4>
       <p>Admins write scripts, callers follow them live. No switching tabs, no looking away from the lead. Script suggestions update based on call stage.</p>
     </div>
     <div class="feat">
-      <div class="feat-icon" style="background:rgba(251,191,36,.15);">🏆</div>
+      <div class="feat-icon" style="background:rgba(251,191,36,.15);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10v5a5 5 0 01-10 0V4z"/><path d="M7 5H4a3 3 0 003 5M17 5h3a3 3 0 01-3 5M9 19h6M12 14v5"/></svg></div>
       <h4>XP and Caller Ranks</h4>
       <p>Every dial, callback booked, and successful call earns XP. Callers progress from New Dialer to Legend. Real rank-up moments keep the floor competitive.</p>
     </div>
     <div class="feat">
-      <div class="feat-icon" style="background:rgba(239,68,68,.15);">⚡</div>
+      <div class="feat-icon" style="background:rgba(239,68,68,.15);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z"/></svg></div>
       <h4>Live Leaderboard</h4>
       <p>Floor-wide leaderboard with weekly and all-time views. Team goals, top performer spotlight, and XP history — motivation baked into the product.</p>
     </div>
     <div class="feat">
-      <div class="feat-icon" style="background:rgba(124,92,255,.15);">💬</div>
+      <div class="feat-icon" style="background:rgba(124,92,255,.15);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v11H8l-4 4V5z"/></svg></div>
       <h4>Team Chat</h4>
       <p>Built-in floor chat with admin announcements, disappearing messages, and push notifications. No Slack tab required.</p>
     </div>
     <div class="feat">
-      <div class="feat-icon" style="background:rgba(79,140,255,.15);">📱</div>
+      <div class="feat-icon" style="background:rgba(79,140,255,.15);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4f8cff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/></svg></div>
       <h4>Your Brand, Your App</h4>
       <p>Upload your logo, set your panel name — the whole interface becomes your product. Tenants get a fully branded call centre, not a white-label with seams showing.</p>
     </div>
     <div class="feat">
-      <div class="feat-icon" style="background:rgba(34,197,94,.15);">🔔</div>
+      <div class="feat-icon" style="background:rgba(34,197,94,.15);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10a6 6 0 1112 0c0 5 2 6 2 6H4s2-1 2-6z"/><path d="M10 20a2 2 0 004 0"/></svg></div>
       <h4>Telegram Announcements</h4>
       <p>Push updates to every verified caller individually via Telegram. Admin posts once, every team member gets a personal DM — even if they're off the panel.</p>
     </div>
@@ -282,7 +282,7 @@ footer{border-top:1px solid var(--border);padding:40px clamp(20px,5vw,80px);disp
 
 <!-- Telegram channel banner -->
 <div class="tg-banner">
-  <div class="tg-icon">📣</div>
+  <div class="tg-icon" style="color:#29a9eb;"><svg width="42" height="42" viewBox="0 0 24 24" fill="currentColor"><path d="M21.94 4.3a1.3 1.3 0 00-1.35-.2L3.3 10.98c-.86.34-.83 1.58.05 1.87l4.35 1.42 1.66 5.14a1 1 0 001.62.42l2.4-2.16 4.36 3.2a1.3 1.3 0 002.03-.82l3.2-14.5a1.3 1.3 0 00-.5-1.28zM9.5 14.13l8.1-5.9-6.6 6.9-.06 3.1-1.44-4.1z"/></svg></div>
   <div class="tg-banner-left">
     <h3>Stay in the loop.</h3>
     <p>Product updates, new features, and platform announcements go to our Telegram channel. Every ClearPanel operator gets individual DMs for critical updates — the channel is for everything else.</p>
