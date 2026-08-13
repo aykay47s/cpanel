@@ -219,9 +219,13 @@ telephony.post('/api/telephony/status', async (c) => {
 
 async function getTelnyxKey(tenantId: number | null): Promise<string | null> {
   const [row] = await sql`SELECT value FROM settings WHERE key = ${'telnyx_api_key:' + tenantId}`;
-  // Fall back to a server-level key (env) when the tenant hasn't stored one — lets
-  // the self-tenant's telephony work from config alone, no in-panel connect step.
-  return row?.value || process.env.TELNYX_API_KEY || null;
+  if (row?.value) return row.value;
+  // Env fallback applies ONLY to the platform's own self-tenant — never to resold
+  // tenants. This keeps the owner's Telnyx account/number completely private: a
+  // reseller only ever uses credentials they entered in their own panel.
+  const selfId = await getSelfTenantId();
+  if (tenantId != null && tenantId === selfId) return process.env.TELNYX_API_KEY || null;
+  return null;
 }
 
 // Issue a single Call Control command. action is e.g. 'answer', 'gather_using_speak',
@@ -347,7 +351,9 @@ async function telnyxDialNext(apiKey: string, callControlId: string, cfg: any, d
     return;
   }
   const target = callers[index].call_phone;
-  const fromNumber = cfg.telnyx_phone_number || process.env.TELNYX_PHONE_NUMBER || undefined;
+  // Env from-number fallback is self-tenant only (same privacy rule as the key).
+  const selfIdForFrom = await getSelfTenantId();
+  const fromNumber = cfg.telnyx_phone_number || (tenantId != null && tenantId === selfIdForFrom ? process.env.TELNYX_PHONE_NUMBER : undefined) || undefined;
   await telnyxCommand(apiKey, callControlId, 'transfer', {
     to: target,
     from: fromNumber,
@@ -365,10 +371,14 @@ async function telnyxDialNext(apiKey: string, callControlId: string, cfg: any, d
 telephony.get('/api/admin/telephony/telnyx/status', requireRole('admin'), async (c) => {
   const user = c.get('user');
   const [keyRow] = await sql`SELECT value FROM settings WHERE key = ${'telnyx_api_key:' + user.tenant_id}`;
-  const apiKey = keyRow?.value || process.env.TELNYX_API_KEY;
   const [cfgRow] = await sql`SELECT value FROM settings WHERE key = ${'telephony_config:' + user.tenant_id}`;
   const cfg = cfgRow ? JSON.parse(cfgRow.value) : {};
-  const number = cfg.telnyx_phone_number || process.env.TELNYX_PHONE_NUMBER;
+  // The env-configured key/number belong to the platform owner's self-tenant only.
+  // A reseller only ever sees a number they entered themselves — never the owner's.
+  const selfId = await getSelfTenantId();
+  const isSelf = user.tenant_id != null && user.tenant_id === selfId;
+  const apiKey = keyRow?.value || (isSelf ? process.env.TELNYX_API_KEY : undefined);
+  const number = cfg.telnyx_phone_number || (isSelf ? process.env.TELNYX_PHONE_NUMBER : undefined);
   if (!apiKey || !number) return c.json({ data: { configured: false } });
   try {
     const res = await fetch(`https://api.telnyx.com/v2/phone_numbers?filter%5Bphone_number%5D=${encodeURIComponent(number)}`, {
