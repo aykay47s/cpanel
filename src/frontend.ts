@@ -215,12 +215,12 @@ function showRoleQuiz() {
     + '<p style="font-size:13px;color:var(--text-dim);line-height:1.6;margin-bottom:28px;">Just so we point you to the right place. Your admin sets your actual access level.</p>'
     + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">'
     +   '<div data-role-pick="caller" class="role-card" onclick="confirmRole(this)">'
-    +     '<div style="font-size:32px;margin-bottom:10px;">📞</div>'
+    +     '<div style="width:40px;height:40px;margin:0 auto 10px;color:var(--gold-bright);display:flex;align-items:center;justify-content:center;">' + (ICONS_SVG.phone || '') + '</div>'
     +     '<div style="font-weight:700;font-size:15px;margin-bottom:6px;">Caller</div>'
     +     '<div style="font-size:12px;color:var(--text-dim);line-height:1.5;">Dial leads, log outcomes, track your XP and rank on the floor.</div>'
     +   '</div>'
     +   '<div data-role-pick="admin" class="role-card" onclick="confirmRole(this)">'
-    +     '<div style="font-size:32px;margin-bottom:10px;">🗂</div>'
+    +     '<div style="width:40px;height:40px;margin:0 auto 10px;color:var(--violet-bright);display:flex;align-items:center;justify-content:center;">' + (ICONS_SVG.dashboard || '') + '</div>'
     +     '<div style="font-weight:700;font-size:15px;margin-bottom:6px;">Manager / Admin</div>'
     +     '<div style="font-size:12px;color:var(--text-dim);line-height:1.5;">Upload leads, manage the team, view dashboards and run the floor.</div>'
     +   '</div>'
@@ -1027,12 +1027,19 @@ body{
   /* Deep purple-violet wash — near-black still dominates, but the colour now has
      real presence at the edges instead of being a faint hint. */
   background:
-    radial-gradient(ellipse 100% 65% at 12% -12%, rgba(147,112,255,.16), transparent 58%),
-    radial-gradient(ellipse 85% 60% at 105% -5%, rgba(79,140,255,.11), transparent 55%),
-    radial-gradient(ellipse 75% 55% at 50% 115%, rgba(45,212,191,.06), transparent 62%),
-    radial-gradient(ellipse 60% 40% at 90% 90%, rgba(167,139,250,.06), transparent 60%),
+    radial-gradient(ellipse 100% 65% at 12% -12%, rgba(147,112,255,.18), transparent 58%),
+    radial-gradient(ellipse 85% 60% at 105% -5%, rgba(79,140,255,.13), transparent 55%),
+    radial-gradient(ellipse 75% 55% at 50% 115%, rgba(45,212,191,.07), transparent 62%),
+    radial-gradient(ellipse 60% 40% at 90% 90%, rgba(167,139,250,.07), transparent 60%),
     var(--bg);
   font-size:14px;line-height:1.5;letter-spacing:-.006em;
+}
+/* Fine film-grain texture over the whole viewport — the single biggest "designed
+   vs flat" lift on dark UIs. Barely visible, but it kills the plasticky flatness
+   and reads as a premium, considered surface. Fixed, non-interactive, on top. */
+body::before{
+  content:''; position:fixed; inset:0; z-index:9999; pointer-events:none; opacity:.035; mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 .app-shell{
   position:relative; margin:18px; border-radius:var(--r-xl); overflow:hidden;
@@ -1126,7 +1133,7 @@ button{font-family:'Geist',sans-serif;cursor:pointer;border:none;outline:none;tr
 .btn-ghost:hover{color:var(--text);border-color:rgba(255,255,255,.26);}
 .btn-block{width:100%;}
 .btn-sm{padding:8px 14px;font-size:12px;border-radius:8px;}
-input,select,textarea{width:100%;padding:12px 16px;border-radius:14px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.04);color:var(--text);font-size:16px;outline:none;font-family:inherit;-webkit-appearance:none;appearance:none;transition:border-color .12s ease, box-shadow .12s ease;}
+input,select,textarea{width:100%;padding:13px 16px;border-radius:14px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.035);color:var(--text);font-size:16px;outline:none;font-family:inherit;-webkit-appearance:none;appearance:none;box-shadow:inset 0 1px 2px rgba(0,0,0,.15);transition:border-color .16s ease, box-shadow .16s ease, background .16s ease;}
 /* A real on/off switch, not a native checkbox — native checkboxes render as an
    ambiguous unstyled ring on dark backgrounds with no clear on/off signal. Applied
    via the .toggle-switch class on any checkbox used as a toggle. */
@@ -1134,7 +1141,7 @@ input.toggle-switch{width:44px;height:26px;padding:0;border-radius:100px;backgro
 input.toggle-switch::after{content:'';position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.4);transition:transform .2s cubic-bezier(.34,1.56,.64,1);}
 input.toggle-switch:checked{background:var(--success);border-color:transparent;}
 input.toggle-switch:checked::after{transform:translateX(18px);}
-input:focus,select:focus,textarea:focus{border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-glow);}
+input:focus,select:focus,textarea:focus{border-color:var(--gold);background:rgba(255,255,255,.05);box-shadow:inset 0 1px 2px rgba(0,0,0,.12), 0 0 0 3px var(--gold-glow);}
 label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.7px;display:block;margin-bottom:7px;font-weight:600;}
 .field{margin-bottom:15px;}
 .badge{position:relative;padding:5px 11px 5px 9px;font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;display:inline-flex;align-items:center;gap:6px;border-radius:100px;line-height:1.3;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);backdrop-filter:blur(6px);transition:transform .18s var(--ease-spring), box-shadow .18s ease;}
@@ -1178,9 +1185,9 @@ label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spa
 .pin-dot.error{border-color:var(--danger);animation:shake .4s;}
 @keyframes shake{0%,100%{transform:translateX(0);}25%{transform:translateX(-6px);}75%{transform:translateX(6px);}}
 .keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
-.key{aspect-ratio:1;border-radius:18px;font-size:22px;font-weight:600;background:linear-gradient(160deg,var(--s2),var(--bg-2));border:1px solid var(--border);color:var(--text);font-family:'Geist Mono',monospace;transition:transform .12s var(--ease-spring), background .12s ease, border-color .12s ease, box-shadow .15s ease;box-shadow:inset 0 1px 0 rgba(255,255,255,.04);}
-.key:hover{background:linear-gradient(160deg,var(--s3),var(--s1));border-color:var(--border-2);box-shadow:inset 0 1px 0 rgba(255,255,255,.06), var(--sh-1);}
-.key:active{transform:scale(.92);background:linear-gradient(140deg,var(--violet-bright),var(--gold));color:#fff;border-color:transparent;box-shadow:0 4px 16px var(--gold-glow);}
+.key{aspect-ratio:1;border-radius:20px;font-size:23px;font-weight:600;background:linear-gradient(160deg,rgba(255,255,255,.055),rgba(255,255,255,.02) 60%);border:1px solid var(--border-2);color:var(--text);font-family:'Geist Mono',monospace;position:relative;overflow:hidden;transition:transform .14s var(--ease-spring), background .14s ease, border-color .14s ease, box-shadow .18s ease;box-shadow:inset 0 1px 0 rgba(255,255,255,.08), 0 1px 2px rgba(0,0,0,.3), 0 4px 12px rgba(0,0,0,.22);backdrop-filter:blur(8px);}
+.key:hover{background:linear-gradient(160deg,rgba(255,255,255,.09),rgba(255,255,255,.03) 60%);border-color:rgba(255,255,255,.2);box-shadow:inset 0 1px 0 rgba(255,255,255,.1), 0 2px 4px rgba(0,0,0,.3), 0 8px 20px rgba(0,0,0,.3);transform:translateY(-1px);}
+.key:active{transform:scale(.9);background:linear-gradient(140deg,var(--violet-bright),var(--gold));color:#fff;border-color:transparent;box-shadow:0 4px 20px var(--gold-glow), inset 0 1px 0 rgba(255,255,255,.4);}
 .key.wide{font-size:12px;color:var(--text-dim);}
 .login-error{color:var(--danger);font-size:12.5px;margin-top:12px;min-height:16px;}
 
@@ -1213,8 +1220,9 @@ label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spa
 .side-link.active .ic{animation:iconPop .4s cubic-bezier(.34,1.56,.64,1);}
 @keyframes iconPop{0%{transform:scale(.7);}60%{transform:scale(1.25);}100%{transform:scale(1);}}
 .side-link:hover{background:var(--s2);color:var(--text);}
-.side-link.active{background:linear-gradient(135deg,#fff,#f1ecff);color:#0a0a0c;font-weight:600;box-shadow:0 2px 12px rgba(124,92,255,.22);}
-.side-link.active .ic{color:#0a0a0c;}
+.side-link.active{background:linear-gradient(135deg,rgba(124,92,255,.2),rgba(79,140,255,.1));color:#fff;font-weight:600;box-shadow:inset 0 1px 0 rgba(255,255,255,.08), 0 2px 12px rgba(124,92,255,.18);border:1px solid rgba(167,139,250,.28);}
+.side-link.active .ic{color:var(--violet-bright);}
+.side-link.active::before{content:'';position:absolute;left:0;top:50%;transform:translateY(-50%);width:3px;height:60%;border-radius:100px;background:linear-gradient(180deg,var(--violet-bright),var(--gold));box-shadow:0 0 8px var(--violet-glow);}
 .side-link .ic{flex-shrink:0;color:var(--text-faint);}
 .side-sec{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--text-faint);font-weight:600;margin:18px 10px 8px;}
 .admin-main{flex:1;min-width:0;}
@@ -1262,11 +1270,13 @@ label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spa
 .stat-box.accent{border-color:var(--gold-glow);}
 /* ---- Stat tile v2: icon chip + number, used on the caller home screen ---- */
 .stat-tile{padding:16px 14px;border-radius:16px;position:relative;overflow:hidden;transition:transform .3s var(--ease-spring), border-color .2s ease, box-shadow .3s var(--ease-smooth);}
-.stat-tile:hover{transform:translateY(-2px);border-color:var(--border-2);box-shadow:var(--sh-2);}
+.stat-tile::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(255,255,255,.14),transparent);}
+.stat-tile:hover{transform:translateY(-3px);border-color:var(--border-2);box-shadow:0 2px 4px rgba(0,0,0,.3), 0 14px 30px rgba(0,0,0,.4), 0 0 30px rgba(124,92,255,.06);}
 .stat-tile:active{transform:scale(.97);}
-.icon-chip{width:30px;height:30px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;}
+.icon-chip{width:32px;height:32px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;box-shadow:inset 0 1px 0 rgba(255,255,255,.1), 0 2px 8px rgba(0,0,0,.2);}
+.icon-chip .ic{width:16px;height:16px;}
 .stat-tile .icon-chip{margin-bottom:10px;}
-.stat-tile .num{font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:800;letter-spacing:-.03em;line-height:1;}
+.stat-tile .num{font-family:'Bricolage Grotesque',sans-serif;font-size:25px;font-weight:900;letter-spacing:-.04em;line-height:1;}
 .stat-tile .lbl{font-size:10px;color:var(--text-faint);font-weight:700;letter-spacing:.04em;text-transform:uppercase;margin-top:4px;}
 .section-title{font-size:12px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.8px;margin:28px 0 14px;font-weight:600;padding-left:11px;position:relative;}
 .section-title::before{content:'';position:absolute;left:0;top:50%;transform:translateY(-50%);width:3px;height:12px;border-radius:100px;background:linear-gradient(180deg,var(--violet-bright),var(--gold));box-shadow:0 0 8px var(--violet-glow);}
@@ -1442,6 +1452,7 @@ tr.clickable:active{background:rgba(255,255,255,.05);}
 @keyframes xpBarSheen{0%{transform:translateX(-100%);}55%,100%{transform:translateX(100%);}}
 /* Role picker cards */
 .role-card{padding:24px 16px;border-radius:16px;background:rgba(255,255,255,.04);border:2px solid var(--border);cursor:pointer;transition:border-color .18s ease,background .18s ease,transform .18s ease;}
+.role-card .ic{width:34px;height:34px;stroke-width:1.5;}
 .role-card:hover{border-color:var(--violet-bright);background:rgba(124,92,255,.08);transform:translateY(-2px);}
 /* ---- Segmented tabs (This Week / All Time) ---- */
 .seg-tabs{display:flex;gap:4px;padding:4px;border-radius:100px;background:rgba(255,255,255,.05);border:1px solid var(--border);width:fit-content;}
