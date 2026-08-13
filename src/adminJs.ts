@@ -277,27 +277,21 @@ async function renderAdminImport(el) {
       </div>
       <div class="field" style="margin-top:16px;">
         <label>Which bank are these for?</label>
-        <p style="font-size:11px;color:var(--text-faint);margin:-2px 0 8px;line-height:1.4;">This tags every lead in the batch. Manage the list under Lead Categories.</p>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;">\${cats.map(c => {
-          const logoTag = c.domain ? '<img src="' + esc(c.domain) + '" style="width:20px;height:20px;object-fit:contain;vertical-align:middle;margin-right:4px;" />' : '';
-          return '<label style="display:flex;align-items:center;padding:8px 12px;border:1px solid var(--border-subtle);border-radius:6px;cursor:pointer;background:var(--bg-dim);transition:all .2s;"><input type="radio" name="importLeadType" value="' + esc(c.name) + '" style="cursor:pointer;margin-right:4px;" />' + logoTag + '<span style="font-size:13px;">' + esc(c.name) + '</span></label>';
-        }).join('') || '<label><input type="radio" name="importLeadType" value="general" />General</label>'}</div>
-        <select id="importLeadType" style="display:none;">\${cats.map(c => '<option value="' + esc(c.name) + '"></option>').join('')}</select>
+        <p style="font-size:11px;color:var(--text-faint);margin:-2px 0 10px;line-height:1.4;">Tap a bank to tag every lead in this batch. Manage the list under Lead Categories.</p>
+        <div class="bank-grid" id="importBankGrid">\${cats.map((c, i) => {
+          const domain = c.domain || (window.BANK_DOMAINS && window.BANK_DOMAINS[String(c.name).toLowerCase()]) || '';
+          const color = c.color || '#4f8cff';
+          const initial = esc(String(c.name).charAt(0).toUpperCase());
+          const logo = domain
+            ? '<img src="' + bankLogoUrl(domain) + '" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\';" /><span class="bank-fallback" style="display:none;background:' + esc(color) + ';">' + initial + '</span>'
+            : '<span class="bank-fallback" style="display:flex;background:' + esc(color) + ';">' + initial + '</span>';
+          return '<div class="bank-card import-bank' + (i === 0 ? ' selected' : '') + '" data-import-bank="' + esc(c.name) + '" onclick="pickImportBank(this)">' + logo + '<span class="bn">' + esc(c.name) + '</span><span class="bank-tick">' + (ICONS.check || '') + '</span></div>';
+        }).join('') || '<div class="bank-card import-bank selected" data-import-bank="general" onclick="pickImportBank(this)"><span class="bn">General</span></div>'}</div>
+        <input type="hidden" id="importLeadType" value="\${cats.length ? esc(cats[0].name) : 'general'}" />
       </div>
-      <button class="btn btn-gold btn-block" style="margin-top:14px;" onclick="runImportPreview()">Analyze \u2192</button>
+      <button class="btn btn-gold btn-block" style="margin-top:16px;" onclick="runImportPreview()">Analyze \u2192</button>
     </div>
     <div id="importPreview"></div>\`;
-  // Sync radio buttons to hidden select for backward compatibility with runImportPreview()
-  setTimeout(() => {
-    const radios = document.querySelectorAll('input[name="importLeadType"]');
-    const select = document.getElementById('importLeadType');
-    if (select && radios.length) select.value = radios[0].value;  // Set default to first
-    radios.forEach(radio => {
-      radio.addEventListener('change', () => {
-        if (select) select.value = radio.value;
-      });
-    });
-  }, 0);
 }
 function importStepActive(n) {
   const s2 = document.getElementById('istep2'), s3 = document.getElementById('istep3');
@@ -313,6 +307,16 @@ function handleImportFile(event) {
   reader.readAsText(file);
 }
 let lastImportPreview = [];
+// Click-to-select for the import bank picker. Toggles the .selected state and
+// writes the chosen bank name into the hidden #importLeadType input that
+// runImportPreview() reads.
+function pickImportBank(el) {
+  const grid = document.getElementById('importBankGrid');
+  if (grid) grid.querySelectorAll('.import-bank').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  const hidden = document.getElementById('importLeadType');
+  if (hidden) hidden.value = el.dataset.importBank || 'general';
+}
 async function runImportPreview() {
   const text = document.getElementById('importText').value.trim();
   if (!text) return;

@@ -854,6 +854,7 @@ const BANK_DOMAINS = {
   'tsb': 'tsb.co.uk', 'nationwide': 'nationwide.co.uk', 'rbs': 'rbs.co.uk',
   'metro bank': 'metrobankonline.co.uk', 'monzo': 'monzo.com', 'starling': 'starlingbank.com',
 };
+window.BANK_DOMAINS = BANK_DOMAINS;
 let sharedCategoryCache = null;
 async function loadCategoryCache() {
   if (sharedCategoryCache) return sharedCategoryCache;
@@ -1434,6 +1435,11 @@ tr.clickable:active{background:rgba(255,255,255,.05);}
 .bank-card .bn{font-size:12px;font-weight:600;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .bank-card.added{border-color:rgba(34,197,94,.4);background:rgba(34,197,94,.07);cursor:default;}
 .bank-card.added .bn::after{content:' ✓';color:var(--success);}
+.bank-card.selected{border-color:var(--gold);background:linear-gradient(135deg,rgba(79,140,255,.14),rgba(124,92,255,.08));box-shadow:inset 0 1px 0 rgba(255,255,255,.08), 0 0 0 1px var(--gold-glow), 0 6px 18px rgba(79,140,255,.14);}
+.bank-card.selected .bn{color:var(--text);font-weight:700;}
+.bank-card .bank-fallback{width:26px;height:26px;border-radius:7px;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:13px;font-family:'Bricolage Grotesque',sans-serif;}
+.bank-card .bank-tick{margin-left:auto;width:16px;height:16px;color:var(--gold-bright);opacity:0;transform:scale(.6);transition:opacity .18s ease, transform .18s var(--ease-spring);flex-shrink:0;}
+.bank-card.selected .bank-tick{opacity:1;transform:scale(1);}
 /* ---- Import stepper ---- */
 .import-steps{display:flex;align-items:center;gap:10px;margin-bottom:18px;}
 .import-step{display:flex;align-items:center;gap:8px;font-size:11.5px;font-weight:700;color:var(--text-faint);}
