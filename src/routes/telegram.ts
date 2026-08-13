@@ -100,7 +100,7 @@ telegram.post('/api/telegram/start-verification', requireAnyStaff, async (c) => 
   // We have their chat_id — generate a code and DM it to them.
   const { code, expiresAt } = await createVerification(user.id, cleanUsername, s, tenantId);
   const codeFormatted = `${code.slice(0,3)} ${code.slice(3)}`;
-  const dmText = `🔐 <b>ClearPanel Verification</b>\n\n<b>${codeFormatted}</b>\n\nEnter this code in the app to link your Telegram. Expires in 5 minutes.\n\nIf you didn't request this, you can safely ignore it.`;
+  const dmText = `🔐 <b>Your ClearPanel code</b>\n\n<code>${codeFormatted}</code>\n\nType this back in the app to finish linking your account. It expires in <b>5 minutes</b> and only works once.\n\n🔒 ClearPanel will never ask for this code anywhere else. If you didn't request it, just ignore this message — nothing will happen.`;
   const bannerUrl = `${new URL(c.req.url).origin}/clearpanel-logo.png`;
   const dmResult = await sendTelegramPhoto(botToken, reg.chat_id, bannerUrl, dmText);
   if (dmResult.status !== 'sent') return c.json({ error: 'Could not send your code. Make sure you have started the bot first.' }, 400);
