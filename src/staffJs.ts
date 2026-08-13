@@ -169,13 +169,18 @@ async function renderStaffScripts() {
         <div class="section-title" style="margin:0;">Script Library</div>
         <span style="font-size:11px;color:var(--text-faint);font-weight:600;">\${scripts.length} approved</span>
       </div>
+      <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;" id="staffScriptFilters">
+        <button class="chip-filter active" data-aud="all" onclick="filterStaffScripts('all', this)">All</button>
+        <button class="chip-filter" data-aud="opener" onclick="filterStaffScripts('opener', this)">Openers</button>
+        <button class="chip-filter" data-aud="closer" onclick="filterStaffScripts('closer', this)">Closers</button>
+      </div>
       <input id="scriptSearchInput" placeholder="Search scripts…" oninput="filterScriptManager()" style="margin-bottom:12px;" />
       <div id="scriptManagerList"></div>
     </div>
     <div class="section-title">Suggest a Script</div>
     <div class="panel p fade-up">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
-        <div class="icon-chip" style="background:rgba(251,191,36,.14);color:#fbbf24;flex-shrink:0;">✎</div>
+        <div class="icon-chip" style="background:rgba(251,191,36,.14);color:#fbbf24;flex-shrink:0;">\${ICONS.doc || ''}</div>
         <p style="font-size:11.5px;color:var(--text-dim);line-height:1.4;margin:0;">Admin reviews it and can approve it for the whole team to see during calls.</p>
       </div>
       <div class="field"><input id="scriptSuggestTitle" placeholder="Give it a short title" /></div>
@@ -185,19 +190,28 @@ async function renderStaffScripts() {
     </div>\`;
   renderScriptManagerList(scripts);
 }
+let _staffScriptFilter = 'all';
+function filterStaffScripts(aud, btn) {
+  _staffScriptFilter = aud;
+  document.querySelectorAll('#staffScriptFilters .chip-filter').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  filterScriptManager();
+}
 const SCRIPT_ICONS = ['💬','🎯','💡','🔑','📋','✨'];
 function scriptIconFor(idx) { return SCRIPT_ICONS[idx % SCRIPT_ICONS.length]; }
 function renderScriptManagerList(scripts) {
   const list = document.getElementById('scriptManagerList');
   if (!list) return;
+  const audBadge = (aud) => aud === 'opener' ? '<span class="badge in-progress" style="font-size:9px;">Opener</span>' : aud === 'closer' ? '<span class="badge successful_call" style="font-size:9px;">Closer</span>' : '';
   list.innerHTML = scripts.length ? scripts.map((s, i) => \`<div class="script-manager-item" data-script-idx="\${i}" onclick="toggleScriptManagerItem(\${i})" style="padding:13px 14px;margin-bottom:8px;cursor:pointer;">
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
       <div style="display:flex;align-items:center;gap:10px;min-width:0;">
-        <div class="icon-chip" style="width:26px;height:26px;font-size:13px;background:rgba(124,92,255,.12);color:var(--violet-bright);flex-shrink:0;">\${scriptIconFor(i)}</div>
-        <div style="display:flex;align-items:baseline;gap:8px;min-width:0;overflow:hidden;"><b style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">\${esc(s.title)}</b>\${s.lead_type && s.lead_type !== 'general' ? categoryBadgeHtml(s.lead_type) : ''}</div>
+        <div class="icon-chip" style="width:26px;height:26px;background:rgba(124,92,255,.12);color:var(--violet-bright);flex-shrink:0;">\${ICONS.doc || ''}</div>
+        <div style="display:flex;align-items:center;gap:8px;min-width:0;overflow:hidden;flex-wrap:wrap;"><b style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">\${esc(s.title)}</b>\${audBadge(s.audience)}\${s.lead_type && s.lead_type !== 'general' ? categoryBadgeHtml(s.lead_type) : ''}</div>
       </div>
       <span class="script-chevron" style="color:var(--text-faint);flex-shrink:0;transition:transform .2s ease;">▾</span>
     </div>
+    \${s.description ? '<div style="font-size:11px;color:var(--text-faint);margin-top:5px;padding-left:36px;line-height:1.4;">' + esc(s.description) + '</div>' : ''}
     <div class="script-manager-content" style="font-size:12.5px;color:var(--text-dim);white-space:pre-wrap;line-height:1.5;max-height:0;overflow:hidden;transition:max-height .25s ease, margin-top .25s ease;margin-top:0;padding-left:36px;">\${esc(s.content)}</div>
   </div>\`).join('') : '<div style="color:var(--text-dim);font-size:12.5px;">No approved scripts yet.</div>';
 }
@@ -219,7 +233,9 @@ function toggleScriptManagerItem(i) {
 }
 function filterScriptManager() {
   const q = document.getElementById('scriptSearchInput').value.trim().toLowerCase();
-  const filtered = !q ? window._allScripts : window._allScripts.filter(s => s.title.toLowerCase().includes(q) || s.content.toLowerCase().includes(q));
+  let filtered = window._allScripts || [];
+  if (_staffScriptFilter !== 'all') filtered = filtered.filter(s => (s.audience || 'all') === _staffScriptFilter || (s.audience || 'all') === 'all');
+  if (q) filtered = filtered.filter(s => s.title.toLowerCase().includes(q) || s.content.toLowerCase().includes(q));
   renderScriptManagerList(filtered);
 }
 async function suggestScript() {

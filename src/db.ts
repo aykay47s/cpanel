@@ -305,6 +305,11 @@ export async function ensureDb() {
     status TEXT NOT NULL DEFAULT 'approved', submitted_by INTEGER REFERENCES users(id),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`;
+  // Script metadata: who the script is for and a short description, so the Scripts
+  // library can be browsed and filtered (openers/starters vs closers/finishers, etc).
+  await sql`ALTER TABLE scripts ADD COLUMN IF NOT EXISTS audience TEXT DEFAULT 'all'`;
+  await sql`ALTER TABLE scripts ADD COLUMN IF NOT EXISTS description TEXT`;
+  await sql`ALTER TABLE scripts ADD COLUMN IF NOT EXISTS ai_generated BOOLEAN DEFAULT false`;
 
   await sql`CREATE TABLE IF NOT EXISTS announcements (
     id SERIAL PRIMARY KEY,

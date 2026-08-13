@@ -1458,6 +1458,9 @@ tr.clickable:active{background:rgba(255,255,255,.05);}
 @keyframes xpBarSheen{0%{transform:translateX(-100%);}55%,100%{transform:translateX(100%);}}
 /* Role picker cards */
 .role-card{padding:24px 16px;border-radius:16px;background:rgba(255,255,255,.04);border:2px solid var(--border);cursor:pointer;transition:border-color .18s ease,background .18s ease,transform .18s ease;}
+.chip-filter{padding:7px 15px;border-radius:100px;font-size:12px;font-weight:600;background:rgba(255,255,255,.04);border:1px solid var(--border-2);color:var(--text-dim);transition:background .15s ease,color .15s ease,border-color .15s ease;}
+.chip-filter:hover{color:var(--text);border-color:rgba(255,255,255,.22);}
+.chip-filter.active{background:linear-gradient(135deg,var(--violet-bright),var(--gold));color:#fff;border-color:transparent;box-shadow:0 2px 10px rgba(124,92,255,.3);}
 .role-card .ic{width:34px;height:34px;stroke-width:1.5;}
 .role-card:hover{border-color:var(--violet-bright);background:rgba(124,92,255,.08);transform:translateY(-2px);}
 /* ---- Segmented tabs (This Week / All Time) ---- */

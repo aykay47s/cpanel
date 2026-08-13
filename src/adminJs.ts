@@ -576,35 +576,150 @@ async function saveGoal() {
 async function renderAdminScripts(el) {
   const res = await api('/api/admin/scripts');
   const rows = (await res.json()).data;
+  const cats = await api('/api/lead-categories').then(r => r.json()).then(d => d.data).catch(() => []);
+  window._adminScripts = rows;
+  window._adminScriptCats = cats;
   const pending = rows.filter(s => s.status === 'pending');
   const approved = rows.filter(s => s.status === 'approved');
+  const catOpts = '<option value="general">General (all leads)</option>' + cats.map(cc => '<option value="' + esc(cc.name) + '">' + esc(cc.name) + '</option>').join('');
   el.innerHTML = \`
+    <div class="panel p fade-up" style="border-color:var(--violet-glow);position:relative;overflow:hidden;">
+      <div style="position:absolute;top:-30px;right:-30px;width:120px;height:120px;border-radius:50%;background:radial-gradient(circle,rgba(124,92,255,.18),transparent 70%);pointer-events:none;"></div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;position:relative;">
+        <span style="width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--violet-bright),var(--gold));display:flex;align-items:center;justify-content:center;color:#fff;">\${ICONS.doc || ''}</span>
+        <div class="section-title" style="margin:0;">AI Script Writer</div>
+      </div>
+      <p style="font-size:12px;color:var(--text-dim);margin-bottom:14px;line-height:1.6;">Describe what you need and the AI writes a full call script — opening, qualifying questions, objection handling, and close. Review it, tweak, and publish to your team.</p>
+      <div class="field"><label>What should this script do?</label><textarea id="aiBrief" rows="3" placeholder="e.g. Cold call for Lloyds current-account switchers. Friendly but urgent, push the £175 switch bonus, handle 'I'm happy with my bank' and book a callback."></textarea></div>
+      <div class="row-flex">
+        <div class="field"><label>Who's it for?</label><select id="aiAudience"><option value="opener">Opener / Starter</option><option value="closer">Closer / Finisher</option><option value="all">Any caller</option></select></div>
+        <div class="field"><label>Lead type</label><select id="aiLeadType">\${catOpts}</select></div>
+      </div>
+      <div class="field"><label>Tone (optional)</label><input id="aiTone" placeholder="e.g. warm and consultative / high-energy and direct" /></div>
+      <button class="btn btn-gold btn-block" onclick="generateScript()"><span id="aiGenLabel">Generate Script</span></button>
+      <div id="aiGenStatus" style="font-size:12px;margin-top:10px;"></div>
+      <div id="aiGenResult"></div>
+    </div>
+
     <div class="panel p fade-up">
-      <div class="section-title" style="margin-top:0;">Add Script</div>
-      <div class="row-flex"><div class="field"><label>Title</label><input id="scTitle" /></div><div class="field"><label>Lead Type</label><input id="scType" placeholder="general" /></div></div>
+      <div class="section-title" style="margin-top:0;">Add Script Manually</div>
+      <div class="row-flex"><div class="field"><label>Title</label><input id="scTitle" /></div><div class="field"><label>Who's it for?</label><select id="scAudience"><option value="all">Any caller</option><option value="opener">Opener / Starter</option><option value="closer">Closer / Finisher</option></select></div></div>
+      <div class="row-flex"><div class="field"><label>Lead Type</label><select id="scType">\${catOpts}</select></div><div class="field"><label>Short description</label><input id="scDesc" placeholder="one line" /></div></div>
       <div class="field"><label>Content</label><textarea id="scContent" rows="4"></textarea></div>
       <button class="btn btn-gold btn-block" onclick="addScript()">Publish</button>
     </div>
+
     \${pending.length ? \`<div class="panel p fade-up" style="border-color:var(--gold-glow);">
       <div class="section-title" style="margin-top:0;">Pending Review (\${pending.length})</div>
       \${pending.map(s => \`<div style="padding:12px 0;border-bottom:1px solid var(--border);">
-        <div style="display:flex;justify-content:space-between;align-items:baseline;"><b style="font-size:13px;">\${esc(s.title)}</b><span class="badge pending">pending</span></div>
-        <div style="font-size:11px;color:var(--text-dim);margin-top:2px;">Suggested by \${esc(s.submitted_by_name || 'a caller')} · \${s.lead_type}</div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;"><b style="font-size:13px;">\${esc(s.title)}</b><span class="badge requires_review">pending</span></div>
+        <div style="font-size:11px;color:var(--text-dim);margin-top:2px;">Suggested by \${esc(s.submitted_by_name || 'a caller')} · \${esc(s.lead_type)}</div>
         <div style="font-size:12.5px;color:var(--text-dim);margin-top:6px;white-space:pre-wrap;">\${esc(s.content)}</div>
         <div style="display:flex;gap:8px;margin-top:8px;"><button class="btn btn-teal btn-sm" onclick="approveScript(\${s.id})">Approve</button><button class="btn btn-danger btn-sm" onclick="deleteScript(\${s.id})">Reject</button></div>
       </div>\`).join('')}
     </div>\` : ''}
-    <div class="panel p fade-up"><div class="section-title" style="margin-top:0;">Approved Scripts (\${approved.length})</div>
-      \${approved.map(s => \`<div style="padding:12px 0;border-bottom:1px solid var(--border);"><b style="color:var(--gold-bright);font-size:13px;">\${esc(s.title)}</b> <span style="font-size:11px;color:var(--text-dim);">· \${s.lead_type}</span><div style="font-size:12.5px;color:var(--text-dim);margin-top:4px;white-space:pre-wrap;">\${esc(s.content)}</div><button class="btn btn-danger btn-sm" style="margin-top:8px;" onclick="deleteScript(\${s.id})">Delete</button></div>\`).join('') || '<div style="color:var(--text-dim);">No approved scripts yet.</div>'}
+
+    <div class="panel p fade-up">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <div class="section-title" style="margin:0;">Script Library (\${approved.length})</div>
+      </div>
+      <div style="display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap;" id="scriptFilterRow">
+        <button class="chip-filter active" data-aud="all" onclick="filterAdminScripts('all', this)">All</button>
+        <button class="chip-filter" data-aud="opener" onclick="filterAdminScripts('opener', this)">Openers</button>
+        <button class="chip-filter" data-aud="closer" onclick="filterAdminScripts('closer', this)">Closers</button>
+      </div>
+      <input id="adminScriptSearch" placeholder="Search scripts…" oninput="renderAdminScriptList()" style="margin-bottom:12px;" />
+      <div id="adminScriptList"></div>
     </div>\`;
+  renderAdminScriptList();
+}
+let _adminScriptFilter = 'all';
+function filterAdminScripts(aud, btn) {
+  _adminScriptFilter = aud;
+  document.querySelectorAll('#scriptFilterRow .chip-filter').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  renderAdminScriptList();
+}
+function audienceBadge(aud) {
+  if (aud === 'opener') return '<span class="badge in-progress">Opener</span>';
+  if (aud === 'closer') return '<span class="badge successful_call">Closer</span>';
+  return '<span class="badge not_called">All callers</span>';
+}
+function renderAdminScriptList() {
+  const list = document.getElementById('adminScriptList');
+  if (!list) return;
+  const q = (document.getElementById('adminScriptSearch')?.value || '').toLowerCase();
+  let items = (window._adminScripts || []).filter(s => s.status === 'approved');
+  if (_adminScriptFilter !== 'all') items = items.filter(s => (s.audience || 'all') === _adminScriptFilter);
+  if (q) items = items.filter(s => s.title.toLowerCase().includes(q) || (s.content || '').toLowerCase().includes(q) || (s.description || '').toLowerCase().includes(q));
+  if (!items.length) { list.innerHTML = '<div style="color:var(--text-dim);font-size:12.5px;padding:8px 0;">No scripts match.</div>'; return; }
+  list.innerHTML = items.map(s => \`<div class="panel-inset" style="padding:13px 15px;margin-bottom:10px;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+      <div style="min-width:0;flex:1;">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;"><b style="color:var(--gold-bright);font-size:13.5px;">\${esc(s.title)}</b>\${s.ai_generated ? '<span class="badge call_ended" style="font-size:9px;">AI</span>' : ''}</div>
+        <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;align-items:center;">\${audienceBadge(s.audience)}<span style="font-size:11px;color:var(--text-faint);">\${esc(s.lead_type)}</span></div>
+        \${s.description ? '<div style="font-size:11.5px;color:var(--text-dim);margin-top:6px;line-height:1.4;">' + esc(s.description) + '</div>' : ''}
+      </div>
+    </div>
+    <div style="font-size:12.5px;color:var(--text-dim);margin-top:8px;white-space:pre-wrap;max-height:120px;overflow:hidden;position:relative;" id="scriptBody\${s.id}">\${esc(s.content)}</div>
+    <div style="display:flex;gap:8px;margin-top:10px;">
+      <button class="btn btn-ghost btn-sm" onclick="toggleAdminScript(\${s.id})" id="scriptToggle\${s.id}">Expand</button>
+      <button class="btn btn-danger btn-sm" onclick="deleteScript(\${s.id})">Delete</button>
+    </div>
+  </div>\`).join('');
+}
+function toggleAdminScript(id) {
+  const body = document.getElementById('scriptBody' + id);
+  const btn = document.getElementById('scriptToggle' + id);
+  if (!body) return;
+  const expanded = body.style.maxHeight === 'none';
+  body.style.maxHeight = expanded ? '120px' : 'none';
+  if (btn) btn.textContent = expanded ? 'Expand' : 'Collapse';
+}
+async function generateScript() {
+  const brief = document.getElementById('aiBrief').value.trim();
+  const audience = document.getElementById('aiAudience').value;
+  const lead_type = document.getElementById('aiLeadType').value;
+  const tone = document.getElementById('aiTone').value.trim();
+  const status = document.getElementById('aiGenStatus');
+  const label = document.getElementById('aiGenLabel');
+  const result = document.getElementById('aiGenResult');
+  if (!brief) { status.textContent = 'Describe what you want the script to do first.'; status.style.color = 'var(--danger)'; return; }
+  label.textContent = 'Writing…'; status.textContent = ''; result.innerHTML = '';
+  const res = await api('/api/admin/scripts/generate', { method: 'POST', body: JSON.stringify({ brief, audience, lead_type, tone }) });
+  const data = await res.json();
+  label.textContent = 'Generate Script';
+  if (!res.ok) { status.textContent = data.error || 'Generation failed.'; status.style.color = 'var(--danger)'; return; }
+  const s = data.data;
+  window._pendingAiScript = { ...s, ai_generated: true };
+  result.innerHTML = \`<div class="panel-inset" style="padding:15px;margin-top:14px;border-color:var(--violet-glow);">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;"><b style="font-size:14px;color:var(--violet-bright);">\${esc(s.title)}</b><span class="badge call_ended" style="font-size:9px;">AI draft</span></div>
+    \${s.description ? '<div style="font-size:12px;color:var(--text-dim);margin-bottom:10px;">' + esc(s.description) + '</div>' : ''}
+    <textarea id="aiEditContent" rows="10" style="font-size:12.5px;">\${esc(s.content)}</textarea>
+    <div style="display:flex;gap:8px;margin-top:10px;">
+      <button class="btn btn-gold" style="flex:1;" onclick="publishAiScript()">Publish to Team</button>
+      <button class="btn btn-ghost" onclick="generateScript()">Regenerate</button>
+    </div>
+  </div>\`;
+  status.textContent = 'Draft ready — edit if needed, then publish.'; status.style.color = 'var(--success)';
+}
+async function publishAiScript() {
+  const s = window._pendingAiScript;
+  if (!s) return;
+  const content = document.getElementById('aiEditContent').value.trim();
+  if (!content) return;
+  await api('/api/admin/scripts', { method: 'POST', body: JSON.stringify({ title: s.title, content, lead_type: s.lead_type, audience: s.audience, description: s.description, ai_generated: true }) });
+  renderAdminTab('scripts');
 }
 async function approveScript(id) { await api('/api/admin/scripts/' + id + '/approve', { method: 'POST' }); renderAdminTab('scripts'); }
 async function addScript() {
   const title = document.getElementById('scTitle').value.trim();
   const content = document.getElementById('scContent').value.trim();
   const lead_type = document.getElementById('scType').value.trim();
+  const audience = document.getElementById('scAudience').value;
+  const description = document.getElementById('scDesc').value.trim();
   if (!title || !content) return alert('Title and content required');
-  await api('/api/admin/scripts', { method: 'POST', body: JSON.stringify({ title, content, lead_type }) });
+  await api('/api/admin/scripts', { method: 'POST', body: JSON.stringify({ title, content, lead_type, audience, description }) });
   renderAdminTab('scripts');
 }
 async function deleteScript(id) { await api('/api/admin/scripts/' + id, { method: 'DELETE' }); renderAdminTab('scripts'); }
