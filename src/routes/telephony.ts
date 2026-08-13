@@ -211,6 +211,149 @@ telephony.post('/api/telephony/status', async (c) => {
   return c.text('', 200);
 });
 
+// ================= TELNYX CALL CONTROL (webhook-driven IVR) =================
+// Telnyx doesn't return TwiML; it sends events and we drive the call with API
+// commands. This mirrors the Twilio IVR exactly: greet -> gather menu digit ->
+// dial eligible callers in priority order, trying the next on no-answer -> log.
+// State between webhooks travels in base64 client_state (dial index + digit).
+
+async function getTelnyxKey(tenantId: number | null): Promise<string | null> {
+  const [row] = await sql`SELECT value FROM settings WHERE key = ${'telnyx_api_key:' + tenantId}`;
+  return row?.value || null;
+}
+
+// Issue a single Call Control command. action is e.g. 'answer', 'gather_using_speak',
+// 'transfer', 'hangup', 'speak'. Non-fatal on failure — Telnyx will hang up itself.
+async function telnyxCommand(apiKey: string, callControlId: string, action: string, body: any = {}) {
+  try {
+    const res = await fetch(`https://api.telnyx.com/v2/calls/${encodeURIComponent(callControlId)}/actions/${action}`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    return res.ok;
+  } catch { return false; }
+}
+
+function encodeState(obj: any): string { return Buffer.from(JSON.stringify(obj)).toString('base64'); }
+function decodeState(s: string | undefined | null): any {
+  if (!s) return {};
+  try { return JSON.parse(Buffer.from(s, 'base64').toString('utf-8')); } catch { return {}; }
+}
+
+telephony.post('/api/telephony/telnyx/webhook', async (c) => {
+  // Always 200 fast — Telnyx retries any non-200 webhook, which would replay the IVR.
+  const body = await c.req.json().catch(() => ({} as any));
+  const data = body?.data || {};
+  const eventType: string = data.event_type || '';
+  const payload = data.payload || {};
+  const callControlId: string = payload.call_control_id || '';
+  const from: string = payload.from || '';
+  const state = decodeState(payload.client_state);
+
+  const tenantId = await getSelfTenantId();
+  const apiKey = await getTelnyxKey(tenantId);
+  // Without a key we can't send commands; ack so Telnyx stops retrying.
+  if (!apiKey || !callControlId) return c.json({ ok: true });
+
+  const cfg = await getTelephonyConfig();
+
+  // --- New inbound call: log it, alert, and answer ---
+  if (eventType === 'call.initiated') {
+    if (tenantId) {
+      const [existing] = await sql`SELECT 1 FROM inbound_calls WHERE twilio_call_sid = ${callControlId}`;
+      await sql`INSERT INTO inbound_calls (twilio_call_sid, from_number, status, provider, tenant_id) VALUES (${callControlId}, ${from}, 'ringing', 'telnyx', ${tenantId}) ON CONFLICT (twilio_call_sid) DO NOTHING`;
+      broadcast('inbound_call', { callSid: callControlId, from }, tenantId);
+      if (!existing) await identifyAndAlertForInboundCall(from, tenantId, 'telnyx').catch(() => {});
+    }
+    await telnyxCommand(apiKey, callControlId, 'answer', { client_state: encodeState({ stage: 'greet' }) });
+    return c.json({ ok: true });
+  }
+
+  // --- Call answered: present the menu (or go straight to routing if no menu) ---
+  if (eventType === 'call.answered') {
+    const greetingName = cfg.greeting_name || await getPanelName();
+    const options = cfg.menu_options || [];
+    if (options.length) {
+      const promptParts = options.map((o: any) => `Press ${o.digit} for ${o.label}.`).join(' ');
+      await telnyxCommand(apiKey, callControlId, 'gather_using_speak', {
+        payload: `Thanks for calling ${greetingName}. ${promptParts}`,
+        voice: 'female', language: 'en-US',
+        valid_digits: options.map((o: any) => o.digit).join(''),
+        max_digits: 1, timeout_millis: 8000,
+        client_state: encodeState({ stage: 'menu' }),
+      });
+    } else {
+      // No menu — greet then route to first available caller.
+      await telnyxCommand(apiKey, callControlId, 'speak', {
+        payload: `Thanks for calling ${greetingName}. Please hold while we connect you.`,
+        voice: 'female', language: 'en-US',
+      });
+      await telnyxDialNext(apiKey, callControlId, cfg, '', 0, tenantId);
+    }
+    return c.json({ ok: true });
+  }
+
+  // --- Caller pressed a menu digit ---
+  if (eventType === 'call.gather.ended') {
+    const digit = payload.digits || '';
+    const option = (cfg.menu_options || []).find((o: any) => o.digit === digit);
+    const label = option ? option.label : 'General';
+    await sql`UPDATE inbound_calls SET menu_selection = ${label} WHERE twilio_call_sid = ${callControlId}`;
+    await telnyxDialNext(apiKey, callControlId, cfg, digit, 0, tenantId);
+    return c.json({ ok: true });
+  }
+
+  // --- A dial attempt (transfer) finished. If the agent didn't pick up, try next. ---
+  if (eventType === 'call.hangup') {
+    // hangup_cause 'normal_clearing' after a bridged call = completed; otherwise
+    // if we were mid-dial, advance to the next caller.
+    if (state.stage === 'dialing' && typeof state.dialIndex === 'number') {
+      const wasBridged = payload.hangup_source === 'callee' && state.bridged;
+      if (!wasBridged) {
+        // The call itself may already be gone; only advance while the inbound leg lives.
+        const [live] = await sql`SELECT status FROM inbound_calls WHERE twilio_call_sid = ${callControlId}`;
+        if (live && live.status === 'ringing') {
+          await telnyxDialNext(apiKey, callControlId, cfg, state.digit || '', (state.dialIndex || 0) + 1, tenantId);
+          return c.json({ ok: true });
+        }
+      }
+    }
+    const dur = payload.call_duration_secs ? parseInt(String(payload.call_duration_secs), 10) : null;
+    const [updated] = await sql`UPDATE inbound_calls SET status = 'completed', duration_seconds = ${dur}, ended_at = now() WHERE twilio_call_sid = ${callControlId} AND status != 'completed' RETURNING tenant_id`;
+    if (updated) broadcast('inbound_call_update', { callSid: callControlId, status: 'completed' }, updated.tenant_id);
+    return c.json({ ok: true });
+  }
+
+  // Any other event (call.bridged, speak.ended, etc.) — just acknowledge.
+  return c.json({ ok: true });
+});
+
+// Transfer the inbound call to the Nth eligible caller. On no-answer, the
+// resulting call.hangup re-enters the webhook and advances the index.
+async function telnyxDialNext(apiKey: string, callControlId: string, cfg: any, digit: string, index: number, tenantId: number | null) {
+  const callers = await getEligibleCallers(cfg, tenantId);
+  if (!callers.length || index >= callers.length) {
+    await telnyxCommand(apiKey, callControlId, 'speak', {
+      payload: index >= callers.length && callers.length
+        ? 'Sorry, nobody was able to take your call. Please try again shortly.'
+        : 'Sorry, nobody is available to take your call right now. Please try again shortly.',
+      voice: 'female', language: 'en-US',
+    });
+    await sql`UPDATE inbound_calls SET status = 'missed' WHERE twilio_call_sid = ${callControlId} AND status = 'ringing'`;
+    await telnyxCommand(apiKey, callControlId, 'hangup', {});
+    return;
+  }
+  const target = callers[index].call_phone;
+  const fromNumber = cfg.telnyx_phone_number || undefined;
+  await telnyxCommand(apiKey, callControlId, 'transfer', {
+    to: target,
+    from: fromNumber,
+    timeout_secs: 20,
+    client_state: encodeState({ stage: 'dialing', dialIndex: index, digit }),
+  });
+}
+
 // ================= 3CX CALL CONTROL (live socket) =================
 // Live health of the PBX connection. The panel polls this on the telephony tab so
 // a dead socket or expired API client is visible immediately rather than being

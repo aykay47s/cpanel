@@ -179,6 +179,103 @@ misc.post('/api/admin/telephony-config/disconnect-twilio', requireRole('admin'),
   return c.json({ ok: true });
 });
 
+// ============================================================================
+// TELNYX — Call Control connector (lighter KYC than Twilio, same IVR behaviour)
+// ============================================================================
+// Unlike Twilio's TwiML (return-XML) model, Telnyx uses Call Control: the number
+// is attached to a "Call Control Application" whose webhook URL receives events
+// (call.initiated, call.answered, call.gather.ended, call.hangup). We answer each
+// webhook 200 immediately and drive the call with separate API commands. Connecting
+// does three things: verifies the API key, finds/creates a Call Control App pointed
+// at our webhook, and assigns the chosen number to it.
+misc.post('/api/admin/telephony-config/connect-telnyx', requireRole('admin'), async (c) => {
+  const { api_key, phone_number } = await c.req.json().catch(() => ({}));
+  if (!api_key || !phone_number) {
+    return c.json({ error: 'Telnyx API key and phone number are both required' }, 400);
+  }
+  const auth = { Authorization: `Bearer ${api_key}`, 'Content-Type': 'application/json' };
+  const origin = new URL(c.req.url).origin;
+  const webhookUrl = `${origin}/api/telephony/telnyx/webhook`;
+
+  try {
+    // 1) Verify the key by listing phone numbers, and find the chosen number's ID.
+    const numRes = await fetch(
+      `https://api.telnyx.com/v2/phone_numbers?filter[phone_number]=${encodeURIComponent(phone_number)}`,
+      { headers: auth }
+    );
+    if (numRes.status === 401) return c.json({ error: 'Telnyx rejected that API key — check it in Mission Control → API Keys' }, 400);
+    if (!numRes.ok) return c.json({ error: 'Could not reach Telnyx (status ' + numRes.status + ')' }, 400);
+    const numData: any = await numRes.json();
+    const numberRecord = numData.data?.[0];
+    if (!numberRecord) return c.json({ error: 'That number was not found on this Telnyx account. Buy it in Mission Control first, then connect.' }, 400);
+
+    // 2) Find or create a Call Control Application pointing at our webhook.
+    let appId: string | null = null;
+    const appsRes = await fetch('https://api.telnyx.com/v2/call_control_applications?filter[application_name]=ClearPanel', { headers: auth });
+    if (appsRes.ok) {
+      const appsData: any = await appsRes.json();
+      const existing = (appsData.data || []).find((a: any) => a.webhook_event_url === webhookUrl);
+      if (existing) appId = existing.id;
+    }
+    if (!appId) {
+      const createRes = await fetch('https://api.telnyx.com/v2/call_control_applications', {
+        method: 'POST', headers: auth,
+        body: JSON.stringify({
+          application_name: 'ClearPanel',
+          webhook_event_url: webhookUrl,
+          webhook_event_failover_url: webhookUrl,
+          first_command_timeout: false,
+        }),
+      });
+      if (!createRes.ok) {
+        const e: any = await createRes.json().catch(() => ({}));
+        return c.json({ error: 'Telnyx accepted the key but could not create the Call Control app: ' + (e.errors?.[0]?.detail || createRes.status) }, 400);
+      }
+      const createData: any = await createRes.json();
+      appId = createData.data?.id;
+    }
+    if (!appId) return c.json({ error: 'Could not resolve a Telnyx Call Control application id' }, 400);
+
+    // 3) Assign the number to that application (this is what makes calls hit our webhook).
+    const assignRes = await fetch(`https://api.telnyx.com/v2/phone_numbers/${numberRecord.id}`, {
+      method: 'PATCH', headers: auth,
+      body: JSON.stringify({ connection_id: appId }),
+    });
+    if (!assignRes.ok) {
+      const e: any = await assignRes.json().catch(() => ({}));
+      return c.json({ error: 'Could not attach the number to the Call Control app: ' + (e.errors?.[0]?.detail || assignRes.status) }, 400);
+    }
+
+    const user = c.get('user');
+    const cfgKey = 'telephony_config:' + user.tenant_id;
+    const [row] = await sql`SELECT value FROM settings WHERE key = ${cfgKey}`;
+    const cfg = row ? JSON.parse(row.value) : {};
+    cfg.telnyx_phone_number = phone_number;
+    cfg.telnyx_connection_id = appId;
+    cfg.telnyx_connected = true;
+    await sql`INSERT INTO settings (key, value) VALUES (${cfgKey}, ${JSON.stringify(cfg)}) ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(cfg)}`;
+    // API key stored tenant-scoped, same pattern as twilio_auth_token.
+    await sql`INSERT INTO settings (key, value) VALUES (${'telnyx_api_key:' + user.tenant_id}, ${api_key}) ON CONFLICT (key) DO UPDATE SET value = ${api_key}`;
+    return c.json({ ok: true });
+  } catch (err: any) {
+    return c.json({ error: 'Network error reaching Telnyx: ' + (err?.message || 'unknown') }, 502);
+  }
+});
+
+misc.post('/api/admin/telephony-config/disconnect-telnyx', requireRole('admin'), async (c) => {
+  const user = c.get('user');
+  const cfgKey = 'telephony_config:' + user.tenant_id;
+  const [row] = await sql`SELECT value FROM settings WHERE key = ${cfgKey}`;
+  const cfg = row ? JSON.parse(row.value) : {};
+  cfg.telnyx_connected = false;
+  cfg.telnyx_phone_number = null;
+  cfg.telnyx_connection_id = null;
+  await sql`INSERT INTO settings (key, value) VALUES (${cfgKey}, ${JSON.stringify(cfg)}) ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(cfg)}`;
+  await sql`DELETE FROM settings WHERE key = ${'telnyx_api_key:' + user.tenant_id}`;
+  return c.json({ ok: true });
+});
+
+
 // 3CX is architecturally different from Twilio - there's no TwiML-style "return
 // instructions" webhook model. 3CX authenticates via OAuth2 client-credentials and
 // then exposes a live Call Control socket, which is what actually routes calls now

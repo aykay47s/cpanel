@@ -23,7 +23,7 @@ const TAB_HINTS = {
   template: "The call guide shown at the top of every caller active-call screen.",
   categories: 'Lead types with their colours (and bank marks where they match a real bank) — used for badges and script matching everywhere.',
   branding: "Your panel name and logo, applied across login, title bar, and the mobile home-screen icon.",
-  telephony: 'Inbound call routing. Connect Twilio (or 3CX) and calls to your number get menued, held, and bridged to your callers automatically.',
+  telephony: 'Inbound call routing. Connect Twilio, Telnyx, or 3CX and calls to your number get menued, held, and bridged to your callers automatically. Telnyx has the lightest sign-up.',
 };
 async function renderAdminTab(tab) {
   const el = document.getElementById('adminContent');
@@ -897,14 +897,40 @@ function renderTelephonyLocal() {
         This is fully built and tested. \${connected ? 'Your number is connected and live - test it below with a real call.' : 'Connect your Twilio number below and it starts working immediately - no other setup needed.'}
       </p>
       <p style="font-size:12.5px;color:var(--text-dim);line-height:1.6;margin-top:10px;">
-        <b style="color:var(--text);">How it works:</b> a caller dials your number → hears your menu and picks an option → hears your hold music while the system finds an available caller → the call gets bridged straight to that caller's phone, ringing them until they pick up.
+        <b style="color:var(--text);">What you get, on every provider:</b> a spoken menu callers dial through, real hold music or a hold message, live caller-ID matching against your leads, and automatic bridging to your clocked-in callers in priority order — ringing each until one picks up, then logging every call. Pick a provider below; the routing behaves identically whichever you choose.
+      </p>
+      <p style="font-size:12.5px;color:var(--text-dim);line-height:1.6;margin-top:10px;">
+        <b style="color:var(--text);">How a call flows:</b> caller dials your number → hears your menu and picks an option → hears hold music while the system finds an available caller → the call is bridged straight to that caller's phone, ringing them until they answer.
       </p>
     </div>
 
-    <div class="panel p fade-up" style="padding:6px;display:flex;gap:4px;">
-      <button class="btn \${(cfg.provider || 'twilio') === 'twilio' ? 'btn-gold' : 'btn-ghost'}" style="flex:1;" onclick="switchTelephonyProvider('twilio')">Twilio</button>
-      <button class="btn \${cfg.provider === '3cx' ? 'btn-gold' : 'btn-ghost'}" style="flex:1;" onclick="switchTelephonyProvider('3cx')">3CX</button>
+    <div class="panel p fade-up" style="padding:6px;display:flex;gap:4px;flex-wrap:wrap;">
+      <button class="btn \${(cfg.provider || 'twilio') === 'twilio' ? 'btn-gold' : 'btn-ghost'}" style="flex:1;min-width:90px;" onclick="switchTelephonyProvider('twilio')">Twilio</button>
+      <button class="btn \${cfg.provider === 'telnyx' ? 'btn-gold' : 'btn-ghost'}" style="flex:1;min-width:90px;" onclick="switchTelephonyProvider('telnyx')">Telnyx</button>
+      <button class="btn \${cfg.provider === '3cx' ? 'btn-gold' : 'btn-ghost'}" style="flex:1;min-width:90px;" onclick="switchTelephonyProvider('3cx')">3CX</button>
     </div>
+
+    \${cfg.provider === 'telnyx' ? \`
+    <div class="panel p fade-up">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+        <div class="section-title" style="margin:0;">Telnyx Connection</div>
+        \${cfg.telnyx_connected ? '<span class="badge successful_call">Connected</span>' : '<span class="badge not_called">Not Connected</span>'}
+      </div>
+      <p style="font-size:12px;color:var(--text-dim);margin-bottom:8px;line-height:1.6;">Telnyx works exactly like Twilio here — same menu, same hold, same bridge-to-caller routing — but with much lighter sign-up. Most accounts can buy a local number after just confirming their email and a quick ID check, with no lengthy business review.</p>
+      <div style="font-size:11.5px;color:var(--text-dim);background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:14px;line-height:1.6;">
+        <b style="color:var(--text);">Setup:</b> 1) Sign up at telnyx.com and verify your email. 2) Buy a phone number in Mission Control. 3) Create an API key (Mission Control → API Keys). 4) Paste the key and number below — we auto-create the Call Control app and wire the webhook for you.
+      </div>
+      \${cfg.telnyx_connected ? \`
+        <div class="info-row"><span class="k">Number</span><span class="v mono">\${esc(cfg.telnyx_phone_number || '')}</span></div>
+        <div class="info-row"><span class="k">Call Control App</span><span class="v mono" style="font-size:11px;">\${esc(cfg.telnyx_connection_id || '')}</span></div>
+        <button class="btn btn-danger btn-sm" style="margin-top:10px;" onclick="disconnectTelnyx()">Disconnect</button>
+      \` : \`
+        <div class="field"><label>Telnyx API Key</label><input id="telnyxKey" type="password" placeholder="KEYxxxxxxxxxxxxxxxxxxxxxxxx" /></div>
+        <div class="field"><label>Phone Number</label><input id="telnyxPhone" placeholder="+441234567890" /></div>
+        <button class="btn btn-gold btn-block" onclick="connectTelnyx()">Connect &amp; Auto-Configure</button>
+        <div id="telnyxConnectStatus" style="font-size:12px;margin-top:8px;"></div>
+      \`}
+    </div>\` : ''}
 
     \${(cfg.provider || 'twilio') === 'twilio' ? \`
     <div class="panel p fade-up">
@@ -1096,6 +1122,22 @@ async function sendTestCall() {
 async function disconnectTwilio() {
   if (!confirm('Disconnect this Twilio number? Inbound calls will stop routing here.')) return;
   await api('/api/admin/telephony-config/disconnect-twilio', { method: 'POST' });
+  renderAdminTab('telephony');
+}
+async function connectTelnyx() {
+  const api_key = document.getElementById('telnyxKey').value.trim();
+  const phone_number = document.getElementById('telnyxPhone').value.trim();
+  const status = document.getElementById('telnyxConnectStatus');
+  if (!api_key || !phone_number) { status.textContent = 'API key and phone number are both required.'; status.style.color = 'var(--danger)'; return; }
+  status.textContent = 'Connecting…'; status.style.color = 'var(--text-dim)';
+  const res = await api('/api/admin/telephony-config/connect-telnyx', { method: 'POST', body: JSON.stringify({ api_key, phone_number }) });
+  const data = await res.json();
+  if (!res.ok) { status.textContent = data.error || 'Connection failed.'; status.style.color = 'var(--danger)'; return; }
+  renderAdminTab('telephony');
+}
+async function disconnectTelnyx() {
+  if (!confirm('Disconnect this Telnyx number? Inbound calls will stop routing here.')) return;
+  await api('/api/admin/telephony-config/disconnect-telnyx', { method: 'POST' });
   renderAdminTab('telephony');
 }
 function switchTelephonyProvider(provider) {
