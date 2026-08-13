@@ -87,18 +87,36 @@ app.get('/redeem', (c) => {
 });
 
 app.get('/manifest.json', async (c) => {
-  const rows = await sql`SELECT key, value FROM settings WHERE key IN ('panel_name', 'panel_logo')`;
-  const map = Object.fromEntries(rows.map((r: any) => [r.key, r.value]));
-  const name = map.panel_name || 'ClearPanel';
+  const slug = c.req.query('slug');
+  let tenantName: string | undefined;
+  let tenantLogo: string | undefined;
+  if (slug) {
+    const [tenant] = await sql`SELECT panel_name, panel_logo, name FROM tenants WHERE slug = ${slug} AND status = 'active'`;
+    tenantName = tenant?.panel_name || tenant?.name;
+    tenantLogo = tenant?.panel_logo;
+  } else {
+    const [selfTenant] = await sql`SELECT panel_name, panel_logo FROM tenants WHERE is_self = true`;
+    tenantName = selfTenant?.panel_name;
+    tenantLogo = selfTenant?.panel_logo;
+    if (!tenantName) {
+      const [row] = await sql`SELECT value FROM settings WHERE key = 'panel_name'`;
+      tenantName = row?.value;
+    }
+    if (!tenantLogo) {
+      const [row] = await sql`SELECT value FROM settings WHERE key = 'panel_logo'`;
+      tenantLogo = row?.value;
+    }
+  }
+  const name = (tenantName && !BLOCKED_PANEL_NAMES.has(tenantName.trim().toLowerCase())) ? tenantName : 'ClearPanel';
   return c.json({
     name,
     short_name: name,
-    start_url: '/',
+    start_url: slug ? `/${slug}` : '/',
     display: 'standalone',
     background_color: '#08080b',
     theme_color: '#08080b',
-    icons: map.panel_logo
-      ? [{ src: map.panel_logo, sizes: '512x512', type: 'image/png' }]
+    icons: tenantLogo
+      ? [{ src: tenantLogo, sizes: '512x512', type: 'image/png' }]
       : [
           { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },
@@ -180,7 +198,8 @@ app.get('/:slug', async (c) => {
     .replace('<title>Frap Ties</title>', `<title>${tenantName}</title>`)
     .replace(/<meta name="apple-mobile-web-app-title"[^>]*>/, `<meta name="apple-mobile-web-app-title" content="${tenantName}">`)
     .replace('<div class="brand-mark"></div>', `<div class="brand-mark">${logoTag}</div>`)
-    .replace('<div id="loginTitle">ClearPanel</div>', `<div id="loginTitle">${tenantName}</div>`);
+    .replace('<div id="loginTitle">ClearPanel</div>', `<div id="loginTitle">${tenantName}</div>`)
+    .replace('<link rel="manifest" href="/manifest.json">', `<link rel="manifest" href="/manifest.json?slug=${encodeURIComponent(slug)}">`);
   html = html.replace('</head>', `<meta id="cp-slug" content="${slug}"><meta id="cp-tenant-id" content="${tenant.id}"></head>`);
   return c.html(html);
 });
