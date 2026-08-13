@@ -35,6 +35,9 @@ export const MASTER_PAGE = `<!DOCTYPE html>
   .btn:disabled{opacity:.5;cursor:not-allowed;transform:none;}
   .btn-ghost{background:rgba(255,255,255,.06);border:1px solid var(--border-2);color:var(--text);}
   .btn-danger{background:var(--danger);}
+  .btn-primary{background:linear-gradient(135deg,var(--violet-bright),var(--gold));color:#fff;}
+  .btn-ok{background:linear-gradient(135deg,#22c55e,#16a34a);color:#fff;}
+  .btn-sm{padding:7px 14px;font-size:12px;}
   .panel{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:20px;padding:24px;margin-bottom:18px;backdrop-filter:blur(14px);}
 
   /* Login gate */
@@ -135,8 +138,11 @@ async function renderApp() {
     <div class="container">
       <div class="tabs">
         <button class="tab \${currentTab==='overview'?'on':''}" onclick="switchTab('overview')">Overview</button>
+        <button class="tab \${currentTab==='panels'?'on':''}" onclick="switchTab('panels')">Panels</button>
         <button class="tab \${currentTab==='callers'?'on':''}" onclick="switchTab('callers')">Callers</button>
         <button class="tab \${currentTab==='keys'?'on':''}" onclick="switchTab('keys')">License Keys</button>
+        <button class="tab \${currentTab==='affiliates'?'on':''}" onclick="switchTab('affiliates')">Affiliates</button>
+        <button class="tab \${currentTab==='store'?'on':''}" onclick="switchTab('store')">Store</button>
         <button class="tab \${currentTab==='broadcast'?'on':''}" onclick="switchTab('broadcast')">Broadcast</button>
         <button class="tab \${currentTab==='history'?'on':''}" onclick="switchTab('history')">History</button>
       </div>
@@ -151,20 +157,44 @@ async function loadTab() {
   const body = $('#body');
   body.innerHTML = '<div class="panel" style="color:var(--text-dim);">Loading…</div>';
   if (currentTab === 'overview') await renderOverview();
+  else if (currentTab === 'panels') await renderPanels();
   else if (currentTab === 'callers') await renderCallers();
   else if (currentTab === 'keys') await renderKeys();
+  else if (currentTab === 'affiliates') await renderAffiliates();
+  else if (currentTab === 'store') await renderStore();
   else if (currentTab === 'broadcast') await renderBroadcast();
   else if (currentTab === 'history') await renderHistory();
 }
 
 async function renderOverview() {
-  const res = await api('/api/master/overview');
+  const [res, statsRes] = await Promise.all([api('/api/master/overview'), api('/api/master/stats')]);
   if (res.status === 401) { renderGate('Session expired'); return; }
   overviewData = (await res.json()).data;
+  const stats = statsRes.ok ? (await statsRes.json()).data : null;
   const t = overviewData.totals;
   const botLine = overviewData.bot_configured
     ? '<span class="chip ok">Master bot active: @' + esc(overviewData.bot_username) + '</span>'
     : '<span class="chip warn">Master bot NOT configured — set TELEGRAM_BOT_TOKEN in Railway env</span>';
+  const money = (n) => '£' + Number(n || 0).toLocaleString();
+  const revenueBlock = stats ? \`
+    <h3 style="margin:22px 0 14px;">Revenue & Growth</h3>
+    <div class="stat-grid">
+      <div class="stat"><div class="n" style="color:#5eeaa0;">\${money(stats.keys.revenue_redeemed)}</div><div class="l">Revenue (redeemed keys)</div></div>
+      <div class="stat"><div class="n">\${money(stats.keys.revenue_potential)}</div><div class="l">Potential (all keys)</div></div>
+      <div class="stat"><div class="n">\${stats.keys.redeemed_keys} / \${stats.keys.total_keys}</div><div class="l">Keys redeemed</div></div>
+      <div class="stat"><div class="n">\${stats.leads.total_leads}</div><div class="l">Total leads (all panels)</div></div>
+    </div>
+    <h3 style="margin:22px 0 14px;">Panels & Affiliates</h3>
+    <div class="stat-grid">
+      <div class="stat"><div class="n">\${stats.tenants.active_tenants}</div><div class="l">Active panels</div></div>
+      <div class="stat"><div class="n" style="color:#ff8f8a;">\${stats.tenants.terminated_tenants}</div><div class="l">Terminated</div></div>
+      <div class="stat"><div class="n">\${stats.tenants.expired_tenants}</div><div class="l">Expired</div></div>
+      <div class="stat"><div class="n">\${stats.users.clocked_in_now}</div><div class="l">Callers online now</div></div>
+      <div class="stat"><div class="n">\${stats.affiliates.total_affiliates}</div><div class="l">Affiliates</div></div>
+      <div class="stat"><div class="n">\${stats.affiliates.total_referrals}</div><div class="l">Referral sales</div></div>
+      <div class="stat"><div class="n" style="color:#fbbf24;">\${money(stats.affiliates.commission_owed)}</div><div class="l">Commission owed</div></div>
+      <div class="stat"><div class="n">\${money(stats.affiliates.total_commission)}</div><div class="l">Commission earned</div></div>
+    </div>\` : '';
   $('#body').innerHTML = \`
     <div style="margin-bottom:16px;">\${botLine}</div>
     <div class="stat-grid">
@@ -173,7 +203,8 @@ async function renderOverview() {
       <div class="stat"><div class="n">\${t.callers}</div><div class="l">Callers</div></div>
       <div class="stat"><div class="n">\${t.verified}</div><div class="l">Verified on master bot</div></div>
     </div>
-    <div class="panel">
+    \${revenueBlock}
+    <div class="panel" style="margin-top:22px;">
       <h3 style="margin-bottom:14px;">Tenants</h3>
       <table>
         <thead><tr><th>Name</th><th>Slug</th><th>Plan</th><th>Users</th><th>Verified</th><th>Own bot</th><th>Expires</th></tr></thead>
@@ -190,6 +221,139 @@ async function renderOverview() {
         </tbody>
       </table>
     </div>\`;
+}
+
+// ===== PANELS: full roster with terminate / reactivate =====
+async function renderPanels() {
+  const res = await api('/api/master/tenants-full');
+  if (res.status === 401) { renderGate('Session expired'); return; }
+  const rows = (await res.json()).data;
+  const money = (n) => '£' + Number(n || 0).toLocaleString();
+  const statusChip = (s) => s === 'active' ? '<span class="chip ok">active</span>' : s === 'terminated' ? '<span class="chip no">terminated</span>' : s === 'expired' ? '<span class="chip warn">expired</span>' : '<span class="chip">' + esc(s) + '</span>';
+  $('#body').innerHTML = \`
+    <div class="panel">
+      <h3 style="margin-bottom:6px;">All Panels (\${rows.length})</h3>
+      <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:16px;">Every resold panel. Terminate to instantly block access (callers see the reason at login); reactivate to restore, optionally extending the window.</p>
+      \${rows.length ? rows.map(r => \`<div class="panel" style="margin-bottom:12px;background:var(--s1);">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap;">
+          <div style="min-width:0;">
+            <div style="font-size:15px;font-weight:700;">\${esc(r.panel_name || r.name)} \${statusChip(r.status)}</div>
+            <div class="mono" style="font-size:11.5px;color:var(--text-dim);margin-top:4px;">code: \${esc(r.slug||'—')} · \${r.user_count} users · \${r.online_count} online · \${r.lead_count} leads</div>
+            \${r.termination_reason ? '<div style="font-size:12px;color:#ff8f8a;margin-top:6px;">Reason: ' + esc(r.termination_reason) + '</div>' : ''}
+            <div style="font-size:11.5px;color:var(--text-dim);margin-top:4px;">\${r.plan?esc(r.plan)+' · ':''}\${r.price_paid?money(r.price_paid)+' · ':''}\${r.expires_at?'expires '+new Date(r.expires_at).toLocaleDateString():'no expiry'}</div>
+          </div>
+          <div style="display:flex;gap:8px;flex-shrink:0;">
+            \${r.status === 'active'
+              ? '<button class="btn btn-danger btn-sm" onclick="terminatePanel(' + r.id + ', \\'' + esc(r.panel_name||r.name).replace(/'/g,"") + '\\')">Terminate</button>'
+              : '<button class="btn btn-ok btn-sm" onclick="reactivatePanel(' + r.id + ')">Reactivate</button>'}
+          </div>
+        </div>
+      </div>\`).join('') : '<div style="color:var(--text-dim);">No resold panels yet.</div>'}
+    </div>\`;
+}
+async function terminatePanel(id, name) {
+  const reason = prompt('Terminate "' + name + '"? Callers will be blocked and shown this reason:', '');
+  if (reason === null) return;
+  await api('/api/master/tenants/' + id + '/terminate', { method: 'POST', body: JSON.stringify({ reason }) });
+  renderPanels();
+}
+async function reactivatePanel(id) {
+  const ext = prompt('Reactivate this panel. Extend access by how many days? (leave blank for no change)', '');
+  if (ext === null) return;
+  const extend_days = parseInt(ext, 10);
+  await api('/api/master/tenants/' + id + '/reactivate', { method: 'POST', body: JSON.stringify({ extend_days: extend_days > 0 ? extend_days : undefined }) });
+  renderPanels();
+}
+
+// ===== AFFILIATES =====
+async function renderAffiliates() {
+  const res = await api('/api/master/affiliates');
+  if (res.status === 401) { renderGate('Session expired'); return; }
+  const rows = (await res.json()).data;
+  const money = (n) => '£' + Number(n || 0).toLocaleString();
+  $('#body').innerHTML = \`
+    <div class="panel">
+      <h3 style="margin-bottom:14px;">New Affiliate</h3>
+      <div style="display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end;">
+        <div><label style="font-size:11px;color:var(--text-dim);display:block;margin-bottom:4px;">Name</label><input id="affName" placeholder="e.g. John's Leads" /></div>
+        <div><label style="font-size:11px;color:var(--text-dim);display:block;margin-bottom:4px;">Telegram (optional)</label><input id="affTg" placeholder="@handle" /></div>
+        <div><label style="font-size:11px;color:var(--text-dim);display:block;margin-bottom:4px;">Commission %</label><input id="affPct" type="number" value="10" style="width:90px;" /></div>
+      </div>
+      <button class="btn btn-primary" style="margin-top:12px;" onclick="createAffiliate()">Create Affiliate</button>
+      <div id="affStatus" style="font-size:12.5px;margin-top:10px;"></div>
+    </div>
+    <div class="panel">
+      <h3 style="margin-bottom:14px;">Affiliates (\${rows.length})</h3>
+      \${rows.length ? \`<table>
+        <thead><tr><th>Name</th><th>Code</th><th>PIN</th><th>Rate</th><th>Sales</th><th>Earned</th><th>Owed</th><th></th></tr></thead>
+        <tbody>\${rows.map(a => \`<tr>
+          <td><b>\${esc(a.name)}</b>\${a.telegram_username?'<div class="mono" style="font-size:11px;color:var(--text-dim);">'+esc(a.telegram_username)+'</div>':''}</td>
+          <td class="mono" style="color:var(--gold-bright);">\${esc(a.code)}</td>
+          <td class="mono" style="color:var(--text-dim);">\${esc(a.access_pin||'—')}</td>
+          <td>\${a.commission_pct}%</td>
+          <td>\${a.referral_count}</td>
+          <td>\${money(a.total_earned)}</td>
+          <td style="color:\${Number(a.owed)>0?'#fbbf24':'var(--text-dim)'};">\${money(a.owed)}</td>
+          <td style="white-space:nowrap;">\${Number(a.owed)>0?'<button class="btn btn-ok btn-sm" onclick="markAffPaid('+a.id+')">Mark paid</button> ':''}<button class="btn btn-danger btn-sm" onclick="deleteAffiliate('+a.id+')">×</button></td>
+        </tr>\`).join('')}</tbody>
+      </table>\` : '<div style="color:var(--text-dim);">No affiliates yet.</div>'}
+    </div>\`;
+}
+async function createAffiliate() {
+  const name = $('#affName').value.trim();
+  const telegram_username = $('#affTg').value.trim();
+  const commission_pct = parseFloat($('#affPct').value) || 10;
+  const s = $('#affStatus');
+  if (!name) { s.textContent = 'Name required.'; s.style.color = 'var(--danger)'; return; }
+  const res = await api('/api/master/affiliates', { method: 'POST', body: JSON.stringify({ name, telegram_username, commission_pct }) });
+  const data = await res.json();
+  if (!res.ok) { s.textContent = data.error || 'Failed.'; s.style.color = 'var(--danger)'; return; }
+  renderAffiliates();
+}
+async function markAffPaid(id) {
+  if (!confirm('Mark all outstanding commission as paid for this affiliate?')) return;
+  await api('/api/master/affiliates/' + id + '/mark-paid', { method: 'POST' });
+  renderAffiliates();
+}
+async function deleteAffiliate(id) {
+  if (!confirm('Delete this affiliate? Their referral history is removed too.')) return;
+  await api('/api/master/affiliates/' + id, { method: 'DELETE' });
+  renderAffiliates();
+}
+
+// ===== STORE CONFIG =====
+async function renderStore() {
+  const res = await api('/api/master/store-config');
+  if (res.status === 401) { renderGate('Session expired'); return; }
+  const cfg = (await res.json()).data || {};
+  const tiers = [['3day','3 days'],['7day','7 days'],['14day','14 days'],['30day','30 days']];
+  $('#body').innerHTML = \`
+    <div class="panel">
+      <h3 style="margin-bottom:6px;">Store & Pricing</h3>
+      <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:16px;">These drive the public store page — the price and buy link shown for each panel tier.</p>
+      <div><label style="font-size:11px;color:var(--text-dim);display:block;margin-bottom:4px;">Fallback checkout URL (used if a tier has no buy link)</label><input id="st_checkout" value="\${esc(cfg.store_checkout_url||'')}" placeholder="https://…" /></div>
+      \${tiers.map(([k,label]) => \`<div style="display:grid;grid-template-columns:120px 120px 1fr;gap:10px;align-items:end;margin-top:12px;">
+        <div style="font-weight:600;font-size:13px;padding-bottom:10px;">\${label}</div>
+        <div><label style="font-size:11px;color:var(--text-dim);display:block;margin-bottom:4px;">Price (£)</label><input id="st_price_\${k}" type="number" value="\${esc(cfg['price_'+k]||'')}" /></div>
+        <div><label style="font-size:11px;color:var(--text-dim);display:block;margin-bottom:4px;">Buy link</label><input id="st_buy_\${k}" value="\${esc(cfg['buy_url_'+k]||'')}" placeholder="https://…" /></div>
+      </div>\`).join('')}
+      <button class="btn btn-primary" style="margin-top:16px;" onclick="saveStore()">Save Store Config</button>
+      <div id="stStatus" style="font-size:12.5px;margin-top:10px;"></div>
+    </div>\`;
+}
+async function saveStore() {
+  const body = {
+    store_checkout_url: $('#st_checkout').value.trim(),
+    price_3day: $('#st_price_3day').value.trim(), price_7day: $('#st_price_7day').value.trim(),
+    price_14day: $('#st_price_14day').value.trim(), price_30day: $('#st_price_30day').value.trim(),
+    buy_url_3day: $('#st_buy_3day').value.trim(), buy_url_7day: $('#st_buy_7day').value.trim(),
+    buy_url_14day: $('#st_buy_14day').value.trim(), buy_url_30day: $('#st_buy_30day').value.trim(),
+  };
+  const s = $('#stStatus');
+  s.textContent = 'Saving…'; s.style.color = 'var(--text-dim)';
+  const res = await api('/api/master/store-config', { method: 'POST', body: JSON.stringify(body) });
+  if (!res.ok) { s.textContent = 'Save failed.'; s.style.color = 'var(--danger)'; return; }
+  s.textContent = 'Saved ✓'; s.style.color = '#5eeaa0';
 }
 
 async function renderCallers() {
