@@ -4,6 +4,7 @@ export const REDEEM_PAGE = `<!DOCTYPE html>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
 <title>Activate Your Panel</title>
+<link rel="icon" href="/favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Geist+Mono:wght@500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -55,6 +56,9 @@ export const REDEEM_PAGE = `<!DOCTYPE html>
 <body>
 
 <div class="card" id="formCard">
+  <div style="display:flex;align-items:center;justify-content:center;margin-bottom:18px;">
+    <img src="/clearpanel-icon.png" alt="ClearPanel" style="width:48px;height:48px;border-radius:50%;box-shadow:0 4px 20px rgba(124,92,255,.35);" />
+  </div>
   <div class="step-indicator" id="steps">
     <div class="step done" id="s1"></div>
     <div class="step" id="s2"></div>

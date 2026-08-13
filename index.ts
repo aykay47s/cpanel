@@ -103,6 +103,7 @@ app.get('/manifest.json', async (c) => {
 
 app.get('/clearpanel-logo.png', async (c) => { c.header('Content-Type', 'image/png'); c.header('Cache-Control', 'public, max-age=86400'); return c.body(await Bun.file('./public/clearpanel-logo.png').arrayBuffer()); });
 app.get('/clearpanel-icon.png', async (c) => { c.header('Content-Type', 'image/png'); c.header('Cache-Control', 'public, max-age=86400'); return c.body(await Bun.file('./public/clearpanel-icon.png').arrayBuffer()); });
+app.get('/favicon.png', async (c) => { c.header('Content-Type', 'image/png'); c.header('Cache-Control', 'public, max-age=86400'); return c.body(await Bun.file('./public/favicon.png').arrayBuffer()); });
 app.get('/icon.png', async (c) => { c.header('Content-Type', 'image/png'); return c.body(await Bun.file('./public/icon.png').arrayBuffer()); });
 app.get('/icons.js', async (c) => { c.header('Content-Type', 'application/javascript'); c.header('Cache-Control', 'public, max-age=3600'); return c.body(await Bun.file('./public/icons.js').text()); });
 // Serve extracted JS blocks as external files so <script src> can load them
@@ -117,18 +118,30 @@ app.get('/apple-touch-icon.png', async (c) => { c.header('Content-Type', 'image/
 
 app.get('/', async (c) => {
   c.header('Cache-Control', 'no-store, no-cache, must-revalidate');
-  // Serve the self-tenant panel with its own branding
+  // Serve the self-tenant panel with its own branding. Fallback chain:
+  // tenants.panel_name (new, per-tenant) -> settings.panel_name (legacy, pre-migration
+  // value like "Frap Ties") -> "ClearPanel" only as an absolute last resort for a
+  // genuinely fresh install with nothing configured anywhere.
   const [selfTenant] = await sql`SELECT * FROM tenants WHERE is_self = true LIMIT 1`;
-  const tenantName = selfTenant?.panel_name || 'ClearPanel';
-  const tenantLogo = selfTenant?.panel_logo || null;
+  let tenantName = selfTenant?.panel_name;
+  let tenantLogo = selfTenant?.panel_logo;
+  if (!tenantName) {
+    const [row] = await sql`SELECT value FROM settings WHERE key = 'panel_name'`;
+    tenantName = row?.value || 'ClearPanel';
+  }
+  if (!tenantLogo) {
+    const [row] = await sql`SELECT value FROM settings WHERE key = 'panel_logo'`;
+    tenantLogo = row?.value || null;
+  }
   const logoTag = tenantLogo ? `<img src="${tenantLogo}" style="width:100%;height:100%;object-fit:contain;border-radius:inherit;" />` : '';
   let html = page
     .replace(/<meta name="apple-mobile-web-app-title"[^>]*>/, `<meta name="apple-mobile-web-app-title" content="${tenantName}">`)
     .replace('<div class="brand-mark"></div>', `<div class="brand-mark">${logoTag}</div>`)
-    .replace('<div id="loginTitle">ClearPanel</div>', `<div id="loginTitle">${tenantName}</div>`)
-    + `<!-- ts:null -->`;
-  // Inject TENANT_SLUG=null into main.js via a meta tag the script reads at runtime
-  html = html.replace('</head>', '<meta id="cp-slug" content="null"></head>');
+    .replace('<div id="loginTitle">ClearPanel</div>', `<div id="loginTitle">${tenantName}</div>`);
+  // Empty content (not the string "null") so the frontend's `.content || null`
+  // check correctly treats this as "no slug" — a non-empty string is truthy in JS
+  // regardless of what it says, so content="null" was breaking every login here.
+  html = html.replace('</head>', '<meta id="cp-slug" content=""></head>');
   return c.html(html);
 });
 
@@ -147,8 +160,12 @@ app.get('/:slug', async (c) => {
   }
   c.header('Cache-Control', 'no-store, no-cache, must-revalidate');
   const tenantName = tenant.panel_name || tenant.name || 'ClearPanel';
-  const tenantLogo = tenant.panel_logo || null;
-  const logoTag = tenantLogo ? `<img src="${tenantLogo}" style="width:100%;height:100%;object-fit:contain;border-radius:inherit;" />` : '';
+  // New/resold tenants that haven't uploaded their own logo yet get the
+  // ClearPanel default mark so their panel looks finished immediately —
+  // this never touches the self-tenant (Frap Ties), which is handled by the
+  // '/' route above and preserves exactly what it already had.
+  const tenantLogo = tenant.panel_logo || '/clearpanel-icon.png';
+  const logoTag = `<img src="${tenantLogo}" style="width:100%;height:100%;object-fit:contain;border-radius:inherit;" />`;
   let html = page
     .replace(/<meta name="apple-mobile-web-app-title"[^>]*>/, `<meta name="apple-mobile-web-app-title" content="${tenantName}">`)
     .replace('<div class="brand-mark"></div>', `<div class="brand-mark">${logoTag}</div>`)
@@ -169,12 +186,18 @@ ensureDb()
     // if the token isn't set yet — the operator can (re)set it any time by
     // restarting the server after adding the env var.
     try {
-      const { setMasterWebhook, isMasterBotConfigured } = await import('./src/telegram');
+      const { setMasterWebhook, isMasterBotConfigured, setGatewayWebhook, isGatewayBotConfigured } = await import('./src/telegram');
       if (isMasterBotConfigured()) {
         const base = process.env.PUBLIC_URL || 'https://fraptiseacdivr.up.railway.app';
         const r = await setMasterWebhook(base);
         if (!r.ok) console.warn('[telegram] webhook install failed:', r.error);
         else console.log('[telegram] master webhook installed');
+      }
+      if (isGatewayBotConfigured()) {
+        const base = process.env.PUBLIC_URL || 'https://fraptiseacdivr.up.railway.app';
+        const r = await setGatewayWebhook(base);
+        if (!r.ok) console.warn('[telegram] gateway webhook install failed:', r.error);
+        else console.log('[telegram] gateway webhook installed');
       }
     } catch (e: any) { console.warn('[telegram] webhook setup skipped:', e?.message); }
   })

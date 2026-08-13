@@ -20,6 +20,19 @@ import { sql } from './db';
 const MASTER_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 export const MASTER_BOT_USERNAME = process.env.TELEGRAM_BOT_USERNAME || 'clearpanelotpbot';
 
+// The GATEWAY bot is separate from the master OTP bot — it's the one added to
+// the announcements group (https://t.me/+M-aK0jz4wDI5Nzdh) and used to post
+// broadcast messages into that group, not for per-user verification DMs.
+const GATEWAY_BOT_TOKEN = process.env.TELEGRAM_GATEWAY_BOT_TOKEN || '';
+export const GATEWAY_BOT_USERNAME = process.env.TELEGRAM_GATEWAY_USERNAME || '';
+
+export function isGatewayBotConfigured(): boolean {
+  return GATEWAY_BOT_TOKEN.length > 20 && GATEWAY_BOT_TOKEN.includes(':');
+}
+export function getGatewayToken(): string {
+  return GATEWAY_BOT_TOKEN;
+}
+
 export function isMasterBotConfigured(): boolean {
   return MASTER_BOT_TOKEN.length > 20 && MASTER_BOT_TOKEN.includes(':');
 }
@@ -77,8 +90,41 @@ export async function sendTelegramDM(token: string, chatId: number | string, tex
   return { status: 'failed', error: r.error };
 }
 
-// Install our webhook so Telegram pushes updates to us. Called once at boot
-// and whenever the token or webhook URL changes.
+// Send a photo with an HTML-formatted caption underneath — used for the OTP
+// code and welcome messages so they look like a real product notification
+// instead of a bare line of text. Falls back to a plain text DM if the photo
+// send fails for any reason (bad URL, Telegram rejecting the image, etc.) so
+// a broken banner never blocks the actual code from reaching someone.
+export async function sendTelegramPhoto(token: string, chatId: number | string, photoUrl: string, caption: string): Promise<{ status: 'sent' | 'blocked' | 'failed'; error?: string }> {
+  const r = await tgApi(token, 'sendPhoto', { chat_id: chatId, photo: photoUrl, caption, parse_mode: 'HTML' });
+  if (r.ok) return { status: 'sent' };
+  const err = (r.error || '').toLowerCase();
+  if (err.includes('blocked') || err.includes('deactivated') || err.includes('chat not found')) {
+    return { status: 'blocked', error: r.error };
+  }
+  // Photo failed for some other reason (bad URL, file too big, etc.) — still
+  // get the message through as plain text rather than losing it entirely.
+  return sendTelegramDM(token, chatId, caption);
+}
+
+// Post a message into the gateway bot's group chat (the announcements channel/
+// group it's been added to). Requires the group's numeric chat_id, which is
+// captured automatically the first time the bot sees any message in that
+// group via the gateway webhook below — an invite link alone isn't enough,
+// Telegram's API only accepts the real chat_id.
+export async function sendGatewayGroupMessage(chatId: number | string, text: string): Promise<{ status: 'sent' | 'failed'; error?: string }> {
+  if (!isGatewayBotConfigured()) return { status: 'failed', error: 'gateway_not_configured' };
+  const r = await tgApi(GATEWAY_BOT_TOKEN, 'sendMessage', { chat_id: chatId, text, parse_mode: 'HTML', disable_web_page_preview: true });
+  return r.ok ? { status: 'sent' } : { status: 'failed', error: r.error };
+}
+
+export async function setGatewayWebhook(publicBase: string): Promise<{ ok: boolean; error?: string }> {
+  if (!isGatewayBotConfigured()) return { ok: false, error: 'not_configured' };
+  const url = `${publicBase.replace(/\/$/, '')}/api/telegram/webhook/gateway`;
+  const r = await tgApi(GATEWAY_BOT_TOKEN, 'setWebhook', { url, allowed_updates: ['message', 'my_chat_member'] });
+  return r.ok ? { ok: true } : { ok: false, error: r.error };
+}
+
 export async function setMasterWebhook(publicBase: string): Promise<{ ok: boolean; error?: string }> {
   if (!isMasterBotConfigured()) return { ok: false, error: 'not_configured' };
   const url = `${publicBase.replace(/\/$/, '')}/api/telegram/webhook/master`;

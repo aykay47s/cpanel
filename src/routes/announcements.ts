@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { sql } from '../db';
 import { authenticate, requireRole } from '../auth';
 import { broadcast, notifyRole } from '../realtime';
+import { isGatewayBotConfigured, sendGatewayGroupMessage } from '../telegram';
 
 export const announcements = new Hono();
 function bad(c: any, msg: string, code = 400) { return c.json({ error: msg }, code); }
@@ -28,6 +29,16 @@ announcements.post('/api/admin/announcements', requireRole('admin'), async (c) =
   const [row] = await sql`INSERT INTO announcements (content, important, target_role, created_by, tenant_id) VALUES (${content}, ${!!important}, ${target_role || 'all'}, ${user.id}, ${user.tenant_id}) RETURNING *`;
   broadcast('announcement', row);
   await notifyRole(target_role || 'all', 'announcement', content.slice(0, 100), undefined, user.id, user.tenant_id);
+  // Also post into the Telegram announcements group via the gateway bot, if
+  // it's configured and a group has been selected — fire-and-forget so a
+  // Telegram hiccup never blocks the in-app announcement from saving.
+  if (isGatewayBotConfigured()) {
+    const [chatRow] = await sql`SELECT value FROM settings WHERE key = 'gateway_announcement_chat_id'`;
+    if (chatRow?.value) {
+      const prefix = important ? '🔴 <b>Important Update</b>\n\n' : '📣 <b>Announcement</b>\n\n';
+      sendGatewayGroupMessage(chatRow.value, prefix + content).catch(() => {});
+    }
+  }
   return c.json({ data: row });
 });
 

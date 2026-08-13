@@ -442,6 +442,20 @@ export async function ensureDb() {
   // Ensure the self-tenant has a real slug so /fraptise routes to the operator panel
   await sql`UPDATE tenants SET slug = 'fraptise' WHERE is_self = true AND (slug IS NULL OR slug = '')`;
 
+  // CRITICAL FIX: the self-tenant's panel_name/panel_logo columns were added
+  // after 'Frap Ties' was already configured via the old global settings table.
+  // Backfill from settings so the operator's existing branding is preserved —
+  // never silently replaced by the 'ClearPanel' fallback.
+  const [selfBrand] = await sql`SELECT id, panel_name, panel_logo FROM tenants WHERE is_self = true`;
+  if (selfBrand && !selfBrand.panel_name) {
+    const [nameRow] = await sql`SELECT value FROM settings WHERE key = 'panel_name'`;
+    if (nameRow?.value) await sql`UPDATE tenants SET panel_name = ${nameRow.value} WHERE id = ${selfBrand.id}`;
+  }
+  if (selfBrand && !selfBrand.panel_logo) {
+    const [logoRow] = await sql`SELECT value FROM settings WHERE key = 'panel_logo'`;
+    if (logoRow?.value) await sql`UPDATE tenants SET panel_logo = ${logoRow.value} WHERE id = ${selfBrand.id}`;
+  }
+
   await sql`UPDATE leads SET tenant_id = ${selfTenantId} WHERE tenant_id IS NULL`;
   await sql`UPDATE chat_messages SET tenant_id = ${selfTenantId} WHERE tenant_id IS NULL`;
   await sql`UPDATE announcements SET tenant_id = ${selfTenantId} WHERE tenant_id IS NULL`;
@@ -490,6 +504,15 @@ export async function ensureDb() {
   for (const stmt of usernameAlters) {
     await sql.unsafe(`DO $$ BEGIN ${stmt}; EXCEPTION WHEN OTHERS THEN NULL; END $$;`);
   }
+  // Groups/chats the gateway bot has seen a message in — captured automatically
+  // via its webhook so an admin can pick "the announcements group" from a real
+  // list instead of needing to know its numeric chat_id.
+  await sql`CREATE TABLE IF NOT EXISTS gateway_chats (
+    chat_id BIGINT PRIMARY KEY,
+    title TEXT,
+    chat_type TEXT,
+    last_seen_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`;
 
     // Hard-delete expired disappearing messages every 30s. This actually removes the
   // rows from Postgres — not a soft-delete/hidden flag.

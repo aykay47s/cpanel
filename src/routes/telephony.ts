@@ -26,13 +26,14 @@ async function getSelfTenantId(): Promise<number | null> {
 // respects the admin's "everyone" vs "selected callers only" setting, calls
 // higher-priority (lower number) callers first, and never bridges an inbound call
 // to someone already mid-outbound-call — max one call per caller at a time.
-async function getEligibleCallers(cfg: any) {
+async function getEligibleCallers(cfg: any, tenantId?: number | null) {
   const mode = cfg.inbound_mode || 'everyone';
+  const tid = tenantId ?? await getSelfTenantId();
   const base = mode === 'selected'
-    ? sql`SELECT id, call_phone FROM users WHERE role = 'caller' AND clocked_in = true AND call_phone IS NOT NULL AND call_phone != '' AND inbound_eligible = true
+    ? sql`SELECT id, call_phone FROM users WHERE role = 'caller' AND clocked_in = true AND call_phone IS NOT NULL AND call_phone != '' AND inbound_eligible = true AND tenant_id = ${tid}
         AND id NOT IN (SELECT assigned_caller_id FROM leads WHERE status IN ('calling','active_call') AND assigned_caller_id IS NOT NULL)
         ORDER BY inbound_priority ASC, id ASC`
-    : sql`SELECT id, call_phone FROM users WHERE role = 'caller' AND clocked_in = true AND call_phone IS NOT NULL AND call_phone != ''
+    : sql`SELECT id, call_phone FROM users WHERE role = 'caller' AND clocked_in = true AND call_phone IS NOT NULL AND call_phone != '' AND tenant_id = ${tid}
         AND id NOT IN (SELECT assigned_caller_id FROM leads WHERE status IN ('calling','active_call') AND assigned_caller_id IS NOT NULL)
         ORDER BY inbound_priority ASC, id ASC`;
   return await base;

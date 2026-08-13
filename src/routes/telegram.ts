@@ -7,11 +7,16 @@ import {
   isMasterBotConfigured,
   getMasterToken,
   sendTelegramDM,
+  sendTelegramPhoto,
   sendMasterDM,
   normalizeTelegramUsername,
   createVerification,
   consumeVerificationCode,
   tgApi,
+  isGatewayBotConfigured,
+  getGatewayToken,
+  GATEWAY_BOT_USERNAME,
+  sendGatewayGroupMessage,
 } from '../telegram';
 
 export const telegram = new Hono();
@@ -79,8 +84,10 @@ telegram.post('/api/telegram/start-verification', requireAnyStaff, async (c) => 
   }
   // We have their chat_id — generate a code and DM it to them.
   const { code, expiresAt } = await createVerification(user.id, cleanUsername, s, tenantId);
-  const dmText = `🔐 Your ClearPanel verification code:\n\n<b>${code.slice(0,3)} ${code.slice(3)}</b>\n\nEnter this in the app to link your Telegram. Expires in 5 minutes. If you didn't request this, ignore it.`;
-  const dmResult = await sendTelegramDM(botToken, reg.chat_id, dmText);
+  const codeFormatted = `${code.slice(0,3)} ${code.slice(3)}`;
+  const dmText = `🔐 <b>ClearPanel Verification</b>\n\n<b>${codeFormatted}</b>\n\nEnter this code in the app to link your Telegram. Expires in 5 minutes.\n\nIf you didn't request this, you can safely ignore it.`;
+  const bannerUrl = `${new URL(c.req.url).origin}/clearpanel-logo.png`;
+  const dmResult = await sendTelegramPhoto(botToken, reg.chat_id, bannerUrl, dmText);
   if (dmResult.status !== 'sent') return c.json({ error: 'Could not send your code. Make sure you have started the bot first.' }, 400);
   return c.json({ data: { needs_start: false, expires_at: expiresAt.toISOString(), scope: s } });
 });
@@ -125,7 +132,8 @@ telegram.post('/api/telegram/confirm-code', requireAnyStaff, async (c) => {
   }
   if (chatId) {
     const welcome = `👋 Welcome to ClearPanel, <b>${fresh?.name || 'there'}</b>!\n\nYour Telegram is now linked. You'll receive shift alerts, announcements, and account updates right here.\n\n📣 <b>Join the ClearPanel updates channel</b> to stay in the loop on new features and platform news:\nhttps://t.me/+M-aK0jz4wDI5Nzdh\n\nHead back to the app — you're all set.`;
-    sendTelegramDM(botToken, chatId, welcome).catch(() => {});
+    const bannerUrl = `${new URL(c.req.url).origin}/clearpanel-logo.png`;
+    sendTelegramPhoto(botToken, chatId, bannerUrl, welcome).catch(() => {});
   }
   return c.json({ data: { verified: true, name: fresh?.name || '' } });
 });
@@ -217,6 +225,51 @@ telegram.post('/api/telegram/webhook/tenant/:secret', async (c) => {
   const update = await c.req.json().catch(() => null);
   if (!update) return c.json({ ok: true });
   handleTelegramUpdate(update, 'tenant', t.id, t.telegram_bot_token).catch(() => {});
+  return c.json({ ok: true });
+});
+
+// The gateway bot's only job is posting into group chats (the announcements
+// group), not per-user DMs. Its webhook exists to auto-discover the numeric
+// chat_id of any group it's added to — Telegram's invite links never expose
+// that id, so the bot has to actually see a message in the group first. Once
+// it does, the group is saved to gateway_chats and shows up for an admin to
+// pick as "the announcements group" in Master Control.
+telegram.post('/api/telegram/webhook/gateway', async (c) => {
+  if (!isGatewayBotConfigured()) return c.json({ ok: true });
+  const update = await c.req.json().catch(() => null);
+  if (!update) return c.json({ ok: true });
+  const msg = update.message || update.my_chat_member?.chat ? update.message : null;
+  const chat = update.message?.chat || update.my_chat_member?.chat;
+  if (chat?.id && (chat.type === 'group' || chat.type === 'supergroup')) {
+    await sql`INSERT INTO gateway_chats (chat_id, title, chat_type, last_seen_at)
+      VALUES (${chat.id}, ${chat.title || null}, ${chat.type}, now())
+      ON CONFLICT (chat_id) DO UPDATE SET title = ${chat.title || null}, last_seen_at = now()`.catch(() => {});
+  }
+  return c.json({ ok: true });
+});
+
+// List groups the gateway bot has been seen in — lets an admin pick the real
+// announcements group instead of needing to know its chat_id.
+telegram.get('/api/admin/telegram/gateway/chats', requireAdmin, async (c) => {
+  const rows = await sql`SELECT * FROM gateway_chats ORDER BY last_seen_at DESC LIMIT 25`;
+  return c.json({ data: rows, configured: isGatewayBotConfigured(), bot_username: GATEWAY_BOT_USERNAME || null });
+});
+
+// Set which discovered chat is "the" announcements group. Stored in settings
+// so it survives restarts and is a single well-known key the announcement
+// route below can read without another table join.
+telegram.post('/api/admin/telegram/gateway/set-announcement-chat', requireAdmin, async (c) => {
+  const { chat_id } = await c.req.json().catch(() => ({}));
+  if (!chat_id) return c.json({ error: 'chat_id required' }, 400);
+  await sql`INSERT INTO settings (key, value) VALUES ('gateway_announcement_chat_id', ${String(chat_id)}) ON CONFLICT (key) DO UPDATE SET value = ${String(chat_id)}`;
+  return c.json({ ok: true });
+});
+
+telegram.post('/api/admin/telegram/gateway/test', requireAdmin, async (c) => {
+  const [row] = await sql`SELECT value FROM settings WHERE key = 'gateway_announcement_chat_id'`;
+  if (!row?.value) return c.json({ error: 'No announcements group selected yet' }, 400);
+  const result = await sendGatewayGroupMessage(row.value, '✅ ClearPanel gateway bot test message — if you can see this, announcements are wired up correctly.');
+  if (result.status !== 'sent') return c.json({ error: result.error || 'Send failed' }, 400);
   return c.json({ ok: true });
 });
 

@@ -11,6 +11,7 @@ export function STORE_PAGE(contactUrl: string): string {
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>ClearPanel — Call Centre Management Platform</title>
+<link rel="icon" href="/favicon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Bricolage+Grotesque:wght@700;800;900&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>

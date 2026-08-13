@@ -82,6 +82,7 @@ leads.post('/api/admin/leads/import/confirm', requireRole('admin'), async (c) =>
 
 // ================= DUPLICATE REVIEW =================
 leads.get('/api/admin/duplicates', requireRole('admin'), async (c) => {
+  const user = c.get('user');
   const rows = await sql`
     SELECT df.*, 
       json_build_object('id', la.id, 'first_name', la.first_name, 'last_name', la.last_name, 'phone', la.phone, 'email', la.email, 'created_at', la.created_at) as lead_a,
@@ -89,7 +90,7 @@ leads.get('/api/admin/duplicates', requireRole('admin'), async (c) => {
     FROM duplicate_flags df
     JOIN leads la ON la.id = df.lead_id_a
     JOIN leads lb ON lb.id = df.lead_id_b
-    WHERE df.status = 'pending'
+    WHERE df.status = 'pending' AND la.tenant_id = ${user.tenant_id} AND lb.tenant_id = ${user.tenant_id}
     ORDER BY df.confidence DESC, df.created_at DESC
   `;
   return c.json({ data: rows });
@@ -99,13 +100,16 @@ leads.post('/api/admin/duplicates/:id/resolve', requireRole('admin'), async (c) 
   const user = c.get('user');
   const { decision } = await c.req.json().catch(() => ({}));
   if (!['confirmed_duplicate', 'not_duplicate'].includes(decision)) return bad(c, 'Invalid decision');
+  // Verify the flag actually belongs to this tenant (via lead_id_a) before touching anything
+  const [flagCheck] = await sql`SELECT df.* FROM duplicate_flags df JOIN leads l ON l.id = df.lead_id_a WHERE df.id = ${c.req.param('id')} AND l.tenant_id = ${user.tenant_id}`;
+  if (!flagCheck) return bad(c, 'Not found', 404);
   const [flag] = await sql`UPDATE duplicate_flags SET status = ${decision}, reviewed_by = ${user.id}, reviewed_at = now() WHERE id = ${c.req.param('id')} RETURNING *`;
   if (!flag) return bad(c, 'Not found', 404);
   if (decision === 'confirmed_duplicate') {
-    await sql`UPDATE leads SET merged_into_id = ${flag.lead_id_b}, dedup_status = 'confirmed_duplicate' WHERE id = ${flag.lead_id_a}`;
+    await sql`UPDATE leads SET merged_into_id = ${flag.lead_id_b}, dedup_status = 'confirmed_duplicate' WHERE id = ${flag.lead_id_a} AND tenant_id = ${user.tenant_id}`;
     await logEvent(flag.lead_id_a, 'merged', user, null, null, { merged_into: flag.lead_id_b });
   } else {
-    await sql`UPDATE leads SET dedup_status = 'clear' WHERE id = ${flag.lead_id_a}`;
+    await sql`UPDATE leads SET dedup_status = 'clear' WHERE id = ${flag.lead_id_a} AND tenant_id = ${user.tenant_id}`;
     await logEvent(flag.lead_id_a, 'duplicate_dismissed', user, null, null, { compared_to: flag.lead_id_b });
   }
   return c.json({ ok: true });
@@ -207,11 +211,12 @@ leads.get('/api/admin/leads', requireRole('admin'), async (c) => {
 });
 
 leads.get('/api/admin/leads/:id', requireRole('admin'), async (c) => {
+  const user = c.get('user');
   const id = c.req.param('id');
   const [lead] = await sql`
     SELECT leads.*, uc.name as caller_name, uf.name as finisher_name, uu.name as uploaded_by_name
     FROM leads LEFT JOIN users uc ON uc.id = leads.assigned_caller_id LEFT JOIN users uf ON uf.id = leads.assigned_finisher_id LEFT JOIN users uu ON uu.id = leads.uploaded_by
-    WHERE leads.id = ${id}`;
+    WHERE leads.id = ${id} AND leads.tenant_id = ${user.tenant_id}`;
   if (!lead) return bad(c, 'Not found', 404);
   const events = await sql`SELECT lead_events.*, users.name as actor_name FROM lead_events LEFT JOIN users ON users.id = lead_events.actor_id WHERE lead_id = ${id} ORDER BY created_at ASC`;
   const callerNotes = await sql`SELECT lead_notes.*, users.name as author_name, users.avatar as author_avatar, users.pfp_data as author_pfp_data FROM lead_notes LEFT JOIN users ON users.id = lead_notes.author_id WHERE lead_id = ${id} ORDER BY created_at ASC`;
@@ -220,15 +225,16 @@ leads.get('/api/admin/leads/:id', requireRole('admin'), async (c) => {
 });
 
 leads.delete('/api/admin/leads/:id', requireRole('admin'), async (c) => {
+  const user = c.get('user');
   const id = c.req.param('id');
+  const [owned] = await sql`SELECT id FROM leads WHERE id = ${id} AND tenant_id = ${user.tenant_id}`;
+  if (!owned) return bad(c, 'Not found', 404);
   await sql`DELETE FROM duplicate_flags WHERE lead_id_a = ${id} OR lead_id_b = ${id}`;
   await sql`DELETE FROM lead_events WHERE lead_id = ${id}`;
   await sql`DELETE FROM notifications WHERE related_lead_id = ${id}`;
-  // Older deployments left a 'calls' table behind with a lead_id FK — clean it up if
-  // present, but don't fail on environments where it never existed.
   try { await sql`DELETE FROM calls WHERE lead_id = ${id}`; } catch {}
   await sql`UPDATE leads SET merged_into_id = NULL WHERE merged_into_id = ${id}`;
-  await sql`DELETE FROM leads WHERE id = ${id}`;
+  await sql`DELETE FROM leads WHERE id = ${id} AND tenant_id = ${user.tenant_id}`;
   return c.json({ ok: true });
 });
 
@@ -281,9 +287,9 @@ leads.post('/api/admin/leads/:id/assign-finisher', requireRole('admin'), async (
   if (!finisherId) return bad(c, 'finisherId required');
   const [finisher] = await sql`SELECT id, name, role FROM users WHERE id = ${finisherId} AND tenant_id = ${user.tenant_id}`;
   if (!finisher || finisher.role !== 'finisher') return bad(c, 'Target user is not a finisher');
-  const [lead] = await sql`SELECT status, assigned_finisher_id FROM leads WHERE id = ${c.req.param('id')}`;
+  const [lead] = await sql`SELECT status, assigned_finisher_id FROM leads WHERE id = ${c.req.param('id')} AND tenant_id = ${user.tenant_id}`;
   if (!lead) return bad(c, 'Not found', 404);
-  const [updated] = await sql`UPDATE leads SET status = 'assigned_to_finisher', assigned_finisher_id = ${finisherId}, updated_at = now() WHERE id = ${c.req.param('id')} RETURNING *`;
+  const [updated] = await sql`UPDATE leads SET status = 'assigned_to_finisher', assigned_finisher_id = ${finisherId}, updated_at = now() WHERE id = ${c.req.param('id')} AND tenant_id = ${user.tenant_id} RETURNING *`;
   await logEvent(updated.id, lead.assigned_finisher_id ? 'reassigned_finisher' : 'assigned_finisher', user, lead.status, 'assigned_to_finisher', { finisher_id: finisherId, finisher_name: finisher.name });
   await notify(finisherId, 'lead_assigned', `You've been assigned a lead: ${updated.first_name || 'Unknown'} ${updated.last_name || ''}`.trim(), updated.id);
   await sendPush(finisherId, 'Lead assigned to you', `${updated.first_name || 'Unknown'} ${updated.last_name || ''} is ready for you to close.`.trim(), '/');
@@ -300,10 +306,10 @@ leads.post('/api/admin/leads/:id/assign-caller', requireRole('admin'), async (c)
   if (!callerId) return bad(c, 'callerId required');
   const [caller] = await sql`SELECT id, name, role FROM users WHERE id = ${callerId} AND tenant_id = ${user.tenant_id}`;
   if (!caller || caller.role !== 'caller') return bad(c, 'Target user is not a caller');
-  const [lead] = await sql`SELECT status, assigned_caller_id FROM leads WHERE id = ${c.req.param('id')}`;
+  const [lead] = await sql`SELECT status, assigned_caller_id FROM leads WHERE id = ${c.req.param('id')} AND tenant_id = ${user.tenant_id}`;
   if (!lead) return bad(c, 'Not found', 404);
   if (lead.status !== 'not_called') return bad(c, 'Only unclaimed leads can be sent to a caller');
-  const [updated] = await sql`UPDATE leads SET assigned_caller_id = ${callerId}, updated_at = now() WHERE id = ${c.req.param('id')} RETURNING *`;
+  const [updated] = await sql`UPDATE leads SET assigned_caller_id = ${callerId}, updated_at = now() WHERE id = ${c.req.param('id')} AND tenant_id = ${user.tenant_id} RETURNING *`;
   await logEvent(updated.id, lead.assigned_caller_id ? 'reassigned_caller' : 'sent_to_caller', user, lead.status, lead.status, { caller_id: callerId, caller_name: caller.name });
   await notify(callerId, 'lead_assigned', `A lead was sent to you: ${updated.first_name || 'Unknown'} ${updated.last_name || ''}`.trim(), updated.id);
   await sendPush(callerId, 'Lead sent to you', `${updated.first_name || 'Unknown'} ${updated.last_name || ''} is waiting in your queue.`.trim(), '/');
@@ -314,9 +320,9 @@ leads.post('/api/admin/leads/:id/assign-caller', requireRole('admin'), async (c)
 leads.post('/api/admin/leads/:id/override-status', requireRole('admin'), async (c) => {
   const user = c.get('user');
   const { status, note } = await c.req.json().catch(() => ({}));
-  const [lead] = await sql`SELECT status FROM leads WHERE id = ${c.req.param('id')}`;
+  const [lead] = await sql`SELECT status FROM leads WHERE id = ${c.req.param('id')} AND tenant_id = ${user.tenant_id}`;
   if (!lead) return bad(c, 'Not found', 404);
-  const [updated] = await sql`UPDATE leads SET status = ${status}, updated_at = now() WHERE id = ${c.req.param('id')} RETURNING *`;
+  const [updated] = await sql`UPDATE leads SET status = ${status}, updated_at = now() WHERE id = ${c.req.param('id')} AND tenant_id = ${user.tenant_id} RETURNING *`;
   await logEvent(updated.id, 'admin_override', user, lead.status, status, { note: note || null });
   broadcast('lead_updated', updated);
   return c.json({ data: updated });
@@ -369,9 +375,9 @@ leads.post('/api/caller/leads/:id/claim', requireRole('caller'), async (c) => {
 
 leads.post('/api/caller/leads/:id/connect', requireRole('caller'), async (c) => {
   const user = c.get('user');
-  const [lead] = await sql`SELECT status, assigned_caller_id FROM leads WHERE id = ${c.req.param('id')}`;
+  const [lead] = await sql`SELECT status, assigned_caller_id FROM leads WHERE id = ${c.req.param('id')} AND tenant_id = ${user.tenant_id}`;
   if (!lead || lead.assigned_caller_id !== user.id) return bad(c, 'Not your lead', 403);
-  const [updated] = await sql`UPDATE leads SET status = 'active_call', updated_at = now() WHERE id = ${c.req.param('id')} RETURNING *`;
+  const [updated] = await sql`UPDATE leads SET status = 'active_call', updated_at = now() WHERE id = ${c.req.param('id')} AND tenant_id = ${user.tenant_id} RETURNING *`;
   await logEvent(updated.id, 'call_connected', user, 'calling', 'active_call', {});
   await awardXp(user.id, 10, 'connected', updated.id);
   return c.json({ data: updated });
@@ -379,9 +385,9 @@ leads.post('/api/caller/leads/:id/connect', requireRole('caller'), async (c) => 
 
 leads.post('/api/caller/leads/:id/end-call', requireRole('caller'), async (c) => {
   const user = c.get('user');
-  const [lead] = await sql`SELECT status, assigned_caller_id FROM leads WHERE id = ${c.req.param('id')}`;
+  const [lead] = await sql`SELECT status, assigned_caller_id FROM leads WHERE id = ${c.req.param('id')} AND tenant_id = ${user.tenant_id}`;
   if (!lead || lead.assigned_caller_id !== user.id) return bad(c, 'Not your lead', 403);
-  const [updated] = await sql`UPDATE leads SET status = 'call_ended', call_ended_at = now(), updated_at = now() WHERE id = ${c.req.param('id')} RETURNING *`;
+  const [updated] = await sql`UPDATE leads SET status = 'call_ended', call_ended_at = now(), updated_at = now() WHERE id = ${c.req.param('id')} AND tenant_id = ${user.tenant_id} RETURNING *`;
   await logEvent(updated.id, 'call_ended', user, lead.status, 'call_ended', {});
   return c.json({ data: updated });
 });
@@ -408,6 +414,9 @@ leads.post('/api/caller/leads/:id/note', requireRole('caller', 'finisher'), asyn
 });
 
 leads.get('/api/leads/:id/notes', requireAnyStaff, async (c) => {
+  const user = c.get('user');
+  const [owned] = await sql`SELECT id FROM leads WHERE id = ${c.req.param('id')} AND tenant_id = ${user.tenant_id}`;
+  if (!owned) return bad(c, 'Not found', 404);
   const rows = await sql`SELECT lead_notes.*, users.name as author_name, users.avatar as author_avatar, users.pfp_data as author_pfp_data FROM lead_notes LEFT JOIN users ON users.id = lead_notes.author_id WHERE lead_id = ${c.req.param('id')} ORDER BY created_at ASC`;
   return c.json({ data: rows });
 });
@@ -444,7 +453,7 @@ leads.post('/api/caller/leads/:id/outcome', requireRole('caller'), async (c) => 
   const { outcome, notes } = await c.req.json().catch(() => ({}));
   const validOutcomes = ['successful_call', 'failed', 'requires_review', 'chopped_previously', ...REQUEUE_OUTCOMES];
   if (!validOutcomes.includes(outcome)) return bad(c, 'Invalid outcome');
-  const [lead] = await sql`SELECT status, assigned_caller_id FROM leads WHERE id = ${c.req.param('id')}`;
+  const [lead] = await sql`SELECT status, assigned_caller_id FROM leads WHERE id = ${c.req.param('id')} AND tenant_id = ${user.tenant_id}`;
   if (!lead || lead.assigned_caller_id !== user.id) return bad(c, 'Not your lead', 403);
 
   let finalStatus: string;
@@ -452,8 +461,8 @@ leads.post('/api/caller/leads/:id/outcome', requireRole('caller'), async (c) => 
   else finalStatus = OUTCOME_STATUS_MAP[outcome] || outcome; // 'failed' | 'requires_review' | mapped
 
   const [updated] = REQUEUE_OUTCOMES.includes(outcome)
-    ? await sql`UPDATE leads SET status = ${finalStatus}, outcome = ${outcome}, notes = COALESCE(${notes || null}, notes), assigned_caller_id = NULL, updated_at = now() WHERE id = ${c.req.param('id')} RETURNING *`
-    : await sql`UPDATE leads SET status = ${finalStatus}, outcome = ${outcome}, notes = COALESCE(${notes || null}, notes), updated_at = now() WHERE id = ${c.req.param('id')} RETURNING *`;
+    ? await sql`UPDATE leads SET status = ${finalStatus}, outcome = ${outcome}, notes = COALESCE(${notes || null}, notes), assigned_caller_id = NULL, updated_at = now() WHERE id = ${c.req.param('id')} AND tenant_id = ${user.tenant_id} RETURNING *`
+    : await sql`UPDATE leads SET status = ${finalStatus}, outcome = ${outcome}, notes = COALESCE(${notes || null}, notes), updated_at = now() WHERE id = ${c.req.param('id')} AND tenant_id = ${user.tenant_id} RETURNING *`;
   await logEvent(updated.id, 'outcome_recorded', user, lead.status, outcome, { notes: notes || null });
   if (outcome === 'successful_call') {
     await logEvent(updated.id, 'queued_for_finishing', user, outcome, 'ready_for_finishing', {});
@@ -474,7 +483,7 @@ leads.post('/api/caller/leads/:id/outcome', requireRole('caller'), async (c) => 
 // ================= FINISHER LIFECYCLE =================
 leads.get('/api/finisher/queue', requireRole('finisher'), async (c) => {
   const user = c.get('user');
-  const rows = await sql`SELECT * FROM leads WHERE assigned_finisher_id = ${user.id} AND status = 'assigned_to_finisher' ORDER BY updated_at ASC`;
+  const rows = await sql`SELECT * FROM leads WHERE assigned_finisher_id = ${user.id} AND status = 'assigned_to_finisher' AND tenant_id = ${user.tenant_id} ORDER BY updated_at ASC`;
   return c.json({ data: rows });
 });
 
@@ -482,9 +491,9 @@ leads.post('/api/finisher/leads/:id/outcome', requireRole('finisher'), async (c)
   const user = c.get('user');
   const { outcome, notes } = await c.req.json().catch(() => ({}));
   if (!['completed', 'failed', 'requires_review'].includes(outcome)) return bad(c, 'Invalid outcome');
-  const [lead] = await sql`SELECT status, assigned_finisher_id FROM leads WHERE id = ${c.req.param('id')}`;
+  const [lead] = await sql`SELECT status, assigned_finisher_id FROM leads WHERE id = ${c.req.param('id')} AND tenant_id = ${user.tenant_id}`;
   if (!lead || lead.assigned_finisher_id !== user.id) return bad(c, 'Not your lead', 403);
-  const [updated] = await sql`UPDATE leads SET status = ${outcome}, notes = COALESCE(${notes || null}, notes), updated_at = now() WHERE id = ${c.req.param('id')} RETURNING *`;
+  const [updated] = await sql`UPDATE leads SET status = ${outcome}, notes = COALESCE(${notes || null}, notes), updated_at = now() WHERE id = ${c.req.param('id')} AND tenant_id = ${user.tenant_id} RETURNING *`;
   await logEvent(updated.id, 'finisher_outcome', user, lead.status, outcome, { notes: notes || null });
   const xpAwarded = await awardXp(user.id, outcome === 'completed' ? 75 : 15, 'finisher:' + outcome, updated.id);
   broadcast('lead_updated', updated);
