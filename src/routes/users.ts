@@ -113,15 +113,16 @@ users.post('/api/admin/end-day', requireRole('admin'), async (c) => {
 });
 
 users.get('/api/center-status', async (c) => {
-  const rows = await sql`SELECT key, value FROM settings WHERE key IN ('center_open', 'center_offline_reason')`;
-  const map = Object.fromEntries(rows.map((r: any) => [r.key, r.value]));
+  const user = c.get('user');
+  const rows = await sql`SELECT key, value FROM settings WHERE key IN (${'center_open:' + user.tenant_id}, ${'center_offline_reason:' + user.tenant_id})`;
+  const map = Object.fromEntries(rows.map((r: any) => [r.key.split(':')[0], r.value]));
   return c.json({ data: { open: map.center_open !== 'false', reason: map.center_offline_reason || 'The call center is closed right now. Check back soon.' } });
 });
 users.post('/api/admin/center-status', requireRole('admin'), async (c) => {
   const user = c.get('user');
   const { open, reason } = await c.req.json().catch(() => ({}));
-  if (open !== undefined) await sql`INSERT INTO settings (key, value) VALUES ('center_open', ${String(!!open)}) ON CONFLICT (key) DO UPDATE SET value = ${String(!!open)}`;
-  if (reason !== undefined) await sql`INSERT INTO settings (key, value) VALUES ('center_offline_reason', ${reason}) ON CONFLICT (key) DO UPDATE SET value = ${reason}`;
+  if (open !== undefined) await sql`INSERT INTO settings (key, value) VALUES (${'center_open:' + user.tenant_id}, ${String(!!open)}) ON CONFLICT (key) DO UPDATE SET value = ${String(!!open)}`;
+  if (reason !== undefined) await sql`INSERT INTO settings (key, value) VALUES (${'center_offline_reason:' + user.tenant_id}, ${reason}) ON CONFLICT (key) DO UPDATE SET value = ${reason}`;
 
   let autoEnded = 0;
   let interruptedCalls = 0;
@@ -147,7 +148,7 @@ users.post('/api/admin/center-status', requireRole('admin'), async (c) => {
       await sql`UPDATE clock_sessions SET clocked_out_at = now(), duration_seconds = EXTRACT(EPOCH FROM (now() - clocked_in_at))::int
         WHERE user_id = ANY(${ids}) AND clocked_out_at IS NULL`;
       autoEnded = ids.length;
-      broadcast('center_closed', { reason: reason || null }, ids);
+      broadcast('center_closed', { reason: reason || null }, user.tenant_id, ids);
     }
   }
   return c.json({ ok: true, autoEnded, interruptedCalls });
@@ -160,12 +161,10 @@ users.post('/api/clock', async (c) => {
 
   // Admins can always clock in - they're the ones who control open/closed. Callers
   // and finishers can't start a shift while the center is marked closed.
-  // Note: settings are currently global (not yet tenant-scoped, same as panel_name/
-  // branding elsewhere in this codebase) - a known gap, not unique to this feature.
   if (clockedIn && user.role !== 'admin') {
-    const [openSetting] = await sql`SELECT value FROM settings WHERE key = 'center_open'`;
+    const [openSetting] = await sql`SELECT value FROM settings WHERE key = ${'center_open:' + user.tenant_id}`;
     if (openSetting && openSetting.value === 'false') {
-      const [reasonSetting] = await sql`SELECT value FROM settings WHERE key = 'center_offline_reason'`;
+      const [reasonSetting] = await sql`SELECT value FROM settings WHERE key = ${'center_offline_reason:' + user.tenant_id}`;
       return bad(c, reasonSetting?.value || 'The call center is closed right now.', 403);
     }
   }

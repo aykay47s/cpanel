@@ -71,7 +71,7 @@ leads.post('/api/admin/leads/import/confirm', requireRole('admin'), async (c) =>
     existing.push({ id: lead.id, first_name: lead.first_name, last_name: lead.last_name, phone: lead.phone, phone_e164: lead.phone_e164, email: lead.email });
     // A vaulted lead isn't actually available to anyone yet - no point alerting
     // callers to a lead they can't take until an admin releases it.
-    if (!to_vault) broadcast('new_lead', lead);
+    if (!to_vault) broadcast('new_lead', lead, user.tenant_id);
   }
   if (inserted > 0 && !to_vault) {
     const name = inserted === 1 ? (rows[0] as ParsedLead).first_name || 'A lead' : `${inserted} leads`;
@@ -170,7 +170,7 @@ leads.post('/api/admin/vault/release', requireRole('admin'), async (c) => {
   const released = await sql`UPDATE leads SET status = 'not_called', updated_at = now() WHERE id = ANY(${targetIds}) AND tenant_id = ${user.tenant_id} AND status = 'vaulted' RETURNING *`;
   for (const lead of released) {
     await logEvent(lead.id, 'released_from_vault', admin, 'vaulted', 'not_called', {});
-    broadcast('new_lead', lead);
+    broadcast('new_lead', lead, user.tenant_id);
   }
   if (released.length) {
     const name = released.length === 1 ? (released[0].first_name || 'A lead') : `${released.length} leads`;
@@ -293,7 +293,7 @@ leads.post('/api/admin/leads/:id/assign-finisher', requireRole('admin'), async (
   await logEvent(updated.id, lead.assigned_finisher_id ? 'reassigned_finisher' : 'assigned_finisher', user, lead.status, 'assigned_to_finisher', { finisher_id: finisherId, finisher_name: finisher.name });
   await notify(finisherId, 'lead_assigned', `You've been assigned a lead: ${updated.first_name || 'Unknown'} ${updated.last_name || ''}`.trim(), updated.id);
   await sendPush(finisherId, 'Lead assigned to you', `${updated.first_name || 'Unknown'} ${updated.last_name || ''} is ready for you to close.`.trim(), '/');
-  broadcast('lead_updated', updated);
+  broadcast('lead_updated', updated, user.tenant_id);
   return c.json({ data: updated });
 });
 
@@ -313,7 +313,7 @@ leads.post('/api/admin/leads/:id/assign-caller', requireRole('admin'), async (c)
   await logEvent(updated.id, lead.assigned_caller_id ? 'reassigned_caller' : 'sent_to_caller', user, lead.status, lead.status, { caller_id: callerId, caller_name: caller.name });
   await notify(callerId, 'lead_assigned', `A lead was sent to you: ${updated.first_name || 'Unknown'} ${updated.last_name || ''}`.trim(), updated.id);
   await sendPush(callerId, 'Lead sent to you', `${updated.first_name || 'Unknown'} ${updated.last_name || ''} is waiting in your queue.`.trim(), '/');
-  broadcast('new_lead', updated);
+  broadcast('new_lead', updated, user.tenant_id);
   return c.json({ data: updated });
 });
 
@@ -324,7 +324,7 @@ leads.post('/api/admin/leads/:id/override-status', requireRole('admin'), async (
   if (!lead) return bad(c, 'Not found', 404);
   const [updated] = await sql`UPDATE leads SET status = ${status}, updated_at = now() WHERE id = ${c.req.param('id')} AND tenant_id = ${user.tenant_id} RETURNING *`;
   await logEvent(updated.id, 'admin_override', user, lead.status, status, { note: note || null });
-  broadcast('lead_updated', updated);
+  broadcast('lead_updated', updated, user.tenant_id);
   return c.json({ data: updated });
 });
 
@@ -369,7 +369,7 @@ leads.post('/api/caller/leads/:id/claim', requireRole('caller'), async (c) => {
   if (!updated) return c.json({ claimed: false, reason: 'Already taken' }, 409);
   await logEvent(updated.id, 'claimed', user, 'not_called', 'calling', {});
   await awardXp(user.id, 5, 'claimed', updated.id);
-  broadcast('lead_claimed', { id: Number(id) });
+  broadcast('lead_claimed', { id: Number(id) }, user.tenant_id);
   return c.json({ claimed: true, data: updated });
 });
 
@@ -408,7 +408,7 @@ leads.post('/api/caller/leads/:id/note', requireRole('caller', 'finisher'), asyn
     leadName: `${lead.first_name || ''} ${lead.last_name || ''}`.trim() || 'Lead',
     tenantId: user.tenant_id,
     note: { ...noteRow, author_name: user.name },
-  });
+  }, user.tenant_id);
   await awardXp(user.id, 3, 'note_added', Number(c.req.param('id')));
   return c.json({ data: noteRow });
 });
@@ -469,14 +469,14 @@ leads.post('/api/caller/leads/:id/outcome', requireRole('caller'), async (c) => 
     await notifyRole('admin', 'successful_call', `${user.name} logged a successful call: ${updated.first_name || 'Unknown'} ${updated.last_name || ''}`.trim(), updated.id, undefined, user.tenant_id);
   }
   if (REQUEUE_OUTCOMES.includes(outcome)) {
-    broadcast('new_lead', updated);
+    broadcast('new_lead', updated, user.tenant_id);
     // A requeued lead is genuinely available to claim again - same real push as a
     // fresh import, since from a caller's perspective it's the same "something to
     // claim right now" moment, whatever put it back in the pool.
     await sendPushToRole('caller', 'Lead available', `${updated.first_name || 'A lead'} is back in the queue.`, '/', user.tenant_id);
   }
   const xpAwarded = await awardXp(user.id, XP_MAP[outcome] || 0, 'outcome:' + outcome, updated.id);
-  broadcast('lead_updated', updated);
+  broadcast('lead_updated', updated, user.tenant_id);
   return c.json({ data: updated, xp_awarded: xpAwarded });
 });
 
@@ -496,6 +496,6 @@ leads.post('/api/finisher/leads/:id/outcome', requireRole('finisher'), async (c)
   const [updated] = await sql`UPDATE leads SET status = ${outcome}, notes = COALESCE(${notes || null}, notes), updated_at = now() WHERE id = ${c.req.param('id')} AND tenant_id = ${user.tenant_id} RETURNING *`;
   await logEvent(updated.id, 'finisher_outcome', user, lead.status, outcome, { notes: notes || null });
   const xpAwarded = await awardXp(user.id, outcome === 'completed' ? 75 : 15, 'finisher:' + outcome, updated.id);
-  broadcast('lead_updated', updated);
+  broadcast('lead_updated', updated, user.tenant_id);
   return c.json({ data: updated, xp_awarded: xpAwarded });
 });

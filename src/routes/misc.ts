@@ -82,10 +82,12 @@ misc.get('/api/master/live-stats', requireSuperAdmin(), async (c) => {
 });
 
 misc.get('/api/admin/telephony-config', requireRole('admin'), async (c) => {
-  const [row] = await sql`SELECT value FROM settings WHERE key = 'telephony_config'`;
+  const user = c.get('user');
+  const [row] = await sql`SELECT value FROM settings WHERE key = ${'telephony_config:' + user.tenant_id}`;
   return c.json({ data: row ? JSON.parse(row.value) : null });
 });
 misc.post('/api/admin/telephony-config', requireRole('admin'), async (c) => {
+  const user = c.get('user');
   const body = await c.req.json().catch(() => null);
   if (!body) return c.json({ error: 'Invalid config' }, 400);
   if (body.hold_music_url && body.hold_music_url.length > 2000000) return c.json({ error: 'Audio file too large' }, 400);
@@ -93,7 +95,8 @@ misc.post('/api/admin/telephony-config', requireRole('admin'), async (c) => {
   // came from a form that only had the masked/blank field, don't let it wipe out
   // the real token already stored server-side.
   delete body.twilio_auth_token;
-  await sql`INSERT INTO settings (key, value) VALUES ('telephony_config', ${JSON.stringify(body)}) ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(body)}`;
+  const key = 'telephony_config:' + user.tenant_id;
+  await sql`INSERT INTO settings (key, value) VALUES (${key}, ${JSON.stringify(body)}) ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(body)}`;
   return c.json({ ok: true });
 });
 
@@ -139,26 +142,30 @@ misc.post('/api/admin/telephony-config/connect-twilio', requireRole('admin'), as
     );
     if (!updateRes.ok) return c.json({ error: 'Twilio accepted the credentials but rejected the webhook update (status ' + updateRes.status + ')' }, 400);
 
-    const [row] = await sql`SELECT value FROM settings WHERE key = 'telephony_config'`;
+    const user = c.get('user');
+    const cfgKey = 'telephony_config:' + user.tenant_id;
+    const [row] = await sql`SELECT value FROM settings WHERE key = ${cfgKey}`;
     const cfg = row ? JSON.parse(row.value) : {};
     cfg.twilio_account_sid = account_sid;
     cfg.twilio_phone_number = phone_number;
     cfg.twilio_connected = true;
-    await sql`INSERT INTO settings (key, value) VALUES ('telephony_config', ${JSON.stringify(cfg)}) ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(cfg)}`;
-    await sql`INSERT INTO settings (key, value) VALUES ('twilio_auth_token', ${auth_token}) ON CONFLICT (key) DO UPDATE SET value = ${auth_token}`;
+    await sql`INSERT INTO settings (key, value) VALUES (${cfgKey}, ${JSON.stringify(cfg)}) ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(cfg)}`;
+    await sql`INSERT INTO settings (key, value) VALUES (${'twilio_auth_token:' + user.tenant_id}, ${auth_token}) ON CONFLICT (key) DO UPDATE SET value = ${auth_token}`;
     return c.json({ ok: true });
   } catch (err: any) {
     return c.json({ error: 'Network error reaching Twilio: ' + (err?.message || 'unknown') }, 502);
   }
 });
 misc.post('/api/admin/telephony-config/disconnect-twilio', requireRole('admin'), async (c) => {
-  const [row] = await sql`SELECT value FROM settings WHERE key = 'telephony_config'`;
+  const user = c.get('user');
+  const cfgKey = 'telephony_config:' + user.tenant_id;
+  const [row] = await sql`SELECT value FROM settings WHERE key = ${cfgKey}`;
   const cfg = row ? JSON.parse(row.value) : {};
   cfg.twilio_connected = false;
   cfg.twilio_account_sid = null;
   cfg.twilio_phone_number = null;
-  await sql`INSERT INTO settings (key, value) VALUES ('telephony_config', ${JSON.stringify(cfg)}) ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(cfg)}`;
-  await sql`DELETE FROM settings WHERE key = 'twilio_auth_token'`;
+  await sql`INSERT INTO settings (key, value) VALUES (${cfgKey}, ${JSON.stringify(cfg)}) ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(cfg)}`;
+  await sql`DELETE FROM settings WHERE key = ${'twilio_auth_token:' + user.tenant_id}`;
   return c.json({ ok: true });
 });
 
@@ -188,7 +195,9 @@ misc.post('/api/admin/telephony-config/connect-3cx', requireRole('admin'), async
     return c.json({ error: 'Could not reach that 3CX server: ' + (msg || 'unknown error') }, 502);
   }
 
-  const [row] = await sql`SELECT value FROM settings WHERE key = 'telephony_config'`;
+  const user = c.get('user');
+  const cfgKey = 'telephony_config:' + user.tenant_id;
+  const [row] = await sql`SELECT value FROM settings WHERE key = ${cfgKey}`;
   const cfg = row ? JSON.parse(row.value) : {};
   cfg.provider = '3cx';
   cfg.threecx_fqdn = cleanFqdn;
@@ -200,8 +209,8 @@ misc.post('/api/admin/telephony-config/connect-3cx', requireRole('admin'), async
     cfg.threecx_route_point = discovered.routePoints[0];
   }
   if (!cfg.threecx_ring_seconds) cfg.threecx_ring_seconds = 20;
-  await sql`INSERT INTO settings (key, value) VALUES ('telephony_config', ${JSON.stringify(cfg)}) ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(cfg)}`;
-  await sql`INSERT INTO settings (key, value) VALUES ('threecx_client_secret', ${client_secret}) ON CONFLICT (key) DO UPDATE SET value = ${client_secret}`;
+  await sql`INSERT INTO settings (key, value) VALUES (${cfgKey}, ${JSON.stringify(cfg)}) ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(cfg)}`;
+  await sql`INSERT INTO settings (key, value) VALUES (${'threecx_client_secret:' + user.tenant_id}, ${client_secret}) ON CONFLICT (key) DO UPDATE SET value = ${client_secret}`;
 
   await threecx.restart().catch(() => {});
   return c.json({
@@ -213,15 +222,16 @@ misc.post('/api/admin/telephony-config/connect-3cx', requireRole('admin'), async
   });
 });
 misc.post('/api/admin/telephony-config/disconnect-3cx', requireRole('admin'), async (c) => {
-  const [row] = await sql`SELECT value FROM settings WHERE key = 'telephony_config'`;
+  const user = c.get('user');
+  const cfgKey = 'telephony_config:' + user.tenant_id;
+  const [row] = await sql`SELECT value FROM settings WHERE key = ${cfgKey}`;
   const cfg = row ? JSON.parse(row.value) : {};
   cfg.threecx_connected = false;
   cfg.threecx_fqdn = null;
   cfg.threecx_client_id = null;
-  await sql`INSERT INTO settings (key, value) VALUES ('telephony_config', ${JSON.stringify(cfg)}) ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(cfg)}`;
   cfg.threecx_route_point = null;
-  await sql`INSERT INTO settings (key, value) VALUES ('telephony_config', ${JSON.stringify(cfg)}) ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(cfg)}`;
-  await sql`DELETE FROM settings WHERE key = 'threecx_client_secret'`;
+  await sql`INSERT INTO settings (key, value) VALUES (${cfgKey}, ${JSON.stringify(cfg)}) ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(cfg)}`;
+  await sql`DELETE FROM settings WHERE key = ${'threecx_client_secret:' + user.tenant_id}`;
   threecx.stop();
   return c.json({ ok: true });
 });
@@ -282,30 +292,34 @@ misc.post('/api/admin/telephony-config/connect-vonage', requireRole('admin'), as
     // linked manually in the Vonage dashboard if needed.
     const numberLinked = numberRes.ok;
 
-    const [row] = await sql`SELECT value FROM settings WHERE key = 'telephony_config'`;
+    const user = c.get('user');
+    const cfgKey = 'telephony_config:' + user.tenant_id;
+    const [row] = await sql`SELECT value FROM settings WHERE key = ${cfgKey}`;
     const cfg = row ? JSON.parse(row.value) : {};
     cfg.provider = 'vonage';
     cfg.vonage_api_key = api_key;
     cfg.vonage_application_id = application_id;
     cfg.vonage_number = phone_number;
     cfg.vonage_connected = true;
-    await sql`INSERT INTO settings (key, value) VALUES ('telephony_config', ${JSON.stringify(cfg)}) ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(cfg)}`;
-    await sql`INSERT INTO settings (key, value) VALUES ('vonage_api_secret', ${api_secret}) ON CONFLICT (key) DO UPDATE SET value = ${api_secret}`;
-    await sql`INSERT INTO settings (key, value) VALUES ('vonage_private_key', ${private_key}) ON CONFLICT (key) DO UPDATE SET value = ${private_key}`;
+    await sql`INSERT INTO settings (key, value) VALUES (${cfgKey}, ${JSON.stringify(cfg)}) ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(cfg)}`;
+    await sql`INSERT INTO settings (key, value) VALUES (${'vonage_api_secret:' + user.tenant_id}, ${api_secret}) ON CONFLICT (key) DO UPDATE SET value = ${api_secret}`;
+    await sql`INSERT INTO settings (key, value) VALUES (${'vonage_private_key:' + user.tenant_id}, ${private_key}) ON CONFLICT (key) DO UPDATE SET value = ${private_key}`;
     return c.json({ ok: true, number_linked: numberLinked });
   } catch (err: any) {
     return c.json({ error: 'Network error reaching Vonage: ' + (err?.message || 'unknown') }, 502);
   }
 });
 misc.post('/api/admin/telephony-config/disconnect-vonage', requireRole('admin'), async (c) => {
-  const [row] = await sql`SELECT value FROM settings WHERE key = 'telephony_config'`;
+  const user = c.get('user');
+  const cfgKey = 'telephony_config:' + user.tenant_id;
+  const [row] = await sql`SELECT value FROM settings WHERE key = ${cfgKey}`;
   const cfg = row ? JSON.parse(row.value) : {};
   cfg.vonage_connected = false;
   cfg.vonage_api_key = null;
   cfg.vonage_application_id = null;
   cfg.vonage_number = null;
-  await sql`INSERT INTO settings (key, value) VALUES ('telephony_config', ${JSON.stringify(cfg)}) ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(cfg)}`;
-  await sql`DELETE FROM settings WHERE key IN ('vonage_api_secret', 'vonage_private_key')`;
+  await sql`INSERT INTO settings (key, value) VALUES (${cfgKey}, ${JSON.stringify(cfg)}) ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(cfg)}`;
+  await sql`DELETE FROM settings WHERE key IN (${'vonage_api_secret:' + user.tenant_id}, ${'vonage_private_key:' + user.tenant_id})`;
   return c.json({ ok: true });
 });
 
@@ -313,12 +327,13 @@ misc.post('/api/admin/telephony-config/disconnect-vonage', requireRole('admin'),
 // places a real outbound call from the connected number to whatever number the
 // admin enters, playing the exact same greeting TwiML a real caller would hear.
 misc.post('/api/admin/telephony-config/test-call', requireRole('admin'), async (c) => {
+  const user = c.get('user');
   const { to_number } = await c.req.json().catch(() => ({}));
   if (!to_number) return c.json({ error: 'Enter a phone number to call' }, 400);
-  const [cfgRow] = await sql`SELECT value FROM settings WHERE key = 'telephony_config'`;
+  const [cfgRow] = await sql`SELECT value FROM settings WHERE key = ${'telephony_config:' + user.tenant_id}`;
   const cfg = cfgRow ? JSON.parse(cfgRow.value) : {};
   if (!cfg.twilio_connected) return c.json({ error: 'Connect Twilio first' }, 400);
-  const [tokenRow] = await sql`SELECT value FROM settings WHERE key = 'twilio_auth_token'`;
+  const [tokenRow] = await sql`SELECT value FROM settings WHERE key = ${'twilio_auth_token:' + user.tenant_id}`;
   if (!tokenRow) return c.json({ error: 'No Twilio credentials stored — reconnect Twilio' }, 400);
 
   const authHeader = 'Basic ' + Buffer.from(`${cfg.twilio_account_sid}:${tokenRow.value}`).toString('base64');
@@ -432,13 +447,15 @@ misc.post('/api/push/unsubscribe', async (c) => {
 });
 
 misc.get('/api/call-template', requireRole('admin', 'caller', 'finisher'), async (c) => {
-  const [row] = await sql`SELECT value FROM settings WHERE key = 'call_template'`;
+  const user = c.get('user');
+  const [row] = await sql`SELECT value FROM settings WHERE key = ${'call_template:' + user.tenant_id}`;
   return c.json({ data: { template: row?.value || '' } });
 });
 misc.post('/api/admin/call-template', requireRole('admin'), async (c) => {
+  const user = c.get('user');
   const { template } = await c.req.json().catch(() => ({}));
   if (typeof template !== 'string') return c.json({ error: 'template required' }, 400);
-  await sql`INSERT INTO settings (key, value) VALUES ('call_template', ${template}) ON CONFLICT (key) DO UPDATE SET value = ${template}`;
+  await sql`INSERT INTO settings (key, value) VALUES (${'call_template:' + user.tenant_id}, ${template}) ON CONFLICT (key) DO UPDATE SET value = ${template}`;
   return c.json({ ok: true });
 });
 
@@ -465,11 +482,12 @@ misc.post('/api/admin/goal', requireRole('admin'), async (c) => {
 misc.get('/api/events', async (c) => {
   const user = await authenticate(c);
   const userId = user?.id || 0;
+  const tenantId = user?.tenant_id ?? null;
   return new Response(
     new ReadableStream({
       start(controller) {
         const encoder = new TextEncoder();
-        const client = registerClient(userId, (msg: string) => controller.enqueue(encoder.encode(msg)));
+        const client = registerClient(userId, tenantId, (msg: string) => controller.enqueue(encoder.encode(msg)));
         client.write(': connected\n\n');
         const keepAlive = setInterval(() => { try { client.write(': ping\n\n'); } catch {} }, 25000);
         c.req.raw.signal.addEventListener('abort', () => {

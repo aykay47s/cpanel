@@ -42,7 +42,7 @@ chat.post('/api/chat/messages', async (c) => {
   const expiresAt = expiresInSeconds ? new Date(Date.now() + expiresInSeconds * 1000) : null;
   const [row] = await sql`INSERT INTO chat_messages (sender_id, content, reply_to_id, expires_at, tenant_id) VALUES (${user.id}, ${content.trim()}, ${replyToId || null}, ${expiresAt}, ${user.tenant_id}) RETURNING *`;
   const full = { ...row, sender_name: user.name, sender_avatar: user.avatar, sender_pfp_data: user.pfp_data, sender_role: user.role };
-  broadcast('chat_message', full);
+  broadcast('chat_message', full, user.tenant_id);
   await notifyRole('all', 'chat', `${user.name}: ${content.trim().slice(0, 80)}`, undefined, user.id, user.tenant_id);
   return c.json({ data: full });
 });
@@ -56,7 +56,7 @@ chat.delete('/api/chat/messages/:id', async (c) => {
   if (!msg) return bad(c, 'Not found', 404);
   if (msg.sender_id !== user.id && user.role !== 'admin') return bad(c, 'Unauthorized', 403);
   await sql`DELETE FROM chat_messages WHERE id = ${c.req.param('id')}`;
-  broadcast('chat_deleted', { id: Number(c.req.param('id')) });
+  broadcast('chat_deleted', { id: Number(c.req.param('id')) }, user.tenant_id);
   return c.json({ ok: true });
 });
 

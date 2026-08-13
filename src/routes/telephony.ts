@@ -10,17 +10,25 @@ function esc(s: string) {
   return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+async function getSelfTenantId(): Promise<number | null> {
+  const [row] = await sql`SELECT id FROM tenants WHERE is_self = true`;
+  return row?.id ?? null;
+}
+// Twilio/Vonage inbound routing is currently only ever wired to the self
+// tenant's origin (see the note on /api/telephony/inbound below) - so the
+// config it reads is scoped to the self tenant's key specifically, matching
+// the tenant-scoped storage every admin-facing telephony route now uses.
+// This was a single global, unscoped key until it was found that every
+// tenant could see and overwrite every other tenant's Twilio/3CX/Vonage
+// credentials through it.
 async function getTelephonyConfig() {
-  const [row] = await sql`SELECT value FROM settings WHERE key = 'telephony_config'`;
+  const selfId = await getSelfTenantId();
+  const [row] = await sql`SELECT value FROM settings WHERE key = ${'telephony_config:' + selfId}`;
   return row ? JSON.parse(row.value) : { menu_options: [], hold_music_url: null, ring_behavior: 'keep_ringing', greeting_name: null };
 }
 async function getPanelName() {
   const [row] = await sql`SELECT value FROM settings WHERE key = 'panel_name'`;
   return row?.value || 'us';
-}
-async function getSelfTenantId(): Promise<number | null> {
-  const [row] = await sql`SELECT id FROM tenants WHERE is_self = true`;
-  return row?.id ?? null;
 }
 // Ordered list of who's actually eligible to receive an inbound call right now —
 // respects the admin's "everyone" vs "selected callers only" setting, calls
@@ -62,7 +70,7 @@ telephony.post('/api/telephony/inbound', async (c) => {
   if (callSid && tenantId) {
     const [existingCall] = await sql`SELECT 1 FROM inbound_calls WHERE twilio_call_sid = ${callSid}`;
     await sql`INSERT INTO inbound_calls (twilio_call_sid, from_number, status, tenant_id) VALUES (${callSid}, ${from}, 'ringing', ${tenantId}) ON CONFLICT (twilio_call_sid) DO NOTHING`;
-    broadcast('inbound_call', { callSid, from });
+    broadcast('inbound_call', { callSid, from }, tenantId);
     if (!existingCall) await identifyAndAlertForInboundCall(from, tenantId, 'twilio').catch(() => {});
   }
 
@@ -197,8 +205,8 @@ telephony.post('/api/telephony/status', async (c) => {
   const status = String((body as any).CallStatus || '');
   const duration = (body as any).CallDuration ? parseInt(String((body as any).CallDuration), 10) : null;
   if (callSid) {
-    await sql`UPDATE inbound_calls SET status = ${status}, duration_seconds = ${duration}, ended_at = now() WHERE twilio_call_sid = ${callSid}`;
-    broadcast('inbound_call_update', { callSid, status });
+    const [updated] = await sql`UPDATE inbound_calls SET status = ${status}, duration_seconds = ${duration}, ended_at = now() WHERE twilio_call_sid = ${callSid} RETURNING tenant_id`;
+    if (updated) broadcast('inbound_call_update', { callSid, status }, updated.tenant_id);
   }
   return c.text('', 200);
 });
@@ -228,13 +236,15 @@ telephony.post('/api/admin/telephony/3cx/reconnect', requireRole('admin'), async
 
 // Routing settings that only apply to the call control engine.
 telephony.post('/api/admin/telephony/3cx/routing', requireRole('admin'), async (c) => {
+  const user = c.get('user');
   const { route_point, ring_seconds, fallback } = await c.req.json().catch(() => ({} as any));
-  const [row] = await sql`SELECT value FROM settings WHERE key = 'telephony_config'`;
+  const cfgKey = 'telephony_config:' + user.tenant_id;
+  const [row] = await sql`SELECT value FROM settings WHERE key = ${cfgKey}`;
   const cfg = row ? JSON.parse(row.value) : {};
   if (route_point !== undefined) cfg.threecx_route_point = route_point || null;
   if (ring_seconds !== undefined) cfg.threecx_ring_seconds = Math.max(5, Math.min(120, parseInt(ring_seconds, 10) || 20));
   if (fallback !== undefined) cfg.threecx_fallback = fallback || null;
-  await sql`INSERT INTO settings (key, value) VALUES ('telephony_config', ${JSON.stringify(cfg)}) ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(cfg)}`;
+  await sql`INSERT INTO settings (key, value) VALUES (${cfgKey}, ${JSON.stringify(cfg)}) ON CONFLICT (key) DO UPDATE SET value = ${JSON.stringify(cfg)}`;
   await threecx.restart(); // route point changes decide what the socket listens to
   return c.json({ data: cfg });
 });
@@ -283,7 +293,7 @@ async function identifyAndAlertForInboundCall(from: string, tenantId: number, pr
   const [lead] = await sql`SELECT * FROM leads WHERE tenant_id = ${tenantId} AND regexp_replace(phone, '[^0-9]', '', 'g') LIKE ${'%' + digitsOnly.slice(-9)} ORDER BY updated_at DESC LIMIT 1`;
   if (!lead) return;
 
-  broadcast('caller_identified', { lead, from, provider });
+  broadcast('caller_identified', { lead, from, provider }, tenantId);
 
   const cfg = await getTelephonyConfig();
   const eligible = cfg.inbound_mode === 'selected'
@@ -306,7 +316,7 @@ async function handle3cxWebhook(c: any, tenantId: number) {
   if (['ringing', 'incoming', 'new', 'start'].some(k => eventType.includes(k))) {
     const [existingConfig] = await sql`SELECT 1 FROM inbound_calls WHERE twilio_call_sid = ${callId}`;
     await sql`INSERT INTO inbound_calls (twilio_call_sid, from_number, status, provider, tenant_id) VALUES (${callId}, ${from}, 'ringing', '3cx', ${tenantId}) ON CONFLICT (twilio_call_sid) DO NOTHING`;
-    broadcast('inbound_call', { callSid: callId, from });
+    broadcast('inbound_call', { callSid: callId, from }, tenantId);
     if (!existingConfig) {
       // Only look up + alert once per call, not on every duplicate ringing event
       // some 3CX configurations send.
@@ -314,7 +324,7 @@ async function handle3cxWebhook(c: any, tenantId: number) {
     }
   } else {
     await sql`UPDATE inbound_calls SET status = ${eventType || 'unknown'}, ended_at = CASE WHEN ${eventType} IN ('ended','completed','hangup','missed') THEN now() ELSE ended_at END WHERE twilio_call_sid = ${callId} AND provider = '3cx'`;
-    broadcast('inbound_call_update', { callSid: callId, status: eventType });
+    broadcast('inbound_call_update', { callSid: callId, status: eventType }, tenantId);
   }
   return c.json({ ok: true });
 }
@@ -355,7 +365,7 @@ telephony.all('/api/telephony/vonage/answer', async (c) => {
   if (callUuid && tenantId) {
     const [existingCall] = await sql`SELECT 1 FROM inbound_calls WHERE twilio_call_sid = ${callUuid}`;
     await sql`INSERT INTO inbound_calls (twilio_call_sid, from_number, status, provider, tenant_id) VALUES (${callUuid}, ${from}, 'ringing', 'vonage', ${tenantId}) ON CONFLICT (twilio_call_sid) DO NOTHING`;
-    broadcast('inbound_call', { callSid: callUuid, from });
+    broadcast('inbound_call', { callSid: callUuid, from }, tenantId);
     if (!existingCall) await identifyAndAlertForInboundCall(from, tenantId, 'vonage').catch(() => {});
   }
 
@@ -423,8 +433,8 @@ telephony.post('/api/telephony/vonage/event', async (c) => {
   const status = String(body.status || '');
   if (callUuid) {
     const isEnded = ['completed', 'failed', 'busy', 'timeout', 'cancelled', 'rejected'].includes(status);
-    await sql`UPDATE inbound_calls SET status = ${status || 'unknown'}, duration_seconds = ${body.duration ? parseInt(body.duration, 10) : null}, ended_at = CASE WHEN ${isEnded} THEN now() ELSE ended_at END WHERE twilio_call_sid = ${callUuid}`.catch(() => {});
-    broadcast('inbound_call_update', { callSid: callUuid, status });
+    const [updated] = await sql`UPDATE inbound_calls SET status = ${status || 'unknown'}, duration_seconds = ${body.duration ? parseInt(body.duration, 10) : null}, ended_at = CASE WHEN ${isEnded} THEN now() ELSE ended_at END WHERE twilio_call_sid = ${callUuid} RETURNING tenant_id`.catch(() => [] as any);
+    if (updated) broadcast('inbound_call_update', { callSid: callUuid, status }, updated.tenant_id);
   }
   return c.text('', 200);
 });

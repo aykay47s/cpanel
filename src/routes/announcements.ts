@@ -27,7 +27,7 @@ announcements.post('/api/admin/announcements', requireRole('admin'), async (c) =
   const { content, important, target_role } = await c.req.json().catch(() => ({}));
   if (!content) return bad(c, 'Content required');
   const [row] = await sql`INSERT INTO announcements (content, important, target_role, created_by, tenant_id) VALUES (${content}, ${!!important}, ${target_role || 'all'}, ${user.id}, ${user.tenant_id}) RETURNING *`;
-  broadcast('announcement', row);
+  broadcast('announcement', row, user.tenant_id);
   await notifyRole(target_role || 'all', 'announcement', content.slice(0, 100), undefined, user.id, user.tenant_id);
   // Also post into the Telegram announcements group via the gateway bot, if
   // it's configured and a group has been selected — fire-and-forget so a
@@ -46,7 +46,7 @@ announcements.patch('/api/admin/announcements/:id', requireRole('admin'), async 
   const user = c.get('user');
   const { content, important, target_role } = await c.req.json().catch(() => ({}));
   const [row] = await sql`UPDATE announcements SET content = COALESCE(${content || null}, content), important = COALESCE(${important ?? null}, important), target_role = COALESCE(${target_role || null}, target_role) WHERE id = ${c.req.param('id')} AND tenant_id = ${user.tenant_id} RETURNING *`;
-  broadcast('announcement', row);
+  broadcast('announcement', row, user.tenant_id);
   return c.json({ data: row });
 });
 

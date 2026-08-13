@@ -518,6 +518,31 @@ export async function ensureDb() {
   for (const stmt of usernameAlters) {
     await sql.unsafe(`DO $$ BEGIN ${stmt}; EXCEPTION WHEN OTHERS THEN NULL; END $$;`);
   }
+  // CRITICAL FIX: telephony_config, twilio_auth_token, threecx_client_secret,
+  // vonage_api_secret, vonage_private_key, and call_template were all stored as
+  // single GLOBAL settings rows shared by every tenant on the platform — any
+  // tenant's admin could view (and overwrite) any other tenant's Twilio/3CX/
+  // Vonage credentials and IVR/script config. Migrate the existing global value
+  // for each key to a tenant-scoped key (key:tenantId) for the self-tenant
+  // specifically, since live call routing has only ever been wired to the self
+  // tenant's origin — this preserves the current live setup exactly as it
+  // already behaves. The old global row is left in place (unused after this)
+  // rather than deleted, so nothing is destroyed if something needs checking.
+  const [selfForTelephony] = await sql`SELECT id FROM tenants WHERE is_self = true`;
+  if (selfForTelephony) {
+    const sid = selfForTelephony.id;
+    const legacyKeys = ['telephony_config', 'twilio_auth_token', 'threecx_client_secret', 'vonage_api_secret', 'vonage_private_key', 'call_template', 'center_open', 'center_offline_reason'];
+    for (const key of legacyKeys) {
+      const scopedKey = `${key}:${sid}`;
+      const [already] = await sql`SELECT 1 FROM settings WHERE key = ${scopedKey}`;
+      if (already) continue;
+      const [legacy] = await sql`SELECT value FROM settings WHERE key = ${key}`;
+      if (legacy?.value !== undefined) {
+        await sql`INSERT INTO settings (key, value) VALUES (${scopedKey}, ${legacy.value}) ON CONFLICT (key) DO NOTHING`;
+      }
+    }
+  }
+
   // Groups/chats the gateway bot has seen a message in — captured automatically
   // via its webhook so an admin can pick "the announcements group" from a real
   // list instead of needing to know its numeric chat_id.

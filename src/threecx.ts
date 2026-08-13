@@ -45,9 +45,16 @@ export interface ThreecxConfig {
   enabled: boolean;
 }
 
+// Scoped to the self tenant's keys - was a single global, unscoped key until
+// it was found that every tenant could see and overwrite every other
+// tenant's 3CX credentials through the shared settings table. The live
+// socket itself only ever connects for the self tenant (this codebase
+// doesn't yet run one socket per resold tenant), so this is the correct
+// scope for what's actually live right now, not a narrowing of behavior.
 async function loadConfig(): Promise<ThreecxConfig | null> {
-  const [cfgRow] = await sql`SELECT value FROM settings WHERE key = 'telephony_config'`;
-  const [secretRow] = await sql`SELECT value FROM settings WHERE key = 'threecx_client_secret'`;
+  const selfId = await getSelfTenantId();
+  const [cfgRow] = await sql`SELECT value FROM settings WHERE key = ${'telephony_config:' + selfId}`;
+  const [secretRow] = await sql`SELECT value FROM settings WHERE key = ${'threecx_client_secret:' + selfId}`;
   if (!cfgRow || !secretRow) return null;
   const cfg = JSON.parse(cfgRow.value);
   if (!cfg.threecx_connected || !cfg.threecx_fqdn || !cfg.threecx_client_id) return null;
@@ -210,15 +217,15 @@ async function handleInboundLeg(cfg: ThreecxConfig, dn: string, p: Participant) 
     VALUES (${key}, ${from}, 'ringing', '3cx', ${tenantId}, ${lead?.id ?? null}, ${p.party_did || null})
     ON CONFLICT (twilio_call_sid) DO NOTHING`;
 
-  broadcast('inbound_call', { callSid: key, from, provider: '3cx', did: p.party_did || null });
-  if (lead) broadcast('caller_identified', { lead, from, provider: '3cx' });
+  broadcast('inbound_call', { callSid: key, from, provider: '3cx', did: p.party_did || null }, tenantId);
+  if (lead) broadcast('caller_identified', { lead, from, provider: '3cx' }, tenantId);
 
   const callers = await getEligibleCallers(cfg, tenantId);
 
   if (!callers.length) {
     status.callsMissed++;
     await sql`UPDATE inbound_calls SET status = 'no_agents', ended_at = now() WHERE twilio_call_sid = ${key}`;
-    broadcast('inbound_call_update', { callSid: key, status: 'no_agents' });
+    broadcast('inbound_call_update', { callSid: key, status: 'no_agents' }, tenantId);
     if (cfg.fallback) {
       await pbx(cfg, `/callcontrol/${encodeURIComponent(dn)}/participants/${p.id}/divert`, {
         method: 'POST',
@@ -241,7 +248,7 @@ async function handleInboundLeg(cfg: ThreecxConfig, dn: string, p: Participant) 
     const name = [lead?.first_name, lead?.last_name].filter(Boolean).join(' ') || from || 'Unknown caller';
     try {
       await notify(caller.id, 'inbound_call', `Inbound: ${name} — your phone is ringing now.`, lead?.id);
-      broadcast('inbound_ringing', { callSid: key, userId: caller.id, lead: lead || null, from }, [caller.id]);
+      broadcast('inbound_ringing', { callSid: key, userId: caller.id, lead: lead || null, from }, tenantId, [caller.id]);
 
       const result = await pbx(
         cfg,
@@ -268,14 +275,14 @@ async function handleInboundLeg(cfg: ThreecxConfig, dn: string, p: Participant) 
       if (answered) {
         status.callsRouted++;
         await sql`UPDATE inbound_calls SET status = 'answered', routed_to_user_id = ${caller.id}, answered_at = now(), route_attempts = ${attempts} WHERE twilio_call_sid = ${key}`;
-        broadcast('inbound_call_update', { callSid: key, status: 'answered', userId: caller.id });
+        broadcast('inbound_call_update', { callSid: key, status: 'answered', userId: caller.id }, tenantId);
 
         // Hand the lead to whoever picked up, so the panel opens on the right
         // record instead of the caller hunting for it mid-conversation.
         if (lead) {
           await sql`UPDATE leads SET assigned_caller_id = ${caller.id}, status = 'active_call', call_started_at = now(), updated_at = now()
                     WHERE id = ${lead.id} AND (assigned_caller_id IS NULL OR status NOT IN ('calling','active_call'))`;
-          broadcast('lead_updated', { id: lead.id });
+          broadcast('lead_updated', { id: lead.id }, tenantId);
         }
         inFlight.delete(key);
         return;
@@ -289,7 +296,7 @@ async function handleInboundLeg(cfg: ThreecxConfig, dn: string, p: Participant) 
   // Nobody took it.
   status.callsMissed++;
   await sql`UPDATE inbound_calls SET status = 'missed', route_attempts = ${attempts}, ended_at = now() WHERE twilio_call_sid = ${key}`;
-  broadcast('inbound_call_update', { callSid: key, status: 'missed' });
+  broadcast('inbound_call_update', { callSid: key, status: 'missed' }, tenantId);
   if (cfg.fallback) {
     await pbx(cfg, `/callcontrol/${encodeURIComponent(dn)}/participants/${p.id}/divert`, {
       method: 'POST',
@@ -301,7 +308,7 @@ async function handleInboundLeg(cfg: ThreecxConfig, dn: string, p: Participant) 
 
 async function markLegEnded(key: string) {
   inFlight.delete(key);
-  const [row] = await sql`SELECT status FROM inbound_calls WHERE twilio_call_sid = ${key}`;
+  const [row] = await sql`SELECT status, tenant_id FROM inbound_calls WHERE twilio_call_sid = ${key}`;
   if (!row) return;
   const stillOpen = ['ringing'].includes(row.status);
   await sql`UPDATE inbound_calls
@@ -309,7 +316,7 @@ async function markLegEnded(key: string) {
                 ended_at = COALESCE(ended_at, now()),
                 duration_seconds = COALESCE(duration_seconds, EXTRACT(EPOCH FROM (now() - created_at))::int)
             WHERE twilio_call_sid = ${key}`;
-  broadcast('inbound_call_update', { callSid: key, status: stillOpen ? 'abandoned' : row.status });
+  broadcast('inbound_call_update', { callSid: key, status: stillOpen ? 'abandoned' : row.status }, row.tenant_id);
 }
 
 // ----------------------------------------------------------- event stream ---
