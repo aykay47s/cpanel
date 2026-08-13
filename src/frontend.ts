@@ -114,6 +114,7 @@ async function attemptLogin() {
   }
   me = data.data;
   localStorage.setItem('dispatch_me', JSON.stringify(me));
+  localStorage.setItem('dispatch_session_ts', String(Date.now()));
   
   // If onboarding is required, show onboarding form instead of entering app
   if (data.onboarding_required) {
@@ -147,7 +148,7 @@ function logout() {
   if (me) api('/api/clock', { method: 'POST', body: JSON.stringify({ clockedIn: false }) });
   if (es) { es.close(); es = null; }
   if (typeof stopQueuePolling === 'function') stopQueuePolling();
-  localStorage.removeItem('dispatch_me'); me = null; pinBuffer = ''; renderPinDots();
+  localStorage.removeItem('dispatch_me'); localStorage.removeItem('dispatch_session_ts'); me = null; pinBuffer = ''; renderPinDots();
   document.getElementById('adminApp').classList.add('hidden');
   document.getElementById('staffApp').classList.add('hidden');
   document.getElementById('loginScreen').classList.remove('hidden');
@@ -1793,7 +1794,26 @@ if (me && String(me.tenant_id ?? '') !== String(_cpPageTenantId)) {
   me = null;
 }
 
-if (me) enterApp();
+// On a fresh page load we don't silently trust a stored session forever. If the
+// last verified login is older than the session window, or the stored session
+// predates session tracking, require the PIN again — so closing the app (or
+// walking away and coming back later) means re-authenticating, not instant access.
+const SESSION_MAX_AGE_MS = 12 * 60 * 60 * 1000; // 12 hours
+function sessionIsFresh() {
+  try {
+    const ts = parseInt(localStorage.getItem('dispatch_session_ts') || '0', 10);
+    return ts > 0 && (Date.now() - ts) < SESSION_MAX_AGE_MS;
+  } catch { return false; }
+}
+if (me && sessionIsFresh()) {
+  enterApp();
+} else if (me) {
+  // Stored session but stale/unverified — keep the username hint but force a PIN entry.
+  me = null;
+  // (dispatch_me is left in place only so the login screen could pre-fill a hint;
+  //  no API call will succeed until the PIN is re-entered and a new session starts.)
+  localStorage.removeItem('dispatch_me');
+}
 
 // Branding is now handled by applyBranding() + server-side name injection.
 // The slug is read from the cp-slug meta tag.
