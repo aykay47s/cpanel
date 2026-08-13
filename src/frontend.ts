@@ -1098,7 +1098,8 @@ label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spa
 /* ---- Stat tile v2: icon chip + number, used on the caller home screen ---- */
 .stat-tile{padding:16px 14px;border-radius:16px;position:relative;overflow:hidden;transition:transform .25s var(--ease-spring);}
 .stat-tile:active{transform:scale(.97);}
-.stat-tile .icon-chip{width:30px;height:30px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:15px;margin-bottom:10px;}
+.icon-chip{width:30px;height:30px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;}
+.stat-tile .icon-chip{margin-bottom:10px;}
 .stat-tile .num{font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:800;letter-spacing:-.03em;line-height:1;}
 .stat-tile .lbl{font-size:10px;color:var(--text-faint);font-weight:700;letter-spacing:.04em;text-transform:uppercase;margin-top:4px;}
 .section-title{font-size:12px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.8px;margin:28px 0 14px;font-weight:600;}

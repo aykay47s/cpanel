@@ -165,13 +165,19 @@ async function renderStaffScripts() {
   body.innerHTML = \`
     <div class="tab-hint"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8h.01M11 12h1v4h1"/></svg><span>Every script admin has approved, searchable anytime — not just mid-call. Got a line that lands? Send it in at the bottom and admin can approve it for the whole floor.</span></div>
     <div class="panel p fade-up">
-      <div class="section-title" style="margin-top:0;">Script Library</div>
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px;">
+        <div class="section-title" style="margin:0;">Script Library</div>
+        <span style="font-size:11px;color:var(--text-faint);font-weight:600;">\${scripts.length} approved</span>
+      </div>
       <input id="scriptSearchInput" placeholder="Search scripts…" oninput="filterScriptManager()" style="margin-bottom:12px;" />
       <div id="scriptManagerList"></div>
     </div>
     <div class="section-title">Suggest a Script</div>
     <div class="panel p fade-up">
-      <p style="font-size:11.5px;color:var(--text-dim);margin-bottom:10px;line-height:1.4;">Admin reviews it and can approve it for the whole team to see during calls.</p>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+        <div class="icon-chip" style="background:rgba(251,191,36,.14);color:#fbbf24;flex-shrink:0;">✎</div>
+        <p style="font-size:11.5px;color:var(--text-dim);line-height:1.4;margin:0;">Admin reviews it and can approve it for the whole team to see during calls.</p>
+      </div>
       <div class="field"><input id="scriptSuggestTitle" placeholder="Give it a short title" /></div>
       <div class="field"><textarea id="scriptSuggestContent" rows="3" placeholder="What do you actually say?"></textarea></div>
       <button class="btn btn-gold btn-block" onclick="suggestScript()">Send for Review</button>
@@ -179,15 +185,20 @@ async function renderStaffScripts() {
     </div>\`;
   renderScriptManagerList(scripts);
 }
+const SCRIPT_ICONS = ['💬','🎯','💡','🔑','📋','✨'];
+function scriptIconFor(idx) { return SCRIPT_ICONS[idx % SCRIPT_ICONS.length]; }
 function renderScriptManagerList(scripts) {
   const list = document.getElementById('scriptManagerList');
   if (!list) return;
   list.innerHTML = scripts.length ? scripts.map((s, i) => \`<div class="script-manager-item" data-script-idx="\${i}" onclick="toggleScriptManagerItem(\${i})" style="padding:13px 14px;margin-bottom:8px;cursor:pointer;">
-    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
-      <div style="display:flex;align-items:baseline;gap:8px;min-width:0;"><b style="font-size:13px;">\${esc(s.title)}</b>\${s.lead_type && s.lead_type !== 'general' ? categoryBadgeHtml(s.lead_type) : ''}</div>
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
+      <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+        <div class="icon-chip" style="width:26px;height:26px;font-size:13px;background:rgba(124,92,255,.12);color:var(--violet-bright);flex-shrink:0;">\${scriptIconFor(i)}</div>
+        <div style="display:flex;align-items:baseline;gap:8px;min-width:0;overflow:hidden;"><b style="font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">\${esc(s.title)}</b>\${s.lead_type && s.lead_type !== 'general' ? categoryBadgeHtml(s.lead_type) : ''}</div>
+      </div>
       <span class="script-chevron" style="color:var(--text-faint);flex-shrink:0;transition:transform .2s ease;">▾</span>
     </div>
-    <div class="script-manager-content" style="font-size:12.5px;color:var(--text-dim);white-space:pre-wrap;line-height:1.5;max-height:0;overflow:hidden;transition:max-height .25s ease, margin-top .25s ease;margin-top:0;">\${esc(s.content)}</div>
+    <div class="script-manager-content" style="font-size:12.5px;color:var(--text-dim);white-space:pre-wrap;line-height:1.5;max-height:0;overflow:hidden;transition:max-height .25s ease, margin-top .25s ease;margin-top:0;padding-left:36px;">\${esc(s.content)}</div>
   </div>\`).join('') : '<div style="color:var(--text-dim);font-size:12.5px;">No approved scripts yet.</div>';
 }
 function toggleScriptManagerItem(i) {
