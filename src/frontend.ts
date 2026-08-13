@@ -472,7 +472,7 @@ function renderStaffNav() {
 function connectEvents() {
   if (es) es.close();
   es = new EventSource('/api/events?uid=' + me.id + '&pin=' + me.pin);
-  es.addEventListener('new_lead', () => { if (staffTab === 'queue' && !onActiveCallScreen) smoothRerender(renderStaffQueue); pingNav('queue'); if (me.role==='admin') maybeRefreshAdmin('leads'); });
+  es.addEventListener('new_lead', () => { if (me.role !== 'admin') playPing('lead'); if (staffTab === 'queue' && !onActiveCallScreen) smoothRerender(renderStaffQueue); pingNav('queue'); if (me.role==='admin') maybeRefreshAdmin('leads'); });
   es.addEventListener('center_closed', (e) => {
     if (me.role === 'admin') return; // admins are exempt from the gate, nothing changes for them
     const d = JSON.parse(e.data);
@@ -485,6 +485,7 @@ function connectEvents() {
   });
   es.addEventListener('caller_identified', (e) => {
     if (me.role !== 'admin') return;
+    playPing('inbound');
     const zone = document.getElementById('callerIdPopZone');
     if (!zone) return; // not currently on the dashboard, no pop to show
     const d = JSON.parse(e.data);
@@ -524,6 +525,34 @@ function connectEvents() {
 function pingNav(tab) {
   const btn = document.querySelector('.nav-btn[data-tab="' + tab + '"]');
   if (btn && !btn.querySelector('.nav-badge')) { const b = document.createElement('span'); b.className = 'nav-badge'; b.style.position='absolute'; b.style.top='2px'; b.style.right='22%'; btn.appendChild(b); }
+}
+// Short, pleasant two-note ping via Web Audio — no asset to load, works offline.
+// Respects a per-user mute (cp_sound_off) so callers can silence it. Browsers
+// block audio until the first interaction, which a caller always makes (login/tap),
+// so by the time an alert fires the context is unlocked.
+let _audioCtx = null;
+function playPing(kind) {
+  try {
+    if (localStorage.getItem('cp_sound_off') === '1') return;
+    _audioCtx = _audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = _audioCtx;
+    if (ctx.state === 'suspended') ctx.resume();
+    const now = ctx.currentTime;
+    // Inbound calls get a more urgent triple note; new leads a soft two-note.
+    const notes = kind === 'inbound' ? [880, 1174, 880] : [660, 990];
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      const t = now + i * 0.13;
+      gain.gain.setValueAtTime(0, t);
+      gain.gain.linearRampToValueAtTime(0.18, t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.start(t); osc.stop(t + 0.17);
+    });
+  } catch {}
 }
 function clearNavBadge(tab) { const btn = document.querySelector('.nav-btn[data-tab="' + tab + '"]'); const b = btn && btn.querySelector('.nav-badge'); if (b) b.remove(); }
 let currentAdminTab = 'dashboard';

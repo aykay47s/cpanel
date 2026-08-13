@@ -595,6 +595,7 @@ async function renderStaffProfile() {
       <label style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;text-transform:none;letter-spacing:0;font-weight:500;color:var(--text);font-size:13px;"><span>Lead assignments</span><input type="checkbox" class="toggle-switch" id="prefLead" checked /></label>
       <label style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;text-transform:none;letter-spacing:0;font-weight:500;color:var(--text);font-size:13px;"><span>Chat messages</span><input type="checkbox" class="toggle-switch" id="prefChat" checked /></label>
       <label style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;text-transform:none;letter-spacing:0;font-weight:500;color:var(--text);font-size:13px;"><span>Announcements</span><input type="checkbox" class="toggle-switch" id="prefAnn" checked /></label>
+      <label style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;text-transform:none;letter-spacing:0;font-weight:500;color:var(--text);font-size:13px;"><span>Alert sound (new leads &amp; calls)</span><input type="checkbox" class="toggle-switch" id="prefSound" \${localStorage.getItem('cp_sound_off')==='1'?'':'checked'} onchange="localStorage.setItem('cp_sound_off', this.checked?'0':'1'); if(this.checked) playPing('lead');" /></label>
       <button class="btn btn-ghost btn-block" style="margin-top:10px;" onclick="saveNotifPrefs()">Save Preferences</button>
     </div>
     <div class="panel p fade-up" id="pushSection"></div>
