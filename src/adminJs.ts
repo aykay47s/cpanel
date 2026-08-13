@@ -1021,6 +1021,12 @@ function renderTelephonyLocal() {
       <p style="font-size:12.5px;color:var(--text-dim);line-height:1.6;margin-top:10px;">
         <b style="color:var(--text);">How a call flows:</b> caller dials your number → hears your menu and picks an option → hears hold music while the system finds an available caller → the call is bridged straight to that caller's phone, ringing them until they answer.
       </p>
+      <div style="margin-top:14px;padding:12px 14px;border-radius:12px;background:rgba(245,158,11,.09);border:1px solid rgba(245,158,11,.28);display:flex;gap:10px;align-items:flex-start;">
+        <span style="flex-shrink:0;width:18px;height:18px;color:var(--warn);display:inline-flex;">\${ICONS.warn || ''}</span>
+        <div style="font-size:11.5px;color:var(--text-dim);line-height:1.55;">
+          <b style="color:var(--warn);">Before you buy a number:</b> UK numbers — landline, 03xx, 0800, and other toll/business ranges — all require <b style="color:var(--text);">identity &amp; proof-of-address verification</b> before they can make or take calls. This is an Ofcom regulatory rule and applies on <b style="color:var(--text);">Telnyx, Twilio, and every other provider</b> — it's not a ClearPanel step. Buy the number in your provider's dashboard, upload the documents they ask for, and wait for approval (usually a few hours to a day). A number that shows "pending" or "requirement info needed" is wired up correctly here but won't connect live calls until the provider clears it.
+        </div>
+      </div>
     </div>
 
     <div class="panel p fade-up" style="padding:6px;display:flex;gap:4px;flex-wrap:wrap;">
@@ -1035,6 +1041,7 @@ function renderTelephonyLocal() {
         <div class="section-title" style="margin:0;">Telnyx Connection</div>
         \${cfg.telnyx_connected ? '<span class="badge successful_call">Connected</span>' : '<span class="badge not_called">Not Connected</span>'}
       </div>
+      <div id="telnyxNumberStatus"></div>
       <p style="font-size:12px;color:var(--text-dim);margin-bottom:8px;line-height:1.6;">Telnyx works exactly like Twilio here — same menu, same hold, same bridge-to-caller routing — but with much lighter sign-up. Most accounts can buy a local number after just confirming their email and a quick ID check, with no lengthy business review.</p>
       <div style="font-size:11.5px;color:var(--text-dim);background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:14px;line-height:1.6;">
         <b style="color:var(--text);">Setup:</b> 1) Sign up at telnyx.com and verify your email. 2) Buy a phone number in Mission Control. 3) Create an API key (Mission Control → API Keys). 4) Paste the key and number below — we auto-create the Call Control app and wire the webhook for you.
@@ -1193,6 +1200,23 @@ function renderTelephonyLocal() {
     <div id="telephonyStatus" style="font-size:12px;margin-top:10px;text-align:center;"></div>
   \`;
   if (connected) loadInboundCalls();
+  if (cfg.provider === 'telnyx') loadTelnyxStatus();
+}
+async function loadTelnyxStatus() {
+  const el = document.getElementById('telnyxNumberStatus');
+  if (!el) return;
+  try {
+    const res = await api('/api/admin/telephony/telnyx/status');
+    const d = (await res.json()).data || {};
+    if (!d.configured) { el.innerHTML = ''; return; }
+    if (d.found && d.ready) {
+      el.innerHTML = '<div style="margin:6px 0 12px;padding:10px 12px;border-radius:10px;background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.3);font-size:11.5px;color:#5eeaa0;display:flex;gap:8px;align-items:center;"><span style="width:16px;height:16px;display:inline-flex;">' + (ICONS.check || '') + '</span><span><b>' + esc(d.number) + '</b> is verified and live — ready to take calls.</span></div>';
+    } else if (d.found && !d.ready) {
+      el.innerHTML = '<div style="margin:6px 0 12px;padding:11px 13px;border-radius:10px;background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.32);font-size:11.5px;color:var(--text-dim);display:flex;gap:9px;align-items:flex-start;line-height:1.55;"><span style="width:17px;height:17px;color:var(--warn);flex-shrink:0;display:inline-flex;">' + (ICONS.warn || '') + '</span><span><b style="color:var(--warn);">' + esc(d.number) + ' — verification pending (' + esc(d.status) + ')</b><br>The number is wired to ClearPanel correctly, but Telnyx still needs your identity/proof-of-address documents before it will connect live calls. Finish this in Telnyx: Numbers → click the number → complete the regulatory requirements. UK numbers all require this — it is not a ClearPanel step.</span></div>';
+    } else if (!d.reachable) {
+      el.innerHTML = '<div style="margin:6px 0 12px;padding:10px 12px;border-radius:10px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.28);font-size:11.5px;color:#ff8f8a;">Couldn\\'t reach Telnyx to check the number status — check the API key.</div>';
+    }
+  } catch {}
 }
 async function loadInboundCalls() {
   const res = await api('/api/admin/inbound-calls');

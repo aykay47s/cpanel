@@ -360,6 +360,39 @@ async function telnyxDialNext(apiKey: string, callControlId: string, cfg: any, d
 // Live health of the PBX connection. The panel polls this on the telephony tab so
 // a dead socket or expired API client is visible immediately rather than being
 // discovered from a week of missed calls.
+// Live Telnyx number status — tells the admin whether the number is verified and
+// ready, or still pending the provider's regulatory/document review.
+telephony.get('/api/admin/telephony/telnyx/status', requireRole('admin'), async (c) => {
+  const user = c.get('user');
+  const [keyRow] = await sql`SELECT value FROM settings WHERE key = ${'telnyx_api_key:' + user.tenant_id}`;
+  const apiKey = keyRow?.value || process.env.TELNYX_API_KEY;
+  const [cfgRow] = await sql`SELECT value FROM settings WHERE key = ${'telephony_config:' + user.tenant_id}`;
+  const cfg = cfgRow ? JSON.parse(cfgRow.value) : {};
+  const number = cfg.telnyx_phone_number || process.env.TELNYX_PHONE_NUMBER;
+  if (!apiKey || !number) return c.json({ data: { configured: false } });
+  try {
+    const res = await fetch(`https://api.telnyx.com/v2/phone_numbers?filter%5Bphone_number%5D=${encodeURIComponent(number)}`, {
+      headers: { Authorization: `Bearer ${apiKey}` },
+    });
+    if (!res.ok) return c.json({ data: { configured: true, number, reachable: false } });
+    const data: any = await res.json();
+    const row = data.data?.[0];
+    if (!row) return c.json({ data: { configured: true, number, found: false } });
+    const status = row.status || 'unknown';
+    // 'active' means the number is live; anything with 'requirement'/'pending' means
+    // the provider still needs documents before it will connect calls.
+    const ready = status === 'active';
+    return c.json({ data: {
+      configured: true, number, found: true, reachable: true,
+      status, ready,
+      connected: !!row.connection_id,
+      connection_name: row.connection_name || null,
+    }});
+  } catch (err: any) {
+    return c.json({ data: { configured: true, number, reachable: false, error: err?.message } });
+  }
+});
+
 telephony.get('/api/admin/telephony/3cx/status', requireRole('admin'), async (c) => {
   return c.json({ data: threecx.status });
 });
