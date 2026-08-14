@@ -213,9 +213,9 @@ app.get('/icons.js', async (c) => { c.header('Content-Type', 'application/javasc
 // Serve extracted JS blocks as external files so <script src> can load them
 // without the HTML-parser-vs-script-content collision that breaks inline blocks.
 const JS_CACHE = 'no-store, no-cache, must-revalidate';
-app.get('/js/main.js', (c) => { c.header('Content-Type', 'application/javascript'); c.header('Cache-Control', JS_CACHE); return c.text(MAIN_JS); });
-app.get('/js/admin.js', (c) => { c.header('Content-Type', 'application/javascript'); c.header('Cache-Control', JS_CACHE); return c.text(ADMIN_JS); });
-app.get('/js/staff.js', (c) => { c.header('Content-Type', 'application/javascript'); c.header('Cache-Control', JS_CACHE); return c.text(STAFF_JS); });
+app.get('/js/main.js', (c) => { c.header('Content-Type', 'application/javascript; charset=utf-8'); c.header('Cache-Control', JS_CACHE); return c.body(MAIN_JS); });
+app.get('/js/admin.js', (c) => { c.header('Content-Type', 'application/javascript; charset=utf-8'); c.header('Cache-Control', JS_CACHE); return c.body(ADMIN_JS); });
+app.get('/js/staff.js', (c) => { c.header('Content-Type', 'application/javascript; charset=utf-8'); c.header('Cache-Control', JS_CACHE); return c.body(STAFF_JS); });
 app.get('/icon-192.png', async (c) => { c.header('Content-Type', 'image/png'); return c.body(await Bun.file('./public/icon-192.png').arrayBuffer()); });
 app.get('/icon-512.png', async (c) => { c.header('Content-Type', 'image/png'); return c.body(await Bun.file('./public/icon-512.png').arrayBuffer()); });
 app.get('/apple-touch-icon.png', async (c) => { c.header('Content-Type', 'image/png'); return c.body(await Bun.file('./public/apple-touch-icon.png').arrayBuffer()); });
