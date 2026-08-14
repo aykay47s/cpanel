@@ -3,6 +3,7 @@ import { sql } from '../db';
 import { requireRole, authenticate, requireSuperAdmin, requireManager, requireAdmin, requireAnyStaff } from '../auth';
 import { requireMaster } from './telegram';
 import { registerClient, unregisterClient } from '../realtime';
+import { rateLimit, clientIp } from '../ratelimit';
 import { VAPID_PUBLIC_KEY, saveSubscription, removeSubscription } from '../push';
 import * as threecx from '../threecx';
 import jwt from 'jsonwebtoken';
@@ -25,6 +26,15 @@ export function signVonageJwt(applicationId: string, privateKey: string): string
 // resolves the tenant from whichever context is actually present rather than
 // assuming a logged-in user, which crashed this route whenever it was hit without one.
 misc.get('/api/tenant-stats', async (c) => {
+  // No per-tenant auth here by design — this is a machine endpoint the master
+  // panel polls across every reseller's own separately-deployed instance, which
+  // has no shared secret with the master (each tenant runs their own copy of
+  // this code, often on infrastructure the operator doesn't control, so a
+  // coordinated auth rollout across every existing deployment isn't practical).
+  // The data returned is low-sensitivity (aggregate counts, no PII) but this
+  // endpoint should still not be freely scrapable — rate-limit it per IP.
+  const rl = rateLimit('tenant-stats:' + clientIp(c), { windowMs: 60_000, max: 20, blockMs: 120_000 });
+  if (rl.limited) return c.json({ error: 'Too many requests' }, 429);
   const user = c.get('user');
   let tid = user?.tenant_id;
   if (!tid) {
