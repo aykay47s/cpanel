@@ -3,7 +3,13 @@ import { STAFF_JS } from './staffJs';
 
 export const MAIN_JS = `const CP_CHANNEL = 'https://t.me/+M-aK0jz4wDI5Nzdh';
 const CP_BOT = 'https://t.me/clearpanelotpbot';
-let me = JSON.parse(localStorage.getItem('dispatch_me') || 'null');
+let me = (() => {
+  // A corrupt localStorage value here used to throw on the very first line of the
+  // script, which killed ALL of main.js — no branding, and the keypad handler
+  // never attached (taps wouldn't register). Parse defensively instead.
+  try { return JSON.parse(localStorage.getItem('dispatch_me') || 'null'); }
+  catch { try { localStorage.removeItem('dispatch_me'); } catch {} return null; }
+})();
 let brandingData = null;
 async function applyBranding() {
   try {
@@ -92,14 +98,20 @@ async function api(url, opts = {}) {
 }
 
 // ---------- Login ----------
-document.getElementById('keypad').addEventListener('click', (e) => {
-  const btn = e.target.closest('.key'); if (!btn) return;
-  const k = btn.dataset.k;
-  if (k === 'clear') pinBuffer = ''; else if (k === 'back') pinBuffer = pinBuffer.slice(0, -1);
-  else if (pinBuffer.length < 4) pinBuffer += k;
-  renderPinDots();
-  if (pinBuffer.length === 4) attemptLogin();
-});
+// Guard the attach: if the element is missing or anything upstream failed, this
+// must not throw (a throw here would leave the keypad dead — taps not registering).
+(function attachKeypad() {
+  const kp = document.getElementById('keypad');
+  if (!kp) return;
+  kp.addEventListener('click', (e) => {
+    const btn = e.target.closest('.key'); if (!btn) return;
+    const k = btn.dataset.k;
+    if (k === 'clear') pinBuffer = ''; else if (k === 'back') pinBuffer = pinBuffer.slice(0, -1);
+    else if (pinBuffer.length < 4) pinBuffer += k;
+    renderPinDots();
+    if (pinBuffer.length === 4) attemptLogin();
+  });
+})();
 function renderPinDots() { document.querySelectorAll('.pin-dot').forEach((d, i) => { d.classList.remove('error'); d.classList.toggle('filled', i < pinBuffer.length); }); }
 async function attemptLogin() {
   const errEl = document.getElementById('loginError');
