@@ -1027,6 +1027,7 @@ async function renderChatInto(containerEl) {
     const btn = document.getElementById('disappearBtn');
     if (btn) btn.classList.toggle('active', e.target.checked);
   });
+  fitTgChat();
   scrollChatToBottom();
   api('/api/chat/read', { method: 'POST', body: JSON.stringify({ lastReadMessageId: msgs.length ? msgs[msgs.length - 1].id : 0 }) });
   clearNavBadge('chat');
@@ -1142,7 +1143,7 @@ function renderDMList() {
   const view = document.getElementById('dmListView');
   if (!view) return;
   const withKeys = _dmContacts;
-  view.innerHTML = '<div class="tg-chat" style="height:calc(100dvh - 168px);">'
+  view.innerHTML = '<div class="tg-chat" id="tgChatEl">'
     + '<div class="tg-chat-header"><div style="display:flex;align-items:center;gap:10px;"><div class="tg-chat-icon">' + (ICONS.users || '') + '</div><div><div class="tg-chat-title">Direct Messages</div><div class="tg-chat-sub">End-to-end encrypted</div></div></div><span class="tg-lock">' + (ICONS.key || '') + ' E2E</span></div>'
     + '<div class="tg-messages" style="gap:0;padding:8px;">'
     + (withKeys.length ? withKeys.map(function(c){
@@ -1166,13 +1167,14 @@ async function openDMThread(otherId) {
   const view = document.getElementById('dmThreadView');
   view.classList.remove('hidden');
   const canDm = !!_dmActive.dm_public_key;
-  view.innerHTML = '<div class="tg-chat" style="height:calc(100dvh - 168px);">'
+  view.innerHTML = '<div class="tg-chat" id="tgChatEl">'
     + '<div class="tg-chat-header"><div style="display:flex;align-items:center;gap:10px;min-width:0;"><button class="tg-attach" style="width:34px;height:34px;" onclick="closeDMThread()">' + (ICONS.arrowLeft || '') + '</button>' + avatarHtml(_dmActive, 34) + '<div style="min-width:0;"><div class="tg-chat-title">' + esc(_dmActive.name) + '</div><div class="tg-chat-sub">End-to-end encrypted</div></div></div><span class="tg-lock">' + (ICONS.key || '') + ' E2E</span></div>'
     + '<div class="tg-messages" id="dmMessages"></div>'
     + (canDm
         ? '<div class="tg-composer"><input id="dmInput" placeholder="Encrypted message…" autocomplete="off" onkeydown="dmInputKey(event)" /><button class="tg-send" onclick="sendDM()">' + (ICONS.arrowRight || '') + '</button></div>'
         : '<div class="tg-composer" style="justify-content:center;color:var(--text-dim);font-size:12px;padding:16px;">This person has not opened their messages yet, so there is no key to encrypt to. Once they open DMs you can message them.</div>')
     + '</div>';
+  fitTgChat();
   renderDMMessages(data.messages);
 }
 function renderDMMessages(messages) {
@@ -1219,6 +1221,22 @@ function dmInputKey(event) {
   if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendDM(); }
 }
 function switchChatModeEv(btn) { switchChatMode(btn.getAttribute('data-mode')); }
+// Sizes the chat panel to exactly fill the space between whatever's above it
+// (topbar) and whatever's below it (bottom nav on the caller side; nothing on
+// admin, which has no fixed bottom bar) — measured from the real rendered
+// layout instead of guessing a pixel constant, so it's correct on every device
+// and safe-area regardless of notches, browser chrome, etc.
+function fitTgChat() {
+  const el = document.getElementById('tgChatEl');
+  if (!el) return;
+  const rect = el.getBoundingClientRect();
+  const nav = document.getElementById('staffNav');
+  const navH = (nav && nav.offsetParent !== null) ? nav.getBoundingClientRect().height : 0;
+  const available = window.innerHeight - rect.top - navH - 10; // 10px breathing room
+  el.style.height = Math.max(320, available) + 'px';
+}
+window.addEventListener('resize', fitTgChat);
+window.addEventListener('orientationchange', () => setTimeout(fitTgChat, 200));
 function switchChatMode(mode) {  const isAdmin = me.role === 'admin';
   const chatWrap = document.getElementById(isAdmin ? 'adminChatWrap' : 'staffChatWrap');
   const dmWrap = document.getElementById(isAdmin ? 'adminDMWrap' : 'staffDMWrap');
@@ -1235,6 +1253,7 @@ function switchChatMode(mode) {  const isAdmin = me.role === 'admin';
     if (dmBtn) dmBtn.classList.remove('active');
     if (teamBtn) teamBtn.classList.add('active');
   }
+  requestAnimationFrame(fitTgChat);
 }
 async function deleteDM(id) {
   await api('/api/dm/' + id, { method: 'DELETE' });
@@ -1345,7 +1364,7 @@ const _rawPage = `<!DOCTYPE html>
   --ease-out:cubic-bezier(.22,.61,.36,1);
 }
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:manipulation;}
-html,body{height:100%;overscroll-behavior-y:contain;}
+html,body{height:100%;overscroll-behavior-y:none;background-color:#07070a;}
 body{
   font-family:'Geist',-apple-system,sans-serif;color:var(--text);min-height:100vh;min-height:100dvh;overflow-x:hidden;
   -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
@@ -1560,7 +1579,8 @@ label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spa
 .bottom-nav{
   position:fixed;bottom:0;left:0;right:0;z-index:70;
   display:flex;align-items:stretch;
-  background:linear-gradient(180deg, rgba(20,18,30,.72), rgba(12,12,18,.86));
+  background-color:#0c0c12;
+  background-image:linear-gradient(180deg, rgba(20,18,30,.72), rgba(12,12,18,.86));
   backdrop-filter:blur(10px) saturate(1.4);-webkit-backdrop-filter:blur(10px) saturate(1.4);
   border-top:1px solid rgba(255,255,255,.10);
   box-shadow:0 -1px 0 rgba(255,255,255,.04), 0 -12px 32px rgba(0,0,0,.36);
@@ -1830,7 +1850,7 @@ tr.clickable:active{background:rgba(255,255,255,.05);}
 /* Telegram-style team chat. Full-height column: fixed header, internally
    scrolling message list, fixed composer at the bottom — the page itself never
    scrolls, which was the mobile bug. Height is dvh-based minus the chrome. */
-.tg-chat{display:flex;flex-direction:column;height:calc(100dvh - 168px);background:linear-gradient(180deg,rgba(20,19,30,.6),rgba(14,13,20,.7));border:1px solid var(--border-2);border-radius:var(--r-xl);overflow:hidden;box-shadow:0 2px 4px rgba(0,0,0,.3), 0 16px 40px rgba(0,0,0,.4);}
+.tg-chat{display:flex;flex-direction:column;background:linear-gradient(180deg,rgba(20,19,30,.6),rgba(14,13,20,.7));border:1px solid var(--border-2);border-radius:var(--r-xl);overflow:hidden;box-shadow:0 2px 4px rgba(0,0,0,.3), 0 16px 40px rgba(0,0,0,.4);}
 .tg-chat-header{flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;background:linear-gradient(180deg,rgba(147,112,255,.08),rgba(255,255,255,.02));border-bottom:1px solid rgba(255,255,255,.08);}
 .tg-chat-icon{width:36px;height:36px;border-radius:11px;background:linear-gradient(135deg,var(--violet-bright),var(--gold));display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0;}
 .tg-chat-icon .ic{width:19px;height:19px;}
