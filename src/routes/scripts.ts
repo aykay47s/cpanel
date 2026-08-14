@@ -6,24 +6,79 @@ export const scripts = new Hono();
 function bad(c: any, msg: string, code = 400) { return c.json({ error: msg }, code); }
 
 // ============================================================================
-// AI SCRIPT WRITER — calls any OpenAI-compatible endpoint (configured via env).
+// AI SCRIPT WRITER — calls any OpenAI-compatible endpoint(s), configured via env.
 // No artificial limits or content filters are imposed here; whatever the
-// configured backend allows is what the operator gets. Point LLM_API_BASE at a
-// self-hosted FreeLLMAPI aggregator, Groq's free API, or any paid provider.
-//   LLM_API_BASE  e.g. https://your-freellmapi-host/v1  (default: Groq)
-//   LLM_API_KEY   the bearer token for that endpoint
-//   LLM_MODEL     model id (default: llama-3.3-70b-versatile)
+// configured backend allows is what the operator gets.
+//
+// MULTI-PROVIDER FAILOVER: free-tier providers (Gemini, Groq, etc.) intermittently
+// return 503 "high demand" or 429 rate-limit errors, especially once many panels
+// share one key. So this supports a CHAIN of providers, tried in order — if one
+// is overloaded or rate-limited, it automatically falls through to the next
+// instead of failing the request. Configure providers as a numbered list:
+//   LLM_API_BASE / LLM_API_KEY / LLM_MODEL             — provider 1 (primary)
+//   LLM_API_BASE_2 / LLM_API_KEY_2 / LLM_MODEL_2        — provider 2 (fallback)
+//   LLM_API_BASE_3 / LLM_API_KEY_3 / LLM_MODEL_3        — provider 3 (fallback)
+// Only LLM_API_KEY is required; missing LLM_API_BASE_N defaults to Groq's API,
+// and any provider whose key isn't set is simply skipped in the chain.
 // ============================================================================
-function llmConfig() {
-  const base = (process.env.LLM_API_BASE || 'https://api.groq.com/openai/v1').replace(/\/+$/, '');
-  const key = process.env.LLM_API_KEY || '';
-  const model = process.env.LLM_MODEL || 'llama-3.3-70b-versatile';
-  return { base, key, model };
+type LlmProvider = { base: string; key: string; model: string };
+function llmProviders(): LlmProvider[] {
+  const providers: LlmProvider[] = [];
+  const suffixes = ['', '_2', '_3'];
+  for (const suf of suffixes) {
+    const key = process.env['LLM_API_KEY' + suf];
+    if (!key) continue;
+    const base = (process.env['LLM_API_BASE' + suf] || 'https://api.groq.com/openai/v1').replace(/\/+$/, '');
+    const model = process.env['LLM_MODEL' + suf] || 'llama-3.3-70b-versatile';
+    providers.push({ base, key, model });
+  }
+  return providers;
+}
+// Errors worth retrying / falling through to the next provider for — transient
+// capacity issues, not "your request was malformed" (those won't fix themselves).
+const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
+async function callLlmWithFailover(sys: string, prompt: string): Promise<{ text: string } | { error: string; status: number }> {
+  const providers = llmProviders();
+  if (!providers.length) return { error: 'AI script writer is not configured. Set LLM_API_KEY (and optionally LLM_API_BASE / LLM_MODEL) in the environment.', status: 503 };
+  let lastError = '';
+  let lastStatus = 502;
+  for (const p of providers) {
+    // One retry per provider (short backoff) before moving to the next provider —
+    // handles a genuinely momentary blip without burning through the whole chain.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const res = await fetch(`${p.base}/chat/completions`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${p.key}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            model: p.model,
+            messages: [{ role: 'system', content: sys }, { role: 'user', content: prompt }],
+            temperature: 0.8,
+            max_tokens: 1600,
+          }),
+        });
+        if (res.ok) {
+          const data: any = await res.json();
+          const text: string = data?.choices?.[0]?.message?.content || '';
+          if (text) return { text };
+          lastError = 'Empty response from provider'; lastStatus = 502;
+          break; // don't retry an empty-but-200 response on the same provider
+        }
+        const errText = await res.text().catch(() => '');
+        lastError = errText.slice(0, 300); lastStatus = res.status;
+        if (!RETRYABLE_STATUS.has(res.status)) break; // real error (bad key, bad request) — skip to next provider, don't retry
+        if (attempt === 0) await new Promise(r => setTimeout(r, 600)); // brief backoff before the retry
+      } catch (netErr: any) {
+        lastError = netErr?.message || 'Network error'; lastStatus = 502;
+      }
+    }
+    // Fell through this provider's attempts — try the next one in the chain.
+  }
+  return { error: lastError || 'All configured AI providers failed.', status: lastStatus };
 }
 
 scripts.post('/api/admin/scripts/generate', requireRole('admin'), async (c) => {
-  const { base, key, model } = llmConfig();
-  if (!key) return c.json({ error: 'AI script writer is not configured. Set LLM_API_KEY (and optionally LLM_API_BASE / LLM_MODEL) in the environment.' }, 503);
+  if (!llmProviders().length) return c.json({ error: 'AI script writer is not configured. Set LLM_API_KEY (and optionally LLM_API_BASE / LLM_MODEL) in the environment.' }, 503);
 
   const body = await c.req.json().catch(() => ({} as any));
   const brief: string = (body.brief || '').toString().slice(0, 4000);
@@ -50,22 +105,11 @@ Return a JSON object with exactly these keys:
 }`;
 
   try {
-    const res = await fetch(`${base}/chat/completions`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model,
-        messages: [{ role: 'system', content: sys }, { role: 'user', content: prompt }],
-        temperature: 0.8,
-        max_tokens: 1600,
-      }),
-    });
-    if (!res.ok) {
-      const errText = await res.text().catch(() => '');
-      return c.json({ error: 'The AI provider returned an error (' + res.status + '). ' + errText.slice(0, 300) }, 502);
+    const result = await callLlmWithFailover(sys, prompt);
+    if ('error' in result) {
+      return c.json({ error: 'The AI provider returned an error (' + result.status + '). ' + result.error }, 502);
     }
-    const data: any = await res.json();
-    let text: string = data?.choices?.[0]?.message?.content || '';
+    let text = result.text;
     // Strip accidental markdown fences, then parse.
     text = text.replace(/^```(?:json)?/i, '').replace(/```$/i, '').trim();
     let parsed: any;
