@@ -1293,10 +1293,11 @@ const _rawPage = `<!DOCTYPE html>
 <title>ClearPanel</title>
 <link rel="manifest" href="/manifest.json">
 <script src="/icons.js"></script>
-<!-- tweetnacl: audited NaCl crypto (X25519 + XSalsa20-Poly1305) for end-to-end
-     encrypted DMs. Loaded from CDN; the private key is generated and kept only
-     in the browser, never sent to the server. -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/tweetnacl/1.0.3/nacl.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<!-- tweetnacl: audited NaCl crypto for end-to-end encrypted DMs. Loaded with
+     defer + async so a slow or blocked CDN can NEVER freeze the page — login and
+     everything else work without it; DMs simply wait until it is ready (the DM
+     code guards on typeof nacl). -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tweetnacl/1.0.3/nacl.min.js" crossorigin="anonymous" referrerpolicy="no-referrer" defer async></script>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="ClearPanel">
