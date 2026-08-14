@@ -1063,6 +1063,14 @@ async function deleteChatMessage(id) {
 // never sent to the server. Messages are sealed to the recipient's public key,
 // so the server relays ciphertext it can't read. This is true E2E: even an
 // admin (or anyone with the database) cannot read DMs.
+// Util encode/decode implemented inline (not a second CDN dependency) so this
+// can't break if a CDN is unavailable.
+const nu = {
+  decodeUTF8: (s) => new TextEncoder().encode(s),
+  encodeUTF8: (a) => new TextDecoder().decode(a),
+  encodeBase64: (a) => btoa(String.fromCharCode.apply(null, a)),
+  decodeBase64: (s) => { const bin = atob(s); const a = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) a[i] = bin.charCodeAt(i); return a; },
+};
 let _dmKeyPair = null;
 function dmStorageKey() { return 'cp_dm_secret_' + (me && me.id); }
 async function ensureDmKeys() {
@@ -1072,16 +1080,16 @@ async function ensureDmKeys() {
   try { stored = localStorage.getItem(dmStorageKey()); } catch {}
   if (stored) {
     try {
-      const secret = nacl.util.decodeBase64(stored);
+      const secret = nu.decodeBase64(stored);
       _dmKeyPair = nacl.box.keyPair.fromSecretKey(secret);
     } catch { _dmKeyPair = null; }
   }
   if (!_dmKeyPair) {
     _dmKeyPair = nacl.box.keyPair();
-    try { localStorage.setItem(dmStorageKey(), nacl.util.encodeBase64(_dmKeyPair.secretKey)); } catch {}
+    try { localStorage.setItem(dmStorageKey(), nu.encodeBase64(_dmKeyPair.secretKey)); } catch {}
   }
   // Publish our public key so others can encrypt to us (idempotent).
-  const pub = nacl.util.encodeBase64(_dmKeyPair.publicKey);
+  const pub = nu.encodeBase64(_dmKeyPair.publicKey);
   const myKeyRes = await api('/api/dm/my-key');
   const myKey = (await myKeyRes.json()).data;
   if (myKey.public_key !== pub) {
@@ -1092,20 +1100,20 @@ async function ensureDmKeys() {
 // Seal a plaintext to a recipient public key; returns {ciphertext, nonce} base64.
 function dmSeal(plain, recipientPubB64) {
   const nonce = nacl.randomBytes(nacl.box.nonceLength);
-  const msg = nacl.util.decodeUTF8(plain);
-  const recipientPub = nacl.util.decodeBase64(recipientPubB64);
+  const msg = nu.decodeUTF8(plain);
+  const recipientPub = nu.decodeBase64(recipientPubB64);
   const box = nacl.box(msg, nonce, recipientPub, _dmKeyPair.secretKey);
-  return { ciphertext: nacl.util.encodeBase64(box), nonce: nacl.util.encodeBase64(nonce) };
+  return { ciphertext: nu.encodeBase64(box), nonce: nu.encodeBase64(nonce) };
 }
 // Open a sealed message from a given sender public key.
 function dmOpen(ciphertextB64, nonceB64, senderPubB64) {
   try {
-    const box = nacl.util.decodeBase64(ciphertextB64);
-    const nonce = nacl.util.decodeBase64(nonceB64);
-    const senderPub = nacl.util.decodeBase64(senderPubB64);
+    const box = nu.decodeBase64(ciphertextB64);
+    const nonce = nu.decodeBase64(nonceB64);
+    const senderPub = nu.decodeBase64(senderPubB64);
     const opened = nacl.box.open(box, nonce, senderPub, _dmKeyPair.secretKey);
     if (!opened) return null;
-    return nacl.util.encodeUTF8(opened);
+    return nu.encodeUTF8(opened);
   } catch { return null; }
 }
 let _dmContacts = [];
@@ -1158,7 +1166,7 @@ async function openDMThread(otherId) {
 function renderDMMessages(messages) {
   const box = document.getElementById('dmMessages');
   if (!box) return;
-  const myPub = nacl.util.encodeBase64(_dmKeyPair.publicKey);
+  const myPub = nu.encodeBase64(_dmKeyPair.publicKey);
   box.innerHTML = messages.map(function(m){
     var own = m.sender_id === me.id;
     // Decrypt the copy meant for me. If I'm the sender, open my own copy with the
@@ -1182,7 +1190,7 @@ async function sendDM() {
   input.value = ''; input.focus();
   // Seal one copy to the recipient, one to myself (so I can read my own history).
   const forRecipient = dmSeal(text, _dmActive.dm_public_key);
-  const myPub = nacl.util.encodeBase64(_dmKeyPair.publicKey);
+  const myPub = nu.encodeBase64(_dmKeyPair.publicKey);
   const forSelf = dmSeal(text, myPub);
   await api('/api/dm/send', { method: 'POST', body: JSON.stringify({
     recipient_id: _dmActive.id,
@@ -1289,7 +1297,6 @@ const _rawPage = `<!DOCTYPE html>
      encrypted DMs. Loaded from CDN; the private key is generated and kept only
      in the browser, never sent to the server. -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/tweetnacl/1.0.3/nacl.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/tweetnacl-util/0.15.1/nacl-util.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="ClearPanel">
