@@ -973,42 +973,63 @@ async function renderChatInto(containerEl) {
   const [msgsRes, presenceRes] = await Promise.all([api('/api/chat/messages'), api('/api/chat/presence')]);
   const msgs = (await msgsRes.json()).data;
   const presence = (await presenceRes.json()).data;
+  const onlineCount = presence.filter(p => p.clocked_in).length;
   containerEl.innerHTML = \`
-    <div class="presence-strip">\${presence.map(p => '<div class="presence-chip ' + (p.clocked_in ? 'online' : '') + '"><span class="dot"></span>' + avatarHtml(p, 16) + ' ' + esc(p.name) + '</div>').join('')}</div>
-    <div class="chat-shell panel" style="padding:14px;">
-      <div class="chat-messages" id="chatMessages">\${msgs.map(chatMsgHtml).join('')}</div>
-      <div class="chat-input-row" style="flex-direction:column;gap:8px;">
-        <div style="display:flex;gap:8px;">
-          <input id="chatInput" placeholder="Message the team…" onkeydown="if(event.key==='Enter') sendChatMessage()" />
-          <button class="btn btn-gold" onclick="sendChatMessage()">Send</button>
+    <div class="tg-chat">
+      <div class="tg-chat-header">
+        <div style="display:flex;align-items:center;gap:10px;min-width:0;">
+          <div class="tg-chat-icon">\${ICONS.chat || ''}</div>
+          <div style="min-width:0;">
+            <div class="tg-chat-title">Team Chat</div>
+            <div class="tg-chat-sub">\${presence.length} member\${presence.length===1?'':'s'} · <span style="color:var(--success);">\${onlineCount} online</span></div>
+          </div>
         </div>
-        <label style="display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text-dim);text-transform:none;letter-spacing:0;font-weight:500;">
-          <input type="checkbox" id="disappearToggle" style="width:auto;" /> Disappearing message
-          <select id="disappearDuration" style="width:auto;padding:4px 8px;font-size:11px;display:none;">
+        <span class="tg-lock" title="Messages are encrypted at rest in the database">\${ICONS.key || ''} Encrypted</span>
+      </div>
+      <div class="tg-messages" id="chatMessages">\${msgs.map(chatMsgHtml).join('')}</div>
+      <div class="tg-composer">
+        <button class="tg-attach" id="disappearBtn" onclick="toggleDisappearMenu()" title="Disappearing messages">\${ICONS.gear || ''}</button>
+        <div class="tg-disappear-menu hidden" id="disappearMenu">
+          <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;font-weight:600;">Disappearing messages</div>
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:8px;"><input type="checkbox" id="disappearToggle" style="width:auto;" /> Auto-delete after</label>
+          <select id="disappearDuration" style="width:100%;padding:8px;font-size:12px;">
             <option value="60">1 minute</option><option value="3600">1 hour</option><option value="86400" selected>24 hours</option><option value="604800">7 days</option>
           </select>
-        </label>
+        </div>
+        <input id="chatInput" placeholder="Message…" autocomplete="off" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChatMessage();}" />
+        <button class="tg-send" onclick="sendChatMessage()" aria-label="Send">\${ICONS.arrowRight || ''}</button>
       </div>
     </div>\`;
-  document.getElementById('disappearToggle').addEventListener('change', (e) => {
-    document.getElementById('disappearDuration').style.display = e.target.checked ? 'inline-block' : 'none';
+  const toggle = document.getElementById('disappearToggle');
+  if (toggle) toggle.addEventListener('change', (e) => {
+    const btn = document.getElementById('disappearBtn');
+    if (btn) btn.classList.toggle('active', e.target.checked);
   });
-  const box = document.getElementById('chatMessages');
-  box.scrollTop = box.scrollHeight;
+  scrollChatToBottom();
   api('/api/chat/read', { method: 'POST', body: JSON.stringify({ lastReadMessageId: msgs.length ? msgs[msgs.length - 1].id : 0 }) });
   clearNavBadge('chat');
 }
+function toggleDisappearMenu() {
+  const m = document.getElementById('disappearMenu');
+  if (m) m.classList.toggle('hidden');
+}
+function scrollChatToBottom() {
+  const box = document.getElementById('chatMessages');
+  if (box) box.scrollTop = box.scrollHeight;
+}
 function chatMsgHtml(m) {
   const own = m.sender_id === me.id;
-  return \`<div class="chat-msg \${own ? 'own' : ''}" data-msg-id="\${m.id}">\${avatarHtml({ name: m.sender_name, pfp_data: m.sender_pfp_data }, 32)}
-    <div class="chat-bubble"><div class="chat-sender">\${esc(m.sender_name || 'Unknown')}\${m.sender_role === 'admin' ? ' <span class="badge admin" style="margin-left:4px;">admin</span>' : ''}\${m.expires_at ? ' <span title="Disappears ' + timeAgo(m.expires_at) + '" style="opacity:.6;font-size:9.5px;text-transform:uppercase;letter-spacing:.4px;">· expires \${timeAgo(m.expires_at)}</span>' : ''}</div>
-    <div class="chat-text">\${esc(m.content)}</div><div class="chat-time">\${timeAgo(m.created_at)}\${(own || me.role === 'admin') ? ' · <span style="cursor:pointer;text-decoration:underline;" onclick="deleteChatMessage(' + m.id + ')">delete</span>' : ''}</div></div></div>\`;
+  const canDelete = own || me.role === 'admin';
+  const roleTag = m.sender_role === 'admin' ? '<span class="tg-role">admin</span>' : '';
+  const expiryTag = m.expires_at ? '<span class="tg-expiry" title="Disappears">\u23F1</span>' : '';
+  return \`<div class="tg-msg \${own ? 'own' : ''}" data-msg-id="\${m.id}">\${own ? '' : avatarHtml({ name: m.sender_name, pfp_data: m.sender_pfp_data }, 30)}<div class="tg-bubble">\${own ? '' : '<div class="tg-sender">' + esc(m.sender_name || 'Unknown') + roleTag + '</div>'}<div class="tg-text">\${esc(m.content)}</div><div class="tg-meta">\${expiryTag}<span>\${timeAgo(m.created_at)}</span>\${canDelete ? '<span class="tg-del" onclick="deleteChatMessage(' + m.id + ')">Delete</span>' : ''}</div></div></div>\`;
 }
 function appendChatMessage(m) {
   const box = document.getElementById('chatMessages');
   if (!box) return;
+  const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 120;
   box.insertAdjacentHTML('beforeend', chatMsgHtml(m));
-  box.scrollTop = box.scrollHeight;
+  if (nearBottom || m.sender_id === me.id) scrollChatToBottom();
 }
 async function sendChatMessage() {
   const input = document.getElementById('chatInput');
@@ -1017,13 +1038,15 @@ async function sendChatMessage() {
   const disappear = document.getElementById('disappearToggle');
   const expiresInSeconds = disappear && disappear.checked ? Number(document.getElementById('disappearDuration').value) : undefined;
   input.value = '';
+  input.focus();
   await api('/api/chat/messages', { method: 'POST', body: JSON.stringify({ content, expiresInSeconds }) });
 }
 async function deleteChatMessage(id) {
   await api('/api/chat/messages/' + id, { method: 'DELETE' });
   const el = document.querySelector('[data-msg-id="' + id + '"]');
   if (el) el.remove();
-}`;
+}
+`;
 
 export const ICONS_SVG: Record<string, string> = {
   dashboard: '<svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>',
@@ -1596,22 +1619,40 @@ tr.clickable:active{background:rgba(255,255,255,.05);}
 .lb-stats b{color:var(--text);font-size:12.5px;}
 
 /* chat */
-.chat-shell{display:flex;flex-direction:column;height:calc(100dvh - 190px);}
-.chat-messages{flex:1;overflow-y:auto;padding:6px 2px;display:flex;flex-direction:column;gap:12px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;}
-.chat-msg{display:flex;gap:10px;max-width:85%;}
-.chat-msg.own{align-self:flex-end;flex-direction:row-reverse;}
-.chat-av{width:32px;height:32px;border-radius:9px;background:var(--s2);display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0;border:1px solid var(--border);}
-.chat-bubble{background:var(--s2);border:1px solid var(--border);border-radius:13px;padding:10px 13px;}
-.chat-msg.own .chat-bubble{background:rgba(79,140,255,.1);border-color:var(--gold-glow);}
-.chat-sender{font-size:11px;font-weight:700;color:var(--gold-bright);margin-bottom:2px;}
-.chat-text{font-size:13.5px;line-height:1.5;}
-.chat-time{font-size:9.5px;color:var(--text-faint);margin-top:4px;}
-.chat-input-row{display:flex;gap:8px;padding-top:12px;border-top:1px solid var(--border);}
-.chat-input-row input{flex:1;}
-.presence-strip{display:flex;gap:8px;overflow-x:auto;padding:4px 2px 12px;}
-.presence-chip{display:flex;align-items:center;gap:6px;padding:6px 11px;border-radius:20px;background:var(--s2);border:1px solid var(--border);font-size:11px;white-space:nowrap;flex-shrink:0;}
-.presence-chip .dot{width:6px;height:6px;border-radius:50%;background:var(--text-faint);}
-.presence-chip.online .dot{background:var(--success);}
+/* Telegram-style team chat. Full-height column: fixed header, internally
+   scrolling message list, fixed composer at the bottom — the page itself never
+   scrolls, which was the mobile bug. Height is dvh-based minus the chrome. */
+.tg-chat{display:flex;flex-direction:column;height:calc(100dvh - 168px);background:linear-gradient(180deg,rgba(20,19,30,.6),rgba(14,13,20,.7));border:1px solid var(--border-2);border-radius:var(--r-xl);overflow:hidden;box-shadow:0 2px 4px rgba(0,0,0,.3), 0 16px 40px rgba(0,0,0,.4);}
+.tg-chat-header{flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;background:linear-gradient(180deg,rgba(147,112,255,.08),rgba(255,255,255,.02));border-bottom:1px solid rgba(255,255,255,.08);}
+.tg-chat-icon{width:36px;height:36px;border-radius:11px;background:linear-gradient(135deg,var(--violet-bright),var(--gold));display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0;}
+.tg-chat-icon .ic{width:19px;height:19px;}
+.tg-chat-title{font-size:14px;font-weight:700;letter-spacing:-.01em;}
+.tg-chat-sub{font-size:11px;color:var(--text-dim);margin-top:1px;}
+.tg-lock{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:600;color:var(--success);background:rgba(34,197,94,.1);border:1px solid rgba(34,197,94,.25);padding:4px 9px;border-radius:100px;white-space:nowrap;}
+.tg-lock .ic{width:12px;height:12px;}
+.tg-messages{flex:1;overflow-y:auto;padding:16px 14px;display:flex;flex-direction:column;gap:3px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;}
+.tg-msg{display:flex;gap:8px;max-width:82%;align-items:flex-end;margin-top:9px;}
+.tg-msg.own{align-self:flex-end;flex-direction:row-reverse;}
+.tg-bubble{background:var(--s2);border-radius:16px 16px 16px 4px;padding:8px 12px 6px;min-width:0;box-shadow:0 1px 2px rgba(0,0,0,.2);}
+.tg-msg.own .tg-bubble{background:linear-gradient(135deg,rgba(124,92,255,.28),rgba(79,140,255,.22));border-radius:16px 16px 4px 16px;}
+.tg-sender{font-size:11.5px;font-weight:700;color:var(--violet-bright);margin-bottom:2px;display:flex;align-items:center;gap:5px;}
+.tg-role{font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--gold-bright);background:rgba(201,161,94,.16);padding:1px 5px;border-radius:100px;}
+.tg-text{font-size:14px;line-height:1.4;word-wrap:break-word;overflow-wrap:break-word;white-space:pre-wrap;}
+.tg-meta{display:flex;align-items:center;gap:7px;justify-content:flex-end;margin-top:3px;font-size:9.5px;color:var(--text-faint);}
+.tg-expiry{font-size:10px;opacity:.7;}
+.tg-del{cursor:pointer;color:var(--text-faint);opacity:.7;}
+.tg-del:hover{color:var(--danger);opacity:1;}
+.tg-composer{flex-shrink:0;position:relative;display:flex;align-items:center;gap:8px;padding:10px 12px calc(10px + env(safe-area-inset-bottom));background:linear-gradient(0deg,rgba(147,112,255,.05),transparent);border-top:1px solid rgba(255,255,255,.08);}
+.tg-composer input{flex:1;background:rgba(255,255,255,.05);border:1px solid var(--border-2);border-radius:100px;padding:11px 18px;font-size:15px;}
+.tg-composer input:focus{border-color:var(--gold);background:rgba(255,255,255,.07);}
+.tg-attach,.tg-send{width:42px;height:42px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:transform .12s var(--ease-spring),background .15s ease;}
+.tg-attach{background:rgba(255,255,255,.06);border:1px solid var(--border-2);color:var(--text-dim);}
+.tg-attach.active{background:rgba(124,92,255,.2);border-color:var(--violet-bright);color:var(--violet-bright);}
+.tg-attach .ic{width:18px;height:18px;}
+.tg-send{background:linear-gradient(135deg,var(--violet-bright),var(--gold));color:#fff;border:none;}
+.tg-send .ic{width:19px;height:19px;}
+.tg-send:active,.tg-attach:active{transform:scale(.9);}
+.tg-disappear-menu{position:absolute;bottom:60px;left:12px;z-index:20;width:200px;padding:14px;border-radius:14px;background:rgba(24,22,34,.98);border:1px solid var(--border-2);box-shadow:0 12px 32px rgba(0,0,0,.5);}
 
 /* import preview */
 .parse-row{display:grid;grid-template-columns:1.2fr 1fr 1.2fr auto;gap:10px;padding:11px 0;border-bottom:1px solid var(--border);font-size:12.5px;align-items:center;}
