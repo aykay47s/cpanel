@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { createHash, timingSafeEqual as nodeTimingSafeEqual } from 'crypto';
+import { rateLimit } from '../ratelimit';
 import type { Context, Next } from 'hono';
 import { sql } from '../db';
 import { authenticate, requireAdmin, requireAnyStaff } from '../auth';
@@ -125,6 +126,10 @@ telegram.post('/api/telegram/confirm-code', requireAnyStaff, async (c) => {
   const s = scope === 'tenant' ? 'tenant' : 'master';
   const clean = String(code || '').replace(/\D/g, '');
   if (clean.length !== 6) return c.json({ error: 'Enter the 6-digit code from Telegram' }, 400);
+  // Throttle code guesses per user (6-digit codes are 1M combos; a short expiry
+  // plus this makes brute-forcing infeasible). 10 tries/min, then a 10-min block.
+  const rl = rateLimit('otp:' + user.id, { windowMs: 60_000, max: 10, blockMs: 600_000 });
+  if (rl.limited) return c.json({ error: `Too many attempts. Try again in ${rl.retryAfter}s.` }, 429);
   const consumed = await consumeVerificationCode(clean, s, s === 'tenant' ? user.tenant_id : null);
   if (!consumed) return c.json({ error: 'Code is wrong or expired. Get a new one.' }, 400);
   // Look up their chat_id from the registry to stamp it.
