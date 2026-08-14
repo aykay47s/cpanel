@@ -3,6 +3,7 @@ import { sql, ensureDb } from './src/db';
 import { leads } from './src/routes/leads';
 import { users } from './src/routes/users';
 import { chat } from './src/routes/chat';
+import { dm } from './src/routes/dm';
 import { notifications } from './src/routes/notifications';
 import { announcements } from './src/routes/announcements';
 import { scripts } from './src/routes/scripts';
@@ -73,6 +74,7 @@ app.use('*', async (c, next) => {
 app.route('/', leads);
 app.route('/', users);
 app.route('/', chat);
+app.route('/', dm);
 app.route('/', notifications);
 app.route('/', announcements);
 app.route('/', scripts);

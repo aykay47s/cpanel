@@ -524,6 +524,16 @@ function connectEvents() {
   es.addEventListener('lead_updated', () => { if (me.role === 'admin') maybeRefreshAdmin(['dashboard','leads','finishing']); });
   es.addEventListener('announcement', () => { if (staffTab === 'home') renderStaffHome(); if (me.role==='admin') maybeRefreshAdmin('announcements'); });
   es.addEventListener('chat_message', (e) => { const d = JSON.parse(e.data); if (staffTab === 'chat' || (me.role==='admin' && currentAdminTab==='chat')) appendChatMessage(d); else pingNav('chat'); });
+  es.addEventListener('dm_message', (e) => {
+    const d = JSON.parse(e.data);
+    if (d.recipient_id !== me.id && d.sender_id !== me.id) return;
+    // If I'm viewing the thread with the other party, refresh it; otherwise ping.
+    if (_dmActive && (d.sender_id === _dmActive.id || d.recipient_id === _dmActive.id)) {
+      api('/api/dm/thread/' + _dmActive.id).then(r => r.json()).then(x => { if (x.data) renderDMMessages(x.data.messages); });
+    } else if (d.recipient_id === me.id) {
+      playPing('lead'); pingNav('chat');
+    }
+  });
   es.addEventListener('notification', () => refreshNotifBadge());
   es.addEventListener('lead_note', (e) => {
     const d = JSON.parse(e.data);
@@ -1046,6 +1056,179 @@ async function deleteChatMessage(id) {
   const el = document.querySelector('[data-msg-id="' + id + '"]');
   if (el) el.remove();
 }
+
+// ===================== END-TO-END ENCRYPTED DMs =====================
+// Uses tweetnacl (NaCl: X25519 + XSalsa20-Poly1305). The private key is created
+// on this device and stored only here (localStorage, keyed per user) — it is
+// never sent to the server. Messages are sealed to the recipient's public key,
+// so the server relays ciphertext it can't read. This is true E2E: even an
+// admin (or anyone with the database) cannot read DMs.
+let _dmKeyPair = null;
+function dmStorageKey() { return 'cp_dm_secret_' + (me && me.id); }
+async function ensureDmKeys() {
+  if (typeof nacl === 'undefined' || !nacl.box) return null; // library not loaded
+  if (_dmKeyPair) return _dmKeyPair;
+  let stored = null;
+  try { stored = localStorage.getItem(dmStorageKey()); } catch {}
+  if (stored) {
+    try {
+      const secret = nacl.util.decodeBase64(stored);
+      _dmKeyPair = nacl.box.keyPair.fromSecretKey(secret);
+    } catch { _dmKeyPair = null; }
+  }
+  if (!_dmKeyPair) {
+    _dmKeyPair = nacl.box.keyPair();
+    try { localStorage.setItem(dmStorageKey(), nacl.util.encodeBase64(_dmKeyPair.secretKey)); } catch {}
+  }
+  // Publish our public key so others can encrypt to us (idempotent).
+  const pub = nacl.util.encodeBase64(_dmKeyPair.publicKey);
+  const myKeyRes = await api('/api/dm/my-key');
+  const myKey = (await myKeyRes.json()).data;
+  if (myKey.public_key !== pub) {
+    await api('/api/dm/public-key', { method: 'POST', body: JSON.stringify({ public_key: pub }) });
+  }
+  return _dmKeyPair;
+}
+// Seal a plaintext to a recipient public key; returns {ciphertext, nonce} base64.
+function dmSeal(plain, recipientPubB64) {
+  const nonce = nacl.randomBytes(nacl.box.nonceLength);
+  const msg = nacl.util.decodeUTF8(plain);
+  const recipientPub = nacl.util.decodeBase64(recipientPubB64);
+  const box = nacl.box(msg, nonce, recipientPub, _dmKeyPair.secretKey);
+  return { ciphertext: nacl.util.encodeBase64(box), nonce: nacl.util.encodeBase64(nonce) };
+}
+// Open a sealed message from a given sender public key.
+function dmOpen(ciphertextB64, nonceB64, senderPubB64) {
+  try {
+    const box = nacl.util.decodeBase64(ciphertextB64);
+    const nonce = nacl.util.decodeBase64(nonceB64);
+    const senderPub = nacl.util.decodeBase64(senderPubB64);
+    const opened = nacl.box.open(box, nonce, senderPub, _dmKeyPair.secretKey);
+    if (!opened) return null;
+    return nacl.util.encodeUTF8(opened);
+  } catch { return null; }
+}
+let _dmContacts = [];
+let _dmActive = null; // { id, name, dm_public_key, ... }
+async function renderDMsInto(containerEl) {
+  const keys = await ensureDmKeys();
+  if (!keys) { containerEl.innerHTML = '<div class="panel p" style="text-align:center;color:var(--text-dim);">Secure messaging is loading — if this persists, check your connection.</div>'; return; }
+  const res = await api('/api/dm/contacts');
+  _dmContacts = (await res.json()).data;
+  containerEl.innerHTML = '<div id="dmListView"></div><div id="dmThreadView" class="hidden"></div>';
+  renderDMList();
+}
+function renderDMList() {
+  const view = document.getElementById('dmListView');
+  if (!view) return;
+  const withKeys = _dmContacts;
+  view.innerHTML = '<div class="tg-chat" style="height:calc(100dvh - 168px);">'
+    + '<div class="tg-chat-header"><div style="display:flex;align-items:center;gap:10px;"><div class="tg-chat-icon">' + (ICONS.users || '') + '</div><div><div class="tg-chat-title">Direct Messages</div><div class="tg-chat-sub">End-to-end encrypted</div></div></div><span class="tg-lock">' + (ICONS.key || '') + ' E2E</span></div>'
+    + '<div class="tg-messages" style="gap:0;padding:8px;">'
+    + (withKeys.length ? withKeys.map(function(c){
+        var canDm = !!c.dm_public_key;
+        var unread = Number(c.unread) > 0 ? '<span class="dm-unread">' + c.unread + '</span>' : '';
+        return '<div class="dm-contact" onclick="openDMThread(' + c.id + ')">'
+          + avatarHtml(c, 40)
+          + '<div style="flex:1;min-width:0;"><div style="font-weight:600;font-size:14px;display:flex;align-items:center;gap:6px;">' + esc(c.name) + (c.role==='admin'?'<span class="tg-role">admin</span>':'') + '</div>'
+          + '<div style="font-size:11.5px;color:var(--text-faint);">' + (canDm ? (c.username ? '@'+esc(c.username) : 'tap to message') : 'not set up for DMs yet') + '</div></div>'
+          + unread + '</div>';
+      }).join('') : '<div style="color:var(--text-dim);padding:20px;text-align:center;font-size:13px;">No one else on your panel yet.</div>')
+    + '</div></div>';
+}
+async function openDMThread(otherId) {
+  await ensureDmKeys();
+  const res = await api('/api/dm/thread/' + otherId);
+  const data = (await res.json()).data;
+  if (!data) return;
+  _dmActive = data.other;
+  document.getElementById('dmListView').classList.add('hidden');
+  const view = document.getElementById('dmThreadView');
+  view.classList.remove('hidden');
+  const canDm = !!_dmActive.dm_public_key;
+  view.innerHTML = '<div class="tg-chat" style="height:calc(100dvh - 168px);">'
+    + '<div class="tg-chat-header"><div style="display:flex;align-items:center;gap:10px;min-width:0;"><button class="tg-attach" style="width:34px;height:34px;" onclick="closeDMThread()">' + (ICONS.arrowLeft || '') + '</button>' + avatarHtml(_dmActive, 34) + '<div style="min-width:0;"><div class="tg-chat-title">' + esc(_dmActive.name) + '</div><div class="tg-chat-sub">End-to-end encrypted</div></div></div><span class="tg-lock">' + (ICONS.key || '') + ' E2E</span></div>'
+    + '<div class="tg-messages" id="dmMessages"></div>'
+    + (canDm
+        ? '<div class="tg-composer"><input id="dmInput" placeholder="Encrypted message…" autocomplete="off" onkeydown="dmInputKey(event)" /><button class="tg-send" onclick="sendDM()">' + (ICONS.arrowRight || '') + '</button></div>'
+        : '<div class="tg-composer" style="justify-content:center;color:var(--text-dim);font-size:12px;padding:16px;">This person has not opened their messages yet, so there is no key to encrypt to. Once they open DMs you can message them.</div>')
+    + '</div>';
+  renderDMMessages(data.messages);
+}
+function renderDMMessages(messages) {
+  const box = document.getElementById('dmMessages');
+  if (!box) return;
+  const myPub = nacl.util.encodeBase64(_dmKeyPair.publicKey);
+  box.innerHTML = messages.map(function(m){
+    var own = m.sender_id === me.id;
+    // Decrypt the copy meant for me. If I'm the sender, open my own copy with the
+    // recipient's public key; if recipient, open the recipient copy with sender's.
+    var plain;
+    if (own) {
+      plain = dmOpen(m.ciphertext_for_sender, m.nonce_for_sender, _dmActive.dm_public_key);
+    } else {
+      plain = dmOpen(m.ciphertext_for_recipient, m.nonce_for_recipient, _dmActive.dm_public_key);
+    }
+    if (plain === null) plain = '[unable to decrypt]';
+    var del = own ? '<span class="tg-del" onclick="deleteDM(' + m.id + ')">Delete</span>' : '';
+    return '<div class="tg-msg ' + (own?'own':'') + '" data-dm-id="' + m.id + '"><div class="tg-bubble"><div class="tg-text">' + esc(plain) + '</div><div class="tg-meta"><span>' + timeAgo(m.created_at) + '</span>' + del + '</div></div></div>';
+  }).join('');
+  box.scrollTop = box.scrollHeight;
+}
+async function sendDM() {
+  const input = document.getElementById('dmInput');
+  const text = input.value.trim();
+  if (!text || !_dmActive || !_dmActive.dm_public_key) return;
+  input.value = ''; input.focus();
+  // Seal one copy to the recipient, one to myself (so I can read my own history).
+  const forRecipient = dmSeal(text, _dmActive.dm_public_key);
+  const myPub = nacl.util.encodeBase64(_dmKeyPair.publicKey);
+  const forSelf = dmSeal(text, myPub);
+  await api('/api/dm/send', { method: 'POST', body: JSON.stringify({
+    recipient_id: _dmActive.id,
+    ciphertext_for_recipient: forRecipient.ciphertext, nonce_for_recipient: forRecipient.nonce,
+    ciphertext_for_sender: forSelf.ciphertext, nonce_for_sender: forSelf.nonce,
+    sender_ephemeral_pub: myPub,
+  })});
+  // Re-fetch the thread to show the new message.
+  const res = await api('/api/dm/thread/' + _dmActive.id);
+  const data = (await res.json()).data;
+  renderDMMessages(data.messages);
+}
+function dmInputKey(event) {
+  if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendDM(); }
+}
+function switchChatModeEv(btn) { switchChatMode(btn.getAttribute('data-mode')); }
+function switchChatMode(mode) {  const isAdmin = me.role === 'admin';
+  const chatWrap = document.getElementById(isAdmin ? 'adminChatWrap' : 'staffChatWrap');
+  const dmWrap = document.getElementById(isAdmin ? 'adminDMWrap' : 'staffDMWrap');
+  const teamBtn = document.getElementById('cmtTeam');
+  const dmBtn = document.getElementById('cmtDM');
+  if (mode === 'dm') {
+    if (chatWrap) chatWrap.classList.add('hidden');
+    if (dmWrap) { dmWrap.classList.remove('hidden'); renderDMsInto(dmWrap); }
+    if (teamBtn) teamBtn.classList.remove('active');
+    if (dmBtn) dmBtn.classList.add('active');
+  } else {
+    if (dmWrap) dmWrap.classList.add('hidden');
+    if (chatWrap) chatWrap.classList.remove('hidden');
+    if (dmBtn) dmBtn.classList.remove('active');
+    if (teamBtn) teamBtn.classList.add('active');
+  }
+}
+async function deleteDM(id) {
+  await api('/api/dm/' + id, { method: 'DELETE' });
+  var el = document.querySelector('[data-dm-id="' + id + '"]');
+  if (el) el.remove();
+}
+function closeDMThread() {
+  _dmActive = null;
+  const t = document.getElementById('dmThreadView');
+  if (t) t.classList.add('hidden');
+  const l = document.getElementById('dmListView');
+  if (l) l.classList.remove('hidden');
+  renderDMsInto(document.getElementById(me.role === 'admin' ? 'adminDMWrap' : 'staffDMWrap') || document.body);
+}
 `;
 
 export const ICONS_SVG: Record<string, string> = {
@@ -1102,6 +1285,11 @@ const _rawPage = `<!DOCTYPE html>
 <title>ClearPanel</title>
 <link rel="manifest" href="/manifest.json">
 <script src="/icons.js"></script>
+<!-- tweetnacl: audited NaCl crypto (X25519 + XSalsa20-Poly1305) for end-to-end
+     encrypted DMs. Loaded from CDN; the private key is generated and kept only
+     in the browser, never sent to the server. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tweetnacl/1.0.3/nacl.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tweetnacl-util/0.15.1/nacl-util.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="ClearPanel">
@@ -1653,6 +1841,13 @@ tr.clickable:active{background:rgba(255,255,255,.05);}
 .tg-send .ic{width:19px;height:19px;}
 .tg-send:active,.tg-attach:active{transform:scale(.9);}
 .tg-disappear-menu{position:absolute;bottom:60px;left:12px;z-index:20;width:200px;padding:14px;border-radius:14px;background:rgba(24,22,34,.98);border:1px solid var(--border-2);box-shadow:0 12px 32px rgba(0,0,0,.5);}
+.chat-mode-toggle{display:flex;gap:4px;padding:4px;margin-bottom:12px;background:rgba(255,255,255,.04);border:1px solid var(--border-2);border-radius:100px;}
+.cmt-btn{flex:1;padding:9px;border-radius:100px;font-size:13px;font-weight:600;background:transparent;color:var(--text-dim);transition:background .15s ease,color .15s ease;}
+.cmt-btn.active{background:linear-gradient(135deg,var(--violet-bright),var(--gold));color:#fff;box-shadow:0 2px 8px rgba(124,92,255,.3);}
+.dm-contact{display:flex;align-items:center;gap:12px;padding:11px 12px;border-radius:14px;cursor:pointer;transition:background .12s ease;}
+.dm-contact:hover{background:rgba(255,255,255,.04);}
+.dm-contact:active{background:rgba(255,255,255,.07);}
+.dm-unread{min-width:20px;height:20px;padding:0 6px;border-radius:100px;background:var(--violet-bright);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
 
 /* import preview */
 .parse-row{display:grid;grid-template-columns:1.2fr 1fr 1.2fr auto;gap:10px;padding:11px 0;border-bottom:1px solid var(--border);font-size:12.5px;align-items:center;}

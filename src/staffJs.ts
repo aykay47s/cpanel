@@ -8,7 +8,7 @@ async function switchStaffTab(tab) {
   try {
     if (tab === 'home') await renderStaffHome();
     else if (tab === 'queue') { await renderStaffQueue(); startQueuePolling(); }
-    else if (tab === 'chat') { body.innerHTML = '<div class="fade-up" id="staffChatWrap"></div>'; await renderChatInto(document.getElementById('staffChatWrap')); }
+    else if (tab === 'chat') { body.innerHTML = '<div class="fade-up"><div class="chat-mode-toggle"><button class="cmt-btn active" id="cmtTeam" data-mode="team" onclick="switchChatModeEv(this)">Team</button><button class="cmt-btn" id="cmtDM" data-mode="dm" onclick="switchChatModeEv(this)">Direct</button></div><div id="staffChatWrap"></div><div id="staffDMWrap" class="hidden"></div></div>'; await renderChatInto(document.getElementById('staffChatWrap')); }
     else if (tab === 'board') await renderStaffBoard();
     else if (tab === 'scripts') await renderStaffScripts();
     else if (tab === 'profile') await renderStaffProfile();

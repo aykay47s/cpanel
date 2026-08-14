@@ -36,7 +36,7 @@ async function renderAdminTab(tab) {
     else if (tab === 'duplicates') await renderAdminDuplicates(el);
     else if (tab === 'finishing') await renderAdminFinishing(el);
     else if (tab === 'roster') await renderAdminRoster(el);
-    else if (tab === 'chat') { el.innerHTML = '<div class="fade-up" id="adminChatWrap"></div>'; await renderChatInto(document.getElementById('adminChatWrap')); }
+    else if (tab === 'chat') { el.innerHTML = '<div class="fade-up"><div class="chat-mode-toggle"><button class="cmt-btn active" id="cmtTeam" data-mode="team" onclick="switchChatModeEv(this)">Team</button><button class="cmt-btn" id="cmtDM" data-mode="dm" onclick="switchChatModeEv(this)">Direct</button></div><div id="adminChatWrap"></div><div id="adminDMWrap" class="hidden"></div></div>'; await renderChatInto(document.getElementById('adminChatWrap')); }
     else if (tab === 'announcements') await renderAdminAnnouncements(el);
     else if (tab === 'goal') await renderAdminGoal(el);
     else if (tab === 'scripts') await renderAdminScripts(el);

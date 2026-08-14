@@ -405,6 +405,7 @@ export async function ensureDb() {
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS inbound_eligible BOOLEAN DEFAULT true`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS inbound_priority INTEGER DEFAULT 100`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS is_super_admin BOOLEAN DEFAULT false`,
+    `ALTER TABLE users ADD COLUMN IF NOT EXISTS dm_public_key TEXT`,
     `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS slug TEXT`,
     `ALTER TABLE users ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id)`,
     `ALTER TABLE leads ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id)`,
@@ -686,6 +687,27 @@ export async function ensureDb() {
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`;
   await sql`CREATE INDEX IF NOT EXISTS affiliate_referrals_aff ON affiliate_referrals (affiliate_id)`;
+
+  // End-to-end encrypted direct messages. The server stores ONLY ciphertext +
+  // the nonce — it never has the keys to decrypt. Each message is sealed with
+  // libsodium crypto_box (X25519 + XSalsa20-Poly1305) to the recipient's public
+  // key. Because crypto_box is one-recipient, we store two sealed copies (one the
+  // recipient can open, one the sender can open to read their own sent history).
+  await sql`CREATE TABLE IF NOT EXISTS direct_messages (
+    id SERIAL PRIMARY KEY,
+    tenant_id INTEGER REFERENCES tenants(id) ON DELETE CASCADE,
+    sender_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    recipient_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    ciphertext_for_recipient TEXT NOT NULL,
+    nonce_for_recipient TEXT NOT NULL,
+    ciphertext_for_sender TEXT NOT NULL,
+    nonce_for_sender TEXT NOT NULL,
+    sender_ephemeral_pub TEXT,
+    read_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  )`;
+  await sql`CREATE INDEX IF NOT EXISTS dm_pair ON direct_messages (tenant_id, sender_id, recipient_id, id)`;
+  await sql`CREATE INDEX IF NOT EXISTS dm_recipient ON direct_messages (recipient_id, id)`;
 
   // Let a redeemed key remember which affiliate code was used, so the master
   // history and per-tenant view can show the referral source.
