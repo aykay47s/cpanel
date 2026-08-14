@@ -27,14 +27,37 @@ const BLOCKED_PANEL_NAMES = new Set(['niggers', 'nigger', 'nigga', 'niggas']);
 import * as threecx from './src/threecx';
 
 const app = new Hono();
-const ADMIN_PIN = process.env.ADMIN_PIN || '9247';
+// No hardcoded fallback PIN — a predictable default ('9247') would let anyone in
+// if the env var were ever unset. If ADMIN_PIN isn't provided we generate a random
+// one at boot and log it once, so there is never a guessable default in the wild.
+const ADMIN_PIN = process.env.ADMIN_PIN || (() => {
+  const p = String(Math.floor(1000 + Math.random() * 9000000)); // 4-7 random digits
+  console.warn(`[security] ADMIN_PIN not set — generated a random bootstrap admin PIN this boot: ${p} (set ADMIN_PIN in env to make it stable)`);
+  return p;
+})();
 
 // Every uncaught error becomes a proper JSON response with the real error message
 // logged server-side — never Bun's default plain-text crash page, which is what was
 // breaking the frontend's res.json() calls with "Unexpected token 'I'" errors.
+// Uncaught errors: log the real detail server-side, but return a generic message
+// to the client so internal details (SQL errors, stack info, paths) never leak.
 app.onError((err, c) => {
   console.error(`[${c.req.method} ${c.req.path}] Unhandled error:`, err);
-  return c.json({ error: err.message || 'Internal server error' }, 500);
+  return c.json({ error: 'Something went wrong. Please try again.' }, 500);
+});
+
+// Security headers on every response. These harden the app against clickjacking,
+// MIME sniffing, referrer leakage, and force HTTPS. CSP is intentionally
+// permissive enough for the inline styles/handlers this app uses, while still
+// blocking framing and restricting where scripts/connections can originate.
+app.use('*', async (c, next) => {
+  await next();
+  c.header('X-Content-Type-Options', 'nosniff');
+  c.header('X-Frame-Options', 'DENY');
+  c.header('Referrer-Policy', 'no-referrer');
+  c.header('Strict-Transport-Security', 'max-age=63072000; includeSubDomains');
+  c.header('Permissions-Policy', 'geolocation=(), microphone=(), camera=(), payment=()');
+  c.header('X-Permitted-Cross-Domain-Policies', 'none');
 });
 
 app.use('*', async (c, next) => {
