@@ -316,10 +316,20 @@ function dismissPanelUpdate(id) {
 // Returns true if the gate took over the screen (so caller stops).
 async function maybeShowTelegramGate() {
   try {
+    // Admins run the panel — they're never locked out by the verification gate.
+    if (me.role === 'admin') return false;
     const r = await api('/api/telegram/my-status');
     const s = (await r.json()).data;
-    if (!s || !s.master_configured) return false;
-    if (s.verified_master) return false;
+    if (!s) return false;
+    // "Verified" = they have a username AND have confirmed an OTP with the bot.
+    // Once both are true this never fires again — that's the done state.
+    const hasUsername = !!(s.telegram_username || me.username);
+    const verified = !!s.verified_master;
+    if (hasUsername && verified) return false;
+    // Otherwise they must complete it. If the bot isn't configured we can't run
+    // OTP, so we don't hard-lock them out of the product — but the moment it's
+    // configured, unverified callers/managers hit the gate.
+    if (!s.master_configured) return false;
     showTelegramGate(s);
     return true;
   } catch { return false; }

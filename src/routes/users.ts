@@ -357,7 +357,8 @@ users.get('/api/admin/users', requireRole('admin'), async (c) => {
   const rows = await sql`
     SELECT users.id, users.name, users.pin, users.role, users.avatar, users.pfp_data, users.xp, users.clocked_in, users.status,
       users.call_phone, users.inbound_eligible, users.inbound_priority, users.threecx_extension, users.created_at, users.last_seen_at,
-      users.suspended_at, users.suspended_reason,
+      users.suspended_at, users.suspended_reason, users.username, users.telegram_username,
+      users.telegram_chat_id_master IS NOT NULL as telegram_verified,
       active_lead.first_name as active_lead_first_name, active_lead.last_name as active_lead_last_name, active_lead.status as active_lead_status
     FROM users
     LEFT JOIN LATERAL (

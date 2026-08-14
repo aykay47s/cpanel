@@ -442,11 +442,18 @@ async function renderAdminRoster(el) {
       </div>\`).join('')}
       <button class="btn btn-gold btn-block" style="margin-top:14px;" onclick="endDayAll()">Clock Out All \${stale.length}</button>
     </div>\` : ''}
-    <div class="panel p fade-up"><div class="table-scroll"><table><thead><tr><th></th><th>Name</th><th>PIN</th><th>Role</th><th>Call Number</th><th>XP</th><th>Clocked</th><th>Right Now</th><th></th></tr></thead>
+    <div class="panel p fade-up"><div class="table-scroll"><table><thead><tr><th></th><th>Name</th><th>Username</th><th>Telegram</th><th>PIN</th><th>Role</th><th>Call Number</th><th>XP</th><th>Clocked</th><th>Right Now</th><th></th></tr></thead>
     <tbody>\${rows.map(u => {
       const suspendTag = u.suspended_at ? ('<div style="font-size:10px;color:var(--danger);font-weight:700;margin-top:2px;">SUSPENDED' + (u.suspended_reason ? ' · ' + esc(u.suspended_reason) : '') + '</div>') : '';
       const suspendBtn = u.suspended_at ? ('<button class="btn btn-gold btn-sm" onclick="unsuspendUser(' + u.id + ')">Reinstate</button>') : ('<button class="btn btn-ghost btn-sm" onclick="suspendUser(' + u.id + ')" style="color:var(--danger);border-color:rgba(239,68,68,.3);">Suspend</button>');
-      return \`<tr style="\${u.suspended_at ? 'opacity:.55;' : ''}"><td>\${avatarHtml(u, 24)}</td><td>\${esc(u.name)}\${suspendTag}</td><td class="pin-display">\${u.pin}</td><td>\${statusBadge(u.role)}</td>
+      return \`<tr style="\${u.suspended_at ? 'opacity:.55;' : ''}"><td>\${avatarHtml(u, 24)}</td><td>\${esc(u.name)}\${suspendTag}</td>
+      <td>\${u.username ? '<span style="font-size:12px;">' + esc(u.username) + '</span>' : '<span style="color:var(--text-faint);">—</span>'}</td>
+      <td>\${u.telegram_username
+        ? (u.telegram_verified
+            ? '<span class="badge successful_call" style="font-size:9px;">✓ ' + esc(u.telegram_username) + '</span>'
+            : '<span class="badge requires_review" style="font-size:9px;">unverified ' + esc(u.telegram_username) + '</span>')
+        : '<span class="badge failed" style="font-size:9px;">not linked</span>'}</td>
+      <td class="pin-display">\${u.pin}</td><td>\${statusBadge(u.role)}</td>
       <td>\${u.call_phone ? '<span class="blur-phone mono" onclick="this.classList.toggle(\\'revealed\\')">' + esc(u.call_phone) + '</span>' : '<span style="color:var(--text-faint);">—</span>'}</td>
       <td>\${u.xp}</td><td>\${statusBadge(u.status)}\${u.clocked_in ? ' <span class="mono roster-clock-timer" data-uid="' + u.id + '" style="font-size:10.5px;color:var(--gold-bright);"></span>' : ''}</td>
       <td>\${rightNowBadge(u)}</td>
