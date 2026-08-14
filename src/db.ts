@@ -249,6 +249,15 @@ export async function ensureDb() {
     locked_until TIMESTAMPTZ
   )`;
 
+  // General-purpose DB-backed rate limiting (works across multiple app instances,
+  // unlike the in-memory limiter). Keyed by an arbitrary string (e.g. "login:<ip>").
+  await sql`CREATE TABLE IF NOT EXISTS rate_limits (
+    rl_key TEXT PRIMARY KEY,
+    fail_count INTEGER NOT NULL DEFAULT 0,
+    window_start TIMESTAMPTZ NOT NULL DEFAULT now(),
+    locked_until TIMESTAMPTZ
+  )`;
+
 
   // Inbound calls received through a connected Twilio number — logged whether
   // answered, missed, or abandoned in the menu, so admins have visibility even

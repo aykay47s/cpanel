@@ -54,3 +54,47 @@ export function rateLimit(
 export function clearAttempts(key: string) {
   buckets.delete(key);
 }
+
+// ============================================================================
+// DB-backed rate limiter — survives across multiple app instances (the
+// in-memory one above is per-process, so it under-counts when replicas exist).
+// Use this for the security-critical paths (login). Records a failure count in
+// a fixed window; once the count exceeds max within the window, the key is
+// locked for blockMs. Call dbClearAttempts() on success.
+// ============================================================================
+import { sql } from './db';
+
+export async function dbRateLimit(
+  key: string,
+  opts: { windowMs: number; max: number; blockMs: number }
+): Promise<{ limited: boolean; retryAfter?: number }> {
+  const now = Date.now();
+  try {
+    const [row] = await sql`SELECT fail_count, window_start, locked_until FROM rate_limits WHERE rl_key = ${key}`;
+    if (row?.locked_until && new Date(row.locked_until).getTime() > now) {
+      return { limited: true, retryAfter: Math.ceil((new Date(row.locked_until).getTime() - now) / 1000) };
+    }
+    const windowStart = row?.window_start ? new Date(row.window_start).getTime() : now;
+    const inWindow = now - windowStart < opts.windowMs;
+    const newCount = inWindow ? (row?.fail_count || 0) + 1 : 1;
+    const newWindowStart = inWindow ? new Date(windowStart) : new Date(now);
+    if (newCount > opts.max) {
+      const lockedUntil = new Date(now + opts.blockMs);
+      await sql`INSERT INTO rate_limits (rl_key, fail_count, window_start, locked_until)
+        VALUES (${key}, ${newCount}, ${newWindowStart}, ${lockedUntil})
+        ON CONFLICT (rl_key) DO UPDATE SET fail_count = ${newCount}, locked_until = ${lockedUntil}`;
+      return { limited: true, retryAfter: Math.ceil(opts.blockMs / 1000) };
+    }
+    await sql`INSERT INTO rate_limits (rl_key, fail_count, window_start, locked_until)
+      VALUES (${key}, ${newCount}, ${newWindowStart}, NULL)
+      ON CONFLICT (rl_key) DO UPDATE SET fail_count = ${newCount}, window_start = ${newWindowStart}, locked_until = NULL`;
+    return { limited: false };
+  } catch {
+    // If the limiter itself errors, fail open (don't lock users out on a DB hiccup).
+    return { limited: false };
+  }
+}
+
+export async function dbClearAttempts(key: string) {
+  try { await sql`DELETE FROM rate_limits WHERE rl_key = ${key}`; } catch {}
+}

@@ -3,7 +3,7 @@ import { sql } from '../db';
 import { requireRole, authenticate, requireAnyStaff } from '../auth';
 import { broadcast } from '../realtime';
 import { logEvent } from '../audit';
-import { rateLimit, clearAttempts, clientIp } from '../ratelimit';
+import { rateLimit, clearAttempts, clientIp, dbRateLimit, dbClearAttempts } from '../ratelimit';
 
 export const users = new Hono();
 function bad(c: any, msg: string, code = 400) { return c.json({ error: msg }, code); }
@@ -15,9 +15,10 @@ users.post('/api/auth/login', async (c) => {
   if (!pin) return bad(c, 'PIN required');
   // Brute-force protection: PINs are short (4-8 digits), so throttle failed login
   // attempts per IP+panel. Without this, all 10k 4-digit PINs are guessable in
-  // minutes. 8 tries/minute, then a 5-minute block. Successful login clears it.
+  // minutes. DB-backed so it holds across multiple app instances. 8 tries/minute,
+  // then a 5-minute block. Successful login clears it.
   const rlKey = 'login:' + clientIp(c) + ':' + (slug || 'self');
-  const rl = rateLimit(rlKey, { windowMs: 60_000, max: 8, blockMs: 300_000 });
+  const rl = await dbRateLimit(rlKey, { windowMs: 60_000, max: 8, blockMs: 300_000 });
   if (rl.limited) return c.json({ error: `Too many attempts. Try again in ${rl.retryAfter}s.` }, 429);
   // PINs are only unique per-tenant now, not globally - resolve which tenant this
   // login belongs to first. No slug (or an unrecognized one) means the operator's
@@ -53,7 +54,7 @@ users.post('/api/auth/login', async (c) => {
   // Check if onboarding is required (missing username or telegram_username)
   const onboarding_required = !user.username || !user.telegram_username;
   // Successful auth — clear the failed-attempt counter for this IP+panel.
-  clearAttempts(rlKey);
+  await dbClearAttempts(rlKey);
 
   return c.json({ data: user, onboarding_required });
 });
