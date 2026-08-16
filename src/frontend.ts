@@ -229,8 +229,10 @@ async function enterApp() {
   // Role picker: server-side flag, not localStorage — survives a cleared cache,
   // a new device, or reinstalling the PWA. Once confirmed, it never asks again.
   if (!me.role_confirmed_at) {
-    showRoleQuiz();
-    return;
+    // If the quiz somehow fails to render, fall through to the app rather than
+    // dying here — a thrown error at this point leaves the login screen hidden
+    // and nothing shown (the black-screen bug). The quiz re-offers next login.
+    try { showRoleQuiz(); return; } catch (e) { console.error('role quiz failed to render:', e); }
   }
   // Telegram gate
   const gated = await maybeShowTelegramGate();
@@ -1324,6 +1326,13 @@ const _rawPage = `<!DOCTYPE html>
 <title>ClearPanel</title>
 <link rel="manifest" href="/manifest.json">
 <script src="/icons.js"></script>
+<!-- ICONS_SVG is referenced by the role quiz and the Telegram verification gate
+     in main.js, but it only existed as a server-side export — in the browser it
+     was an undeclared identifier, so showRoleQuiz THREW for every new user right
+     after PIN entry (login screen already hidden -> black screen), and the OTP
+     gate silently failed to render (its error was swallowed, so unverified
+     callers skipped mandatory verification). Inject it before main.js runs. -->
+<script>var ICONS_SVG = ${JSON.stringify(ICONS_SVG).replace(/</g, '\\u003c')};</script>
 <!-- tweetnacl: audited NaCl crypto for end-to-end encrypted DMs. Loaded with
      defer + async so a slow or blocked CDN can NEVER freeze the page — login and
      everything else work without it; DMs simply wait until it is ready (the DM
