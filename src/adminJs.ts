@@ -72,7 +72,10 @@ async function renderAdminDashboard(el) {
         </div>
         <p style="font-size:12px;color:var(--text-dim);margin:0;">\${center.open ? 'Callers and finishers can clock in normally.' : 'Callers cannot clock in until you reopen — they see: "' + esc(center.reason) + '"'}</p>
       </div>
-      <button class="btn \${center.open ? 'btn-danger' : 'btn-gold'}" onclick="toggleCenterStatus(\${center.open})">\${center.open ? 'Close for the Day' : 'Start the Day'}</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button class="btn \${center.open ? 'btn-danger' : 'btn-gold'}" onclick="toggleCenterStatus(\${center.open})">\${center.open ? 'Close for the Day' : 'Start the Day'}</button>
+        <button class="btn btn-ghost" id="maintenanceBtn" onclick="toggleMaintenance()" style="color:var(--gold-bright);border-color:rgba(245,158,11,.3);">🔧 Updating…</button>
+      </div>
     </div>
     <div class="stat-grid stagger">
       <div class="stat-box panel accent"><div class="num" data-count="\${d.total}">0</div><div class="lbl">Total Leads</div></div>
@@ -97,8 +100,27 @@ async function renderAdminDashboard(el) {
   animateCountUps(el);
   startOnCallTimers();
 }
-async function toggleCenterStatus(currentlyOpen) {
-  if (currentlyOpen) {
+let _maintenanceActive = false;
+async function toggleMaintenance() {
+  if (_maintenanceActive) {
+    // Turn it off
+    await api('/api/updates/maintenance-off', { method: 'POST' });
+    _maintenanceActive = false;
+    const btn = document.getElementById('maintenanceBtn');
+    if (btn) { btn.textContent = '🔧 Updating…'; btn.style.color = 'var(--gold-bright)'; btn.style.borderColor = 'rgba(245,158,11,.3)'; }
+    if (typeof toast === 'function') toast('Maintenance banner cleared for all callers');
+  } else {
+    // Turn it on — let admin customise the message
+    const msg = prompt('Message to show callers while updating:', 'The panel is currently being updated. Hang tight — it will be back in a moment.');
+    if (msg === null) return; // cancelled
+    await api('/api/updates/maintenance-on', { method: 'POST', body: JSON.stringify({ message: msg || undefined }) });
+    _maintenanceActive = true;
+    const btn = document.getElementById('maintenanceBtn');
+    if (btn) { btn.textContent = '✓ Clear Update Banner'; btn.style.color = 'var(--success)'; btn.style.borderColor = 'rgba(34,197,94,.3)'; }
+    if (typeof toast === 'function') toast('Maintenance banner shown to all callers');
+  }
+}
+async function toggleCenterStatus(currentlyOpen) {  if (currentlyOpen) {
     const reason = prompt('Message callers will see when they try to clock in (e.g. "Back at 9am tomorrow"):', 'The call center is closed right now. Check back soon.');
     if (reason === null) return;
     const res = await api('/api/admin/center-status', { method: 'POST', body: JSON.stringify({ open: false, reason }) });

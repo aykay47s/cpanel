@@ -305,17 +305,23 @@ function showUpdateBanner(update) {
   if (existing) existing.remove();
   const banner = document.createElement('div');
   banner.id = 'cpUpdateBanner';
-  const isLive = update.is_live;
+  const isMaintenance = update.type === 'maintenance';
+  const isLive = update.is_live || isMaintenance;
   banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:250;padding:12px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;'
-    + (isLive ? 'background:linear-gradient(135deg,rgba(239,68,68,.95),rgba(220,38,38,.95));animation:liveGlow 2s ease-in-out infinite;' : 'background:linear-gradient(135deg,rgba(124,92,255,.9),rgba(79,140,255,.85));')
+    + (isMaintenance
+      ? 'background:linear-gradient(135deg,rgba(245,158,11,.97),rgba(234,88,12,.95));animation:liveGlow 2s ease-in-out infinite;'
+      : isLive
+        ? 'background:linear-gradient(135deg,rgba(239,68,68,.95),rgba(220,38,38,.95));animation:liveGlow 2s ease-in-out infinite;'
+        : 'background:linear-gradient(135deg,rgba(124,92,255,.9),rgba(79,140,255,.85));')
     + 'backdrop-filter:blur(12px);border-bottom:1px solid rgba(255,255,255,.15);';
   if (isLive) {
     const style = document.createElement('style');
     style.textContent = '@keyframes liveGlow{0%,100%{box-shadow:0 4px 20px rgba(239,68,68,.4);}50%{box-shadow:0 4px 30px rgba(239,68,68,.7);}}';
     document.head.appendChild(style);
   }
+  const icon = isMaintenance ? '🔧' : isLive ? '<span style="background:rgba(255,255,255,.2);padding:2px 8px;border-radius:4px;font-size:10px;font-weight:800;letter-spacing:.1em;flex-shrink:0;">LIVE</span>' : '📣';
   banner.innerHTML = '<div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">'
-    + (isLive ? '<span style="background:rgba(255,255,255,.2);padding:2px 8px;border-radius:4px;font-size:10px;font-weight:800;letter-spacing:.1em;flex-shrink:0;">LIVE</span>' : '<span style="font-size:16px;flex-shrink:0;">📣</span>')
+    + (typeof icon === 'string' && icon.startsWith('<') ? icon : '<span style="font-size:16px;flex-shrink:0;">' + icon + '</span>')
     + '<span style="font-size:13px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(update.title) + '</span>'
     + '<span style="font-size:12.5px;opacity:.85;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:1;">' + esc(update.body) + '</span>'
     + '</div>'
@@ -538,6 +544,16 @@ function connectEvents() {
   es.addEventListener('lead_updated', () => { if (me.role === 'admin') maybeRefreshAdmin(['dashboard','leads','finishing']); });
   es.addEventListener('announcement', () => { if (staffTab === 'home') renderStaffHome(); if (me.role==='admin') maybeRefreshAdmin('announcements'); });
   es.addEventListener('chat_message', (e) => { const d = JSON.parse(e.data); if (staffTab === 'chat' || (me.role==='admin' && currentAdminTab==='chat')) appendChatMessage(d); else pingNav('chat'); });
+  es.addEventListener('panel_update', (e) => {
+    const d = JSON.parse(e.data);
+    if (d.maintenance === false) {
+      // Maintenance cleared — remove the banner
+      const b = document.getElementById('cpUpdateBanner'); if (b) b.remove();
+    } else if (d.id) {
+      // New update or maintenance banner — show immediately
+      showUpdateBanner(d);
+    }
+  });
   es.addEventListener('dm_message', (e) => {
     const d = JSON.parse(e.data);
     if (d.recipient_id !== me.id && d.sender_id !== me.id) return;
@@ -654,6 +670,7 @@ async function markAllRead() {
 
 // ---------- Clock ----------
 let clockDurationInterval;
+function dismissClockReminder() { const el = document.getElementById('clockOutReminder'); if (el) el.remove(); }
 async function updateClockBtn() {
   const btn = document.getElementById('clockBtn');
   const label = document.getElementById('clockLabel');
@@ -666,10 +683,26 @@ async function updateClockBtn() {
       const data = (await res.json()).data;
       clockedInAt = data.clockedInAt ? new Date(data.clockedInAt).getTime() : Date.now();
     } catch { clockedInAt = Date.now(); }
+    const REMINDER_AFTER_MS = 8 * 60 * 60 * 1000; // 8 hours
+    let reminderShown = false;
     const tick = () => {
       const s = Math.max(0, Math.floor((Date.now() - clockedInAt) / 1000));
       const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), ss = s % 60;
       label.textContent = String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0') + ':' + String(ss).padStart(2, '0');
+      // Show a persistent clock-out reminder after 8 hours — Telegram also sends
+      // a DM at this point, but callers with the app open should see it in-app too.
+      if (!reminderShown && (Date.now() - clockedInAt) > REMINDER_AFTER_MS) {
+        reminderShown = true;
+        const existing = document.getElementById('clockOutReminder');
+        if (!existing) {
+          const rem = document.createElement('div');
+          rem.id = 'clockOutReminder';
+          rem.style.cssText = 'position:fixed;bottom:calc(70px + env(safe-area-inset-bottom));left:12px;right:12px;z-index:180;padding:12px 16px;border-radius:14px;background:linear-gradient(135deg,rgba(245,158,11,.95),rgba(234,88,12,.9));display:flex;align-items:center;justify-content:space-between;gap:10px;box-shadow:0 4px 20px rgba(0,0,0,.4);';
+          rem.innerHTML = '<span style="font-size:13px;font-weight:600;color:#fff;">⏰ You have been clocked in for ' + h + 'h — remember to clock out when done!</span>'
+            + '<button onclick="dismissClockReminder()" style="background:rgba(255,255,255,.2);border:none;color:#fff;padding:5px 10px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0;">Got it</button>';
+          document.body.appendChild(rem);
+        }
+      }
     };
     tick();
     clockDurationInterval = setInterval(tick, 1000);

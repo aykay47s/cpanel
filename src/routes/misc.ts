@@ -662,13 +662,37 @@ misc.get('/api/updates', requireAdmin, async (c) => {
 
 misc.post('/api/updates', requireAdmin, async (c) => {
   const user = c.get('user');
-  const { title, body, is_live } = await c.req.json().catch(() => ({}));
+  const { title, body, is_live, type } = await c.req.json().catch(() => ({}));
   if (!title || !body) return c.json({ error: 'Title and body required' }, 400);
+  const updateType = ['update', 'maintenance', 'announcement'].includes(type) ? type : 'update';
   const [row] = await sql`
-    INSERT INTO panel_updates (tenant_id, title, body, is_live, posted_by)
-    VALUES (${user.tenant_id}, ${title}, ${body}, ${!!is_live}, ${user.id})
-    RETURNING id, title, body, is_live, created_at`;
+    INSERT INTO panel_updates (tenant_id, title, body, is_live, type, posted_by)
+    VALUES (${user.tenant_id}, ${title}, ${body}, ${!!is_live}, ${updateType}, ${user.id})
+    RETURNING id, title, body, is_live, type, created_at`;
+  broadcast('panel_update', row, user.tenant_id);
   return c.json({ data: row });
+});
+
+// Quick maintenance-mode toggle — one click to broadcast "updating now, stand by"
+// to every connected caller. Sets a live undismissable banner; resolving it clears it.
+misc.post('/api/updates/maintenance-on', requireAdmin, async (c) => {
+  const user = c.get('user');
+  const { message } = await c.req.json().catch(() => ({}));
+  // Clear any existing maintenance banner first so there's never two.
+  await sql`UPDATE panel_updates SET resolved_at = now() WHERE tenant_id = ${user.tenant_id} AND type = 'maintenance' AND resolved_at IS NULL`;
+  const [row] = await sql`
+    INSERT INTO panel_updates (tenant_id, title, body, is_live, type, posted_by)
+    VALUES (${user.tenant_id}, ${'Panel Updating'}, ${message || 'The panel is currently being updated. Hang tight — it will be back in a moment.'}, true, 'maintenance', ${user.id})
+    RETURNING id, title, body, is_live, type, created_at`;
+  broadcast('panel_update', { ...row, maintenance: true }, user.tenant_id);
+  return c.json({ data: row });
+});
+
+misc.post('/api/updates/maintenance-off', requireAdmin, async (c) => {
+  const user = c.get('user');
+  await sql`UPDATE panel_updates SET resolved_at = now() WHERE tenant_id = ${user.tenant_id} AND type = 'maintenance' AND resolved_at IS NULL`;
+  broadcast('panel_update', { maintenance: false }, user.tenant_id);
+  return c.json({ ok: true });
 });
 
 misc.post('/api/updates/:id/resolve', requireAdmin, async (c) => {

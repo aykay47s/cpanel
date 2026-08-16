@@ -436,6 +436,7 @@ export async function ensureDb() {
     // the unique-constraint swap happen below, after tenants is guaranteed seeded.
     `ALTER TABLE lead_categories ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id)`,
     `ALTER TABLE clock_sessions ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id)`,
+    `ALTER TABLE clock_sessions ADD COLUMN IF NOT EXISTS reminder_sent_at TIMESTAMPTZ`,
     // --- 3CX Call Control API ---
     // Where 3CX should actually ring this person. Preferred over call_phone for
     // 3CX routing: routing to an internal extension stays on the PBX, while an
@@ -591,6 +592,7 @@ export async function ensureDb() {
     created_at TIMESTAMPTZ NOT NULL DEFAULT now()
   )`;
   await sql`CREATE INDEX IF NOT EXISTS panel_updates_tenant ON panel_updates (tenant_id, created_at DESC)`;
+  await sql`ALTER TABLE panel_updates ADD COLUMN IF NOT EXISTS type TEXT DEFAULT 'update'`;
   // Per-user dismissals for non-live updates
   await sql`CREATE TABLE IF NOT EXISTS panel_update_dismissals (
     update_id INTEGER REFERENCES panel_updates(id) ON DELETE CASCADE,
@@ -660,6 +662,35 @@ export async function ensureDb() {
     setInterval(async () => {
       try { await sql`DELETE FROM chat_messages WHERE expires_at IS NOT NULL AND expires_at < now()`; } catch {}
     }, 30000);
+
+    // Clock-out reminder: Telegram DM to anyone who's been clocked in for over
+    // 8 hours without clocking out. Runs every 30 minutes. Sends at most once
+    // per session (tracked by a flag in clock_sessions) so it doesn't spam them
+    // every 30 minutes after the threshold. Admin also gets a note on their
+    // dashboard (via the stale-clockins endpoint they already poll).
+    setInterval(async () => {
+      try {
+        const { sendMasterDM } = await import('./telegram');
+        const stale = await sql`
+          SELECT u.id, u.name, u.telegram_chat_id_master, cs.id as session_id,
+            cs.clocked_in_at, cs.reminder_sent_at,
+            EXTRACT(EPOCH FROM (now() - cs.clocked_in_at))/3600 as hours_clocked
+          FROM users u
+          JOIN clock_sessions cs ON cs.user_id = u.id AND cs.clocked_out_at IS NULL
+          WHERE u.clocked_in = true
+            AND u.telegram_chat_id_master IS NOT NULL
+            AND cs.clocked_in_at < now() - INTERVAL '8 hours'
+            AND (cs.reminder_sent_at IS NULL OR cs.reminder_sent_at < now() - INTERVAL '2 hours')`;
+        for (const row of stale) {
+          try {
+            const h = Math.round(Number(row.hours_clocked));
+            await sendMasterDM(row.telegram_chat_id_master,
+              `⏰ <b>Don't forget to clock out!</b>\n\nHey ${row.name}, you've been clocked in for <b>${h} hour${h === 1 ? '' : 's'}</b>. If you're done for the day, open the panel and clock out so your hours are logged correctly.`);
+            await sql`UPDATE clock_sessions SET reminder_sent_at = now() WHERE id = ${row.session_id}`;
+          } catch {}
+        }
+      } catch {}
+    }, 30 * 60 * 1000); // every 30 minutes
   }
 
   // === Panel termination (master can kill a tenant and record why) ===
