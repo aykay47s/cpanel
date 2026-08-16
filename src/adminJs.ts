@@ -154,20 +154,115 @@ async function renderAdminLeads(el) {
   const FAILED = ['failed', 'cancelled', 'chopped_previously'];
   const passedCount = rows.filter(l => PASSED.includes(l.status) || PASSED.includes(l.outcome)).length;
   const failedCount = rows.filter(l => FAILED.includes(l.status) || FAILED.includes(l.outcome)).length;
-  const OUTCOMES = ['voicemail','no_answer','hung_up','busy','callback_requested','successful_call','failed','requires_review','cancelled','chopped_previously'];
+  const OUTCOMES = ['voicemail','no_answer','hung_up','busy','callback_requested','successful_call','failed','requires_review','cancelled','chopped_previously','number_not_recognised'];
   el.innerHTML = \`
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+      <button class="btn btn-ghost btn-sm" onclick="renderAdminLeads(document.getElementById('adminContent'))">All Leads</button>
+      <button class="btn btn-ghost btn-sm" onclick="renderAdminCallbacks()">📅 Callbacks</button>
+      <button class="btn btn-ghost btn-sm" onclick="renderStaleLeads()">⏳ Stale</button>
+    </div>
     <div class="row-flex" style="margin-bottom:14px;gap:10px;">
       <div class="stat-box panel" style="flex:1;padding:14px 18px;"><div class="num" style="font-size:20px;color:var(--success);" data-count="\${passedCount}">0</div><div class="lbl">Total Passed</div></div>
       <div class="stat-box panel" style="flex:1;padding:14px 18px;"><div class="num" style="font-size:20px;color:var(--danger);" data-count="\${failedCount}">0</div><div class="lbl">Total Failed</div></div>
     </div>
-    <div class="row-flex fade-up" style="margin-bottom:16px;">
-      <div class="field"><input id="leadSearch" placeholder="Search name, phone, email…" oninput="debouncedLeadSearch()" /></div>
-      <select id="leadStatusFilter" style="max-width:200px;" onchange="filterLeadsByStatus()"><option value="">All statuses</option>\${LEAD_STATUSES.map(s => '<option value="' + s + '">' + titleCase(s) + '</option>').join('')}</select>
-      <select id="leadOutcomeFilter" style="max-width:200px;" onchange="filterLeadsByOutcome()"><option value="">All outcomes</option>\${OUTCOMES.map(s => '<option value="' + s + '">' + titleCase(s) + '</option>').join('')}</select>
+    <div class="row-flex fade-up" style="margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+      <div class="field" style="flex:1;min-width:160px;margin:0;"><input id="leadSearch" placeholder="Search name, phone, email…" oninput="debouncedLeadSearch()" /></div>
+      <select id="leadStatusFilter" onchange="filterLeadsByStatus()"><option value="">All statuses</option>\${LEAD_STATUSES.map(s => '<option value="' + s + '">' + titleCase(s) + '</option>').join('')}</select>
+      <select id="leadOutcomeFilter" onchange="filterLeadsByOutcome()"><option value="">All outcomes</option>\${OUTCOMES.map(s => '<option value="' + s + '">' + titleCase(s) + '</option>').join('')}</select>
     </div>
-    <div class="panel p fade-up"><div class="table-scroll"><table><thead><tr><th>Lead</th><th>Category</th><th>Phone</th><th>Status</th><th>Caller</th><th>Finisher</th><th>Uploaded</th><th>Send To</th><th></th></tr></thead>
+    <!-- Bulk action bar — hidden until at least one lead is checked -->
+    <div id="bulkBar" style="display:none;margin-bottom:10px;padding:10px 14px;border-radius:12px;background:rgba(124,92,255,.1);border:1px solid rgba(124,92,255,.3);display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      <span id="bulkCount" style="font-size:13px;font-weight:600;flex:1;"></span>
+      <select id="bulkCallerSel" style="max-width:160px;"><option value="">Assign to caller…</option>\${callerListCache.map(c => '<option value="' + c.id + '">' + esc(c.name) + '</option>').join('')}</select>
+      <button class="btn btn-ghost btn-sm" onclick="bulkAssign()">Assign</button>
+      <button class="btn btn-ghost btn-sm" onclick="bulkVault()">Vault</button>
+      <button class="btn btn-ghost btn-sm" onclick="bulkReset()">Reset to uncalled</button>
+      <button class="btn btn-danger btn-sm" onclick="bulkDelete()">Delete</button>
+      <button class="btn btn-ghost btn-sm" onclick="clearBulk()">✕</button>
+    </div>
+    <div class="panel p fade-up"><div class="table-scroll"><table><thead><tr>
+      <th style="width:28px;"><input type="checkbox" id="selectAllLeads" onchange="toggleSelectAll(this)" /></th>
+      <th>Lead</th><th>Category</th><th>Phone</th><th>Status</th><th>Caller</th><th>Finisher</th><th>Uploaded</th><th>Send To</th><th></th></tr></thead>
     <tbody id="leadsTbody">\${rows.map(leadRowHtml).join('')}</tbody></table></div></div>\`;
   animateCountUps(el);
+}
+// ---- Bulk action helpers ----
+let _bulkSelected = new Set();
+function toggleSelectAll(cb) {
+  document.querySelectorAll('.lead-check').forEach(c => { c.checked = cb.checked; if (cb.checked) _bulkSelected.add(Number(c.dataset.id)); else _bulkSelected.delete(Number(c.dataset.id)); });
+  updateBulkBar();
+}
+function toggleLeadCheck(cb) {
+  if (cb.checked) _bulkSelected.add(Number(cb.dataset.id)); else _bulkSelected.delete(Number(cb.dataset.id));
+  updateBulkBar();
+}
+function updateBulkBar() {
+  const bar = document.getElementById('bulkBar');
+  const cnt = document.getElementById('bulkCount');
+  if (!bar) return;
+  if (_bulkSelected.size > 0) { bar.style.display = 'flex'; if (cnt) cnt.textContent = _bulkSelected.size + ' lead' + (_bulkSelected.size === 1 ? '' : 's') + ' selected'; }
+  else { bar.style.display = 'none'; }
+}
+function clearBulk() { _bulkSelected.clear(); document.querySelectorAll('.lead-check').forEach(c => c.checked = false); const sel = document.getElementById('selectAllLeads'); if (sel) sel.checked = false; updateBulkBar(); }
+async function bulkAssign() {
+  const callerId = Number(document.getElementById('bulkCallerSel').value);
+  if (!callerId) { alert('Pick a caller first.'); return; }
+  if (!confirm('Assign ' + _bulkSelected.size + ' leads to that caller?')) return;
+  for (const id of _bulkSelected) await api('/api/admin/leads/' + id + '/assign-caller', { method: 'POST', body: JSON.stringify({ callerId }) });
+  clearBulk(); renderAdminLeads(document.getElementById('adminContent'));
+}
+async function bulkVault() {
+  if (!confirm('Send ' + _bulkSelected.size + ' leads to the vault?')) return;
+  for (const id of _bulkSelected) await api('/api/admin/leads/' + id + '/override-status', { method: 'POST', body: JSON.stringify({ status: 'vaulted' }) });
+  clearBulk(); renderAdminLeads(document.getElementById('adminContent'));
+}
+async function bulkReset() {
+  if (!confirm('Reset ' + _bulkSelected.size + ' leads to uncalled?')) return;
+  for (const id of _bulkSelected) await api('/api/admin/leads/' + id + '/override-status', { method: 'POST', body: JSON.stringify({ status: 'not_called' }) });
+  clearBulk(); renderAdminLeads(document.getElementById('adminContent'));
+}
+async function bulkDelete() {
+  if (!confirm('Permanently delete ' + _bulkSelected.size + ' leads? This cannot be undone.')) return;
+  for (const id of _bulkSelected) await api('/api/admin/leads/' + id, { method: 'DELETE' });
+  clearBulk(); renderAdminLeads(document.getElementById('adminContent'));
+}
+// ---- Callbacks view ----
+async function renderAdminCallbacks() {
+  const el = document.getElementById('adminContent');
+  el.innerHTML = '<div style="margin-bottom:14px;"><button class="btn btn-ghost btn-sm" onclick="switchAdminTab(this.dataset.t)" data-t="leads">← Back</button></div><div class="panel p fade-up" style="text-align:center;color:var(--text-dim);font-size:13px;">Loading…</div>';
+  const res = await api('/api/admin/callbacks');
+  const rows = (await res.json()).data;
+  el.innerHTML = \`<div style="margin-bottom:14px;"><button class="btn btn-ghost btn-sm" onclick="renderAdminLeads(document.getElementById('adminContent'))">← Back</button></div>
+  <div class="panel p fade-up">
+    <h3 style="margin-bottom:14px;">Scheduled Callbacks (\${rows.length})</h3>
+    \${rows.length ? \`<div class="table-scroll"><table><thead><tr><th>Lead</th><th>Phone</th><th>Due</th><th>Assigned Caller</th><th>Status</th><th></th></tr></thead><tbody>
+    \${rows.map(l => \`<tr><td>\${esc(fullName(l))}</td><td class="mono">\${l.phone}</td>
+      <td style="color:\${new Date(l.callback_at) < new Date() ? 'var(--danger)' : 'var(--gold-bright)'};">\${new Date(l.callback_at).toLocaleString('en-GB',{dateStyle:'short',timeStyle:'short'})}</td>
+      <td>\${esc(l.callback_caller_name||'Unassigned')}</td><td>\${statusBadge(l.status)}</td>
+      <td><button class="btn btn-ghost btn-sm" onclick="openLeadDetail(\${l.id})">View</button></td>
+    </tr>\`).join('')}</tbody></table></div>\` : '<div style="color:var(--text-dim);">No callbacks scheduled.</div>'}
+  </div>\`;
+}
+// ---- Stale leads view ----
+async function renderStaleLeads() {
+  const days = prompt('Show leads not touched in how many days?', '3');
+  if (!days) return;
+  const el = document.getElementById('adminContent');
+  el.innerHTML = '<div style="margin-bottom:14px;"><button class="btn btn-ghost btn-sm" onclick="switchAdminTab(this.dataset.t)" data-t="leads">← Back</button></div><div style="text-align:center;color:var(--text-dim);">Loading…</div>';
+  const res = await api('/api/admin/stale-leads?days=' + encodeURIComponent(days));
+  const { data: rows } = await res.json();
+  el.innerHTML = \`<div style="margin-bottom:14px;"><button class="btn btn-ghost btn-sm" onclick="renderAdminLeads(document.getElementById('adminContent'))">← Back</button></div>
+  <div class="panel p fade-up">
+    <h3 style="margin-bottom:6px;">Stale Leads — not touched in \${days} days (\${rows.length})</h3>
+    <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:14px;">These are going cold. Reassign, vault, or discard them.</p>
+    \${rows.length ? \`<div class="table-scroll"><table><thead><tr><th>Lead</th><th>Phone</th><th>Last Updated</th><th>Status / Outcome</th><th>Caller</th><th></th></tr></thead><tbody>
+    \${rows.map(l => \`<tr><td>\${esc(fullName(l))}</td><td class="mono">\${l.phone}</td>
+      <td style="color:var(--danger);">\${timeAgo(l.updated_at)}</td>
+      <td>\${statusBadge(l.status)}\${l.outcome ? ' ' + statusBadge(l.outcome) : ''}</td>
+      <td>\${esc(l.caller_name||'—')}</td>
+      <td><button class="btn btn-ghost btn-sm" onclick="openLeadDetail(\${l.id})">View</button></td>
+    </tr>\`).join('')}</tbody></table></div>\` : '<div style="color:var(--success);">No stale leads — queue is fresh ✓</div>'}
+  </div>\`;
 }
 function filterLeadsByOutcome() {
   const outcome = document.getElementById('leadOutcomeFilter').value;
@@ -187,10 +282,21 @@ function categoryBadge(leadType) {
   return '<span class="badge" style="background:' + color + '22;color:' + color + ';border:1px solid ' + color + '44;gap:5px;">' + logoImg + esc(leadType) + '</span>';
 }
 function leadRowHtml(l) {
-  const sendCell = l.status === 'not_called'
+  const sendCell = (l.status === 'not_called' || l.status === 'attempted')
     ? \`<select onclick="event.stopPropagation()" onchange="event.stopPropagation(); sendLeadToCaller(\${l.id}, this.value)"><option value="">Send to…</option>\${callerListCache.map(c => '<option value="' + c.id + '">' + esc(c.name) + '</option>').join('')}</select>\`
     : '<span style="color:var(--text-faint);">—</span>';
-  return \`<tr class="clickable" data-lead-row="\${l.id}"><td onclick="openLeadDetail(\${l.id})">\${esc(fullName(l))} \${l.dedup_status === 'flagged' ? '<span class="dup-warn">possible dup</span>' : ''}\${l.note_count > 0 ? ' <span class="badge" style="background:rgba(79,140,255,.15);color:var(--gold-bright);" title="' + l.note_count + ' caller note(s)">' + l.note_count + ' note' + (l.note_count === 1 ? '' : 's') + '</span>' : ''}</td><td onclick="openLeadDetail(\${l.id})">\${categoryBadge(l.lead_type)}</td><td class="mono" onclick="openLeadDetail(\${l.id})">\${l.phone}</td><td onclick="openLeadDetail(\${l.id})">\${statusBadge(l.status)}</td><td onclick="openLeadDetail(\${l.id})">\${l.caller_name || '—'}</td><td onclick="openLeadDetail(\${l.id})">\${l.finisher_name || '—'}</td><td onclick="openLeadDetail(\${l.id})">\${timeAgo(l.created_at)}</td><td>\${sendCell}</td><td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); deleteLead(\${l.id})">Delete</button></td></tr>\`;
+  return \`<tr class="clickable" data-lead-row="\${l.id}">
+    <td onclick="event.stopPropagation()"><input type="checkbox" class="lead-check" data-id="\${l.id}" onchange="toggleLeadCheck(this)" /></td>
+    <td onclick="openLeadDetail(\${l.id})">\${esc(fullName(l))} \${l.dedup_status === 'flagged' ? '<span class="dup-warn">possible dup</span>' : ''}\${l.note_count > 0 ? ' <span class="badge" style="background:rgba(79,140,255,.15);color:var(--gold-bright);" title="' + l.note_count + ' caller note(s)">' + l.note_count + ' note' + (l.note_count === 1 ? '' : 's') + '</span>' : ''}</td>
+    <td onclick="openLeadDetail(\${l.id})">\${categoryBadge(l.lead_type)}</td>
+    <td class="mono" onclick="openLeadDetail(\${l.id})">\${l.phone}</td>
+    <td onclick="openLeadDetail(\${l.id})">\${statusBadge(l.status)}\${l.outcome && l.outcome !== l.status ? ' <span style="font-size:10px;color:var(--text-faint);display:block;margin-top:3px;">' + titleCase(l.outcome) + '</span>' : ''}\${l.last_call_duration_seconds ? ' <span style="font-size:10px;color:var(--text-faint);display:block;">' + Math.floor(l.last_call_duration_seconds/60) + 'm ' + (l.last_call_duration_seconds%60) + 's</span>' : ''}</td>
+    <td onclick="openLeadDetail(\${l.id})">\${l.caller_name || '—'}</td>
+    <td onclick="openLeadDetail(\${l.id})">\${l.finisher_name || '—'}</td>
+    <td onclick="openLeadDetail(\${l.id})">\${timeAgo(l.created_at)}</td>
+    <td>\${sendCell}</td>
+    <td><button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); deleteLead(\${l.id})">Delete</button></td>
+  </tr>\`;
 }
 async function sendLeadToCaller(leadId, callerId) {
   if (!callerId) return;
@@ -214,7 +320,7 @@ async function filterLeadsByStatus() {
   const res = await api('/api/admin/leads' + (status ? '?status=' + status : ''));
   document.getElementById('leadsTbody').innerHTML = (await res.json()).data.map(leadRowHtml).join('');
 }
-const LEAD_STATUSES = ['not_called','calling','active_call','call_ended','successful_call','ready_for_finishing','assigned_to_finisher','completed','failed','requires_review'];
+const LEAD_STATUSES = ['not_called','attempted','calling','active_call','call_ended','successful_call','ready_for_finishing','assigned_to_finisher','completed','failed','requires_review','number_not_recognised'];
 
 async function openLeadDetail(id) {
   const res = await api('/api/admin/leads/' + id);

@@ -908,6 +908,8 @@ const STATUS_ICONS = {
   cancelled: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 6l12 12M18 6L6 18"/></svg>',
   chopped_previously: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M6 6l12 12M18 6L6 18"/></svg>',
   not_called: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><circle cx="12" cy="12" r="8"/></svg>',
+  attempted: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>',
+  number_not_recognised: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L2.5 17a2 2 0 001.7 3h15.6a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg>',
   calling: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M6.6 10.8a15 15 0 006.6 6.6l2.2-2.2a1 1 0 011.1-.2 11 11 0 003.4.6 1 1 0 011 1V20a1 1 0 01-1 1A17 17 0 013 5a1 1 0 011-1h3.5a1 1 0 011 1 11 11 0 00.6 3.4 1 1 0 01-.2 1.1z"/></svg>',
   active_call: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M6.6 10.8a15 15 0 006.6 6.6l2.2-2.2a1 1 0 011.1-.2 11 11 0 003.4.6 1 1 0 011 1V20a1 1 0 01-1 1A17 17 0 013 5a1 1 0 011-1h3.5a1 1 0 011 1 11 11 0 00.6 3.4 1 1 0 01-.2 1.1z"/></svg>',
   call_ended: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>',
@@ -956,7 +958,7 @@ function avatarWithRankHtml(person, size, rk) {
   const iconSize = Math.round(badgeSize * 0.56);
   return '<div style="position:relative;width:' + size + 'px;height:' + size + 'px;flex-shrink:0;">'
     + avatarHtml(person, size)
-    + '<div style="position:absolute;right:-3px;bottom:-3px;width:' + badgeSize + 'px;height:' + badgeSize + 'px;border-radius:50%;background:linear-gradient(160deg,' + rk.c2 + ',' + rk.c1 + ' 60%);display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 3px var(--bg-2),0 2px 6px rgba(0,0,0,.4);line-height:1;"><span style="width:' + iconSize + 'px;height:' + iconSize + 'px;display:inline-flex;color:#fff;">' + (rk.icon || '') + '</span></div>'
+    + '<div style="position:absolute;right:-3px;bottom:-3px;width:' + badgeSize + 'px;height:' + badgeSize + 'px;border-radius:50%;background:linear-gradient(160deg,' + rk.c2 + ',' + rk.c1 + ' 60%);display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 3px var(--bg-2),0 2px 6px rgba(0,0,0,.4);line-height:1;"><span class="rank-mark" style="width:' + iconSize + 'px;height:' + iconSize + 'px;display:inline-flex;color:#fff;">' + (rk.icon || '') + '</span></div>'
     + '</div>';
 }
 
@@ -1503,6 +1505,10 @@ label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spa
    solid alert-colored slab. "Live" states get a genuine pulsing dot — the only ones
    that move, so motion still means something when you see it. */
 .badge.not_called{background:rgba(190,190,200,.09);color:#c6c6d2;border-color:rgba(190,190,200,.16);}
+/* Attempted: visibly distinct from never-called so a card shows at a glance that
+   someone already tried it, without having to open the lead and read the log. */
+.badge.attempted{background:rgba(129,140,248,.12);color:#a5b4fc;border-color:rgba(129,140,248,.28);}
+.badge.number_not_recognised{background:rgba(245,158,11,.12);color:#f5b942;border-color:rgba(245,158,11,.28);}
 .badge.calling,.badge.active_call,.badge.ringing,.badge.in-progress{background:rgba(79,140,255,.14);color:var(--gold-bright);border-color:rgba(79,140,255,.3);}
 .badge.calling::before,.badge.active_call::before,.badge.ringing::before,.badge.in-progress::before{animation:badgeDotPulse 1.6s ease-in-out infinite;}
 @keyframes badgeDotPulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(.72);}}
@@ -1755,7 +1761,12 @@ tr.clickable:active{background:rgba(255,255,255,.05);}
 .rank-emblem{position:relative;display:flex;align-items:center;justify-content:center;border-radius:50%;background:linear-gradient(160deg,var(--rc2),var(--rc1) 60%);flex-shrink:0;box-shadow:0 0 12px var(--rc1)55;overflow:hidden;}
 .rank-emblem::after{content:'';position:absolute;inset:0;border-radius:50%;background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.35) 50%,transparent 68%);transform:translateX(-120%);animation:emblemSheen 4.5s ease-in-out infinite;}
 @keyframes emblemSheen{0%,60%{transform:translateX(-120%);}85%,100%{transform:translateX(120%);}}
-.rank-emblem .div{position:relative;z-index:1;line-height:1;}
+.rank-emblem .div{position:relative;z-index:1;line-height:1;display:inline-flex;align-items:center;justify-content:center;}
+/* The rank mark SVGs carry no class of their own, and the wrapper span only sets
+   its own box — without this the inner <svg> has no intrinsic size and collapses
+   to zero, so rank emblems rendered as empty coloured circles. */
+.rank-emblem .div svg{width:100%;height:100%;display:block;}
+.rank-mark svg{width:100%;height:100%;display:block;}
 .rank-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 11px 4px 5px;border-radius:100px;background:rgba(255,255,255,.06);border:1px solid var(--border-2);font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;}
 /* ---- Rank-up moment ---- */
 .rankup-overlay{position:fixed;inset:0;z-index:300;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:rgba(5,5,9,.82);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);animation:fadeIn .3s ease both;cursor:pointer;}

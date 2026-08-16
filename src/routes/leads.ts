@@ -244,6 +244,7 @@ leads.get('/api/admin/dashboard', requireRole('admin'), async (c) => {
     SELECT
       COUNT(*)::int as total,
       COUNT(*) FILTER (WHERE status = 'not_called')::int as uncalled,
+      COUNT(*) FILTER (WHERE status = 'attempted')::int as attempted,
       COUNT(*) FILTER (WHERE status IN ('calling','active_call'))::int as active_calls,
       COUNT(*) FILTER (WHERE status IN ('completed'))::int as completed,
       COUNT(*) FILTER (WHERE status = 'successful_call')::int as successful,
@@ -308,7 +309,7 @@ leads.post('/api/admin/leads/:id/assign-caller', requireRole('admin'), async (c)
   if (!caller || caller.role !== 'caller') return bad(c, 'Target user is not a caller');
   const [lead] = await sql`SELECT status, assigned_caller_id FROM leads WHERE id = ${c.req.param('id')} AND tenant_id = ${user.tenant_id}`;
   if (!lead) return bad(c, 'Not found', 404);
-  if (lead.status !== 'not_called') return bad(c, 'Only unclaimed leads can be sent to a caller');
+  if (lead.status !== 'not_called' && lead.status !== 'attempted') return bad(c, 'Only unclaimed leads can be sent to a caller');
   const [updated] = await sql`UPDATE leads SET assigned_caller_id = ${callerId}, updated_at = now() WHERE id = ${c.req.param('id')} AND tenant_id = ${user.tenant_id} RETURNING *`;
   await logEvent(updated.id, lead.assigned_caller_id ? 'reassigned_caller' : 'sent_to_caller', user, lead.status, lead.status, { caller_id: callerId, caller_name: caller.name });
   await notify(callerId, 'lead_assigned', `A lead was sent to you: ${updated.first_name || 'Unknown'} ${updated.last_name || ''}`.trim(), updated.id);
@@ -331,7 +332,7 @@ leads.post('/api/admin/leads/:id/override-status', requireRole('admin'), async (
 // ================= CALLER LIFECYCLE =================
 leads.get('/api/caller/queue', requireRole('caller'), async (c) => {
   const user = c.get('user');
-  const rows = await sql`SELECT * FROM leads WHERE status = 'not_called' AND tenant_id = ${user.tenant_id} AND (assigned_caller_id IS NULL OR assigned_caller_id = ${user.id}) AND merged_into_id IS NULL ORDER BY (assigned_caller_id = ${user.id}) DESC, created_at ASC LIMIT 20`;
+  const rows = await sql`SELECT * FROM leads WHERE status IN ('not_called','attempted') AND tenant_id = ${user.tenant_id} AND (assigned_caller_id IS NULL OR assigned_caller_id = ${user.id}) AND merged_into_id IS NULL ORDER BY (assigned_caller_id = ${user.id}) DESC, (status = 'not_called') DESC, created_at ASC LIMIT 20`;
   return c.json({ data: rows });
 });
 
@@ -365,7 +366,7 @@ leads.post('/api/caller/leads/:id/claim', requireRole('caller'), async (c) => {
   // Claimable if genuinely open, OR if an admin specifically sent it to this caller -
   // and never across a tenant boundary, regardless of what id is guessed/passed in.
   const [updated] = await sql`UPDATE leads SET status = 'calling', assigned_caller_id = ${user.id}, call_started_at = now(), updated_at = now(), call_attempts = call_attempts + 1
-    WHERE id = ${id} AND tenant_id = ${user.tenant_id} AND status = 'not_called' AND (assigned_caller_id IS NULL OR assigned_caller_id = ${user.id}) RETURNING *`;
+    WHERE id = ${id} AND tenant_id = ${user.tenant_id} AND status IN ('not_called','attempted') AND (assigned_caller_id IS NULL OR assigned_caller_id = ${user.id}) RETURNING *`;
   if (!updated) return c.json({ claimed: false, reason: 'Already taken' }, 409);
   await logEvent(updated.id, 'claimed', user, 'not_called', 'calling', {});
   await awardXp(user.id, 5, 'claimed', updated.id);
@@ -427,7 +428,7 @@ leads.get('/api/leads/:id/notes', requireAnyStaff, async (c) => {
 // still worth an order of magnitude more, because that's the job.
 const XP_MAP: Record<string, number> = {
   successful_call: 100, callback_requested: 15, requires_review: 10, failed: 10,
-  voicemail: 5, no_answer: 5, hung_up: 5, busy: 3,
+  voicemail: 5, no_answer: 5, hung_up: 5, busy: 3, number_not_recognised: 5,
   cancelled: 0, chopped_previously: 2,
 };
 // Single choke point for all XP: bumps the running total AND records the event
@@ -443,27 +444,34 @@ async function awardXp(userId: number, amount: number, reason: string, leadId?: 
 // pool for someone else (or the same caller later) to try again.
 const REQUEUE_OUTCOMES = ['voicemail', 'hung_up', 'no_answer', 'busy', 'callback_requested', 'cancelled'];
 // chopped_previously: someone else already worked this lead — terminal, not retried.
+// number_not_recognised: the number is wrong/dead — terminal, no point requeueing it.
 const OUTCOME_STATUS_MAP: Record<string, string> = {
   successful_call: 'ready_for_finishing',
   chopped_previously: 'failed',
+  number_not_recognised: 'number_not_recognised',
 };
 
 leads.post('/api/caller/leads/:id/outcome', requireRole('caller'), async (c) => {
   const user = c.get('user');
-  const { outcome, notes } = await c.req.json().catch(() => ({}));
-  const validOutcomes = ['successful_call', 'failed', 'requires_review', 'chopped_previously', ...REQUEUE_OUTCOMES];
+  const { outcome, notes, duration } = await c.req.json().catch(() => ({}));
+  const durationSec = duration && Number.isFinite(Number(duration)) ? Math.max(0, Math.round(Number(duration))) : null;
+  const validOutcomes = ['successful_call', 'failed', 'requires_review', 'chopped_previously', 'number_not_recognised', ...REQUEUE_OUTCOMES];
   if (!validOutcomes.includes(outcome)) return bad(c, 'Invalid outcome');
   const [lead] = await sql`SELECT status, assigned_caller_id FROM leads WHERE id = ${c.req.param('id')} AND tenant_id = ${user.tenant_id}`;
   if (!lead || lead.assigned_caller_id !== user.id) return bad(c, 'Not your lead', 403);
 
   let finalStatus: string;
-  if (REQUEUE_OUTCOMES.includes(outcome)) finalStatus = 'not_called';
+  // Requeued leads used to go back to 'not_called', which made an attempted lead
+  // indistinguishable from one nobody had ever touched — you had to open the lead
+  // and read the log to see it had been called. They now become 'attempted', which
+  // is still claimable by the queue but displays the real outcome on the card.
+  if (REQUEUE_OUTCOMES.includes(outcome)) finalStatus = 'attempted';
   else finalStatus = OUTCOME_STATUS_MAP[outcome] || outcome; // 'failed' | 'requires_review' | mapped
 
   const [updated] = REQUEUE_OUTCOMES.includes(outcome)
-    ? await sql`UPDATE leads SET status = ${finalStatus}, outcome = ${outcome}, notes = COALESCE(${notes || null}, notes), assigned_caller_id = NULL, updated_at = now() WHERE id = ${c.req.param('id')} AND tenant_id = ${user.tenant_id} RETURNING *`
-    : await sql`UPDATE leads SET status = ${finalStatus}, outcome = ${outcome}, notes = COALESCE(${notes || null}, notes), updated_at = now() WHERE id = ${c.req.param('id')} AND tenant_id = ${user.tenant_id} RETURNING *`;
-  await logEvent(updated.id, 'outcome_recorded', user, lead.status, outcome, { notes: notes || null });
+    ? await sql`UPDATE leads SET status = ${finalStatus}, outcome = ${outcome}, notes = COALESCE(${notes || null}, notes), last_call_duration_seconds = COALESCE(${durationSec}, last_call_duration_seconds), call_attempts = call_attempts + 1, assigned_caller_id = NULL, updated_at = now() WHERE id = ${c.req.param('id')} AND tenant_id = ${user.tenant_id} RETURNING *`
+    : await sql`UPDATE leads SET status = ${finalStatus}, outcome = ${outcome}, notes = COALESCE(${notes || null}, notes), last_call_duration_seconds = COALESCE(${durationSec}, last_call_duration_seconds), call_attempts = call_attempts + 1, updated_at = now() WHERE id = ${c.req.param('id')} AND tenant_id = ${user.tenant_id} RETURNING *`;
+  await logEvent(updated.id, 'outcome_recorded', user, lead.status, outcome, { notes: notes || null, duration_seconds: durationSec });
   if (outcome === 'successful_call') {
     await logEvent(updated.id, 'queued_for_finishing', user, outcome, 'ready_for_finishing', {});
     await notifyRole('admin', 'successful_call', `${user.name} logged a successful call: ${updated.first_name || 'Unknown'} ${updated.last_name || ''}`.trim(), updated.id, undefined, user.tenant_id);
@@ -478,6 +486,68 @@ leads.post('/api/caller/leads/:id/outcome', requireRole('caller'), async (c) => 
   const xpAwarded = await awardXp(user.id, XP_MAP[outcome] || 0, 'outcome:' + outcome, updated.id);
   broadcast('lead_updated', updated, user.tenant_id);
   return c.json({ data: updated, xp_awarded: xpAwarded });
+});
+
+// ================= CALLBACK SCHEDULING =================
+// Schedule a callback on a lead — stores when and (optionally) which caller
+// should make it. The lead stays in its current status so it doesn't disappear
+// from the queue, but the callback_at timestamp now drives a dedicated view.
+leads.post('/api/caller/leads/:id/callback', requireAnyStaff, async (c) => {
+  const user = c.get('user');
+  const { callback_at, note } = await c.req.json().catch(() => ({}));
+  if (!callback_at) return bad(c, 'callback_at required');
+  const callbackDate = new Date(callback_at);
+  if (isNaN(callbackDate.getTime())) return bad(c, 'Invalid date');
+  const [lead] = await sql`SELECT id, tenant_id, assigned_caller_id, status FROM leads WHERE id = ${c.req.param('id')} AND tenant_id = ${user.tenant_id}`;
+  if (!lead) return bad(c, 'Lead not found', 404);
+  const callerId = user.role === 'admin' ? (lead.assigned_caller_id || user.id) : user.id;
+  const [updated] = await sql`UPDATE leads SET callback_at = ${callbackDate}, callback_caller_id = ${callerId}, outcome = 'callback_requested', status = 'attempted', call_attempts = call_attempts + 1, assigned_caller_id = NULL, updated_at = now() WHERE id = ${lead.id} AND tenant_id = ${user.tenant_id} RETURNING *`;
+  if (note) await sql`INSERT INTO lead_notes (lead_id, author_id, content, tenant_id) VALUES (${lead.id}, ${user.id}, ${note}, ${user.tenant_id}) ON CONFLICT DO NOTHING`.catch(() => {});
+  await logEvent(lead.id, 'callback_scheduled', user, lead.status, 'callback_requested', { callback_at: callbackDate.toISOString() });
+  broadcast('lead_updated', updated, user.tenant_id);
+  // Telegram reminder to the assigned caller (fire and forget).
+  try {
+    const [cb] = await sql`SELECT u.telegram_chat_id_master as chat_id, u.name FROM users u WHERE u.id = ${callerId} AND u.telegram_chat_id_master IS NOT NULL`;
+    if (cb?.chat_id) {
+      const { sendMasterMessage } = await import('../telegram');
+      const when = callbackDate.toLocaleString('en-GB', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Europe/London' });
+      sendMasterMessage(cb.chat_id, `📅 <b>Callback scheduled</b>\n\n<b>${updated.first_name || ''} ${updated.last_name || ''}</b> (${updated.phone})\n🕐 Due: <b>${when}</b>\n\nYou'll get a reminder when it's time.`).catch(() => {});
+    }
+  } catch {}
+  return c.json({ data: updated });
+});
+
+// Due callbacks for a caller — leads where callback_at has passed (or is within
+// the next 15 minutes) and this caller is assigned to make the call.
+leads.get('/api/caller/callbacks', requireAnyStaff, async (c) => {
+  const user = c.get('user');
+  const now = new Date();
+  const soon = new Date(Date.now() + 15 * 60 * 1000);
+  const rows = await sql`
+    SELECT * FROM leads
+    WHERE tenant_id = ${user.tenant_id}
+      AND callback_at IS NOT NULL
+      AND callback_at <= ${soon}
+      AND (callback_caller_id = ${user.id} OR (callback_caller_id IS NULL AND ${user.role} = 'caller'))
+      AND status IN ('attempted', 'not_called')
+      AND merged_into_id IS NULL
+    ORDER BY callback_at ASC LIMIT 30`;
+  return c.json({ data: rows });
+});
+
+// Admin view — all upcoming callbacks across the whole tenant.
+leads.get('/api/admin/callbacks', requireRole('admin'), async (c) => {
+  const user = c.get('user');
+  const rows = await sql`
+    SELECT l.*, u.name as callback_caller_name
+    FROM leads l
+    LEFT JOIN users u ON u.id = l.callback_caller_id
+    WHERE l.tenant_id = ${user.tenant_id}
+      AND l.callback_at IS NOT NULL
+      AND l.status IN ('attempted', 'not_called')
+      AND l.merged_into_id IS NULL
+    ORDER BY l.callback_at ASC LIMIT 200`;
+  return c.json({ data: rows });
 });
 
 // ================= FINISHER LIFECYCLE =================
@@ -498,4 +568,22 @@ leads.post('/api/finisher/leads/:id/outcome', requireRole('finisher'), async (c)
   const xpAwarded = await awardXp(user.id, outcome === 'completed' ? 75 : 15, 'finisher:' + outcome, updated.id);
   broadcast('lead_updated', updated, user.tenant_id);
   return c.json({ data: updated, xp_awarded: xpAwarded });
+});
+
+// ================= STALE LEAD DETECTION (#3) =================
+// Leads that haven't been touched in a while — admin can see what's going cold.
+leads.get('/api/admin/stale-leads', requireRole('admin'), async (c) => {
+  const user = c.get('user');
+  const daysParam = Number(c.req.query('days') || '3');
+  const days = Math.max(1, Math.min(30, daysParam));
+  const rows = await sql`
+    SELECT l.*, u.name as caller_name
+    FROM leads l
+    LEFT JOIN users u ON u.id = l.assigned_caller_id
+    WHERE l.tenant_id = ${user.tenant_id}
+      AND l.status IN ('not_called', 'attempted')
+      AND l.merged_into_id IS NULL
+      AND l.updated_at < now() - (${days} || ' days')::INTERVAL
+    ORDER BY l.updated_at ASC LIMIT 200`;
+  return c.json({ data: rows, days });
 });

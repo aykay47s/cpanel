@@ -400,6 +400,13 @@ export async function ensureDb() {
     `ALTER TABLE leads ADD COLUMN IF NOT EXISTS extra_info TEXT`,
     `ALTER TABLE leads ADD COLUMN IF NOT EXISTS date_of_birth DATE`,
     `ALTER TABLE leads ADD COLUMN IF NOT EXISTS call_attempts INTEGER NOT NULL DEFAULT 0`,
+    // #2: store the call duration that the client already sends — was thrown away.
+    `ALTER TABLE leads ADD COLUMN IF NOT EXISTS last_call_duration_seconds INTEGER`,
+    // #3: callback scheduling — when the contact asked to be called back.
+    `ALTER TABLE leads ADD COLUMN IF NOT EXISTS callback_at TIMESTAMPTZ`,
+    `ALTER TABLE leads ADD COLUMN IF NOT EXISTS callback_caller_id INTEGER REFERENCES users(id)`,
+    // age index so stale-lead queries are fast
+    `CREATE INDEX IF NOT EXISTS leads_created_tenant ON leads (tenant_id, created_at)`,
     `ALTER TABLE announcements ADD COLUMN IF NOT EXISTS important BOOLEAN NOT NULL DEFAULT false`,
     `ALTER TABLE announcements ADD COLUMN IF NOT EXISTS target_role TEXT NOT NULL DEFAULT 'all'`,
     `ALTER TABLE announcements ADD COLUMN IF NOT EXISTS created_by INTEGER REFERENCES users(id)`,

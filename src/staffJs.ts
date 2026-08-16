@@ -1,5 +1,16 @@
 export const STAFF_JS = `
 async function switchStaffTab(tab) {
+  // A caller holding a claimed lead must log an outcome before navigating away —
+  // otherwise the lead sits assigned to them with no record of what happened, and
+  // the next person can't tell it was ever worked. The lead screen itself is the
+  // only place an outcome can be given, so leaving it is what we block.
+  if (onActiveCallScreen && staffTab === 'queue' && tab !== 'queue') {
+    if (typeof toast === 'function') toast('Log an outcome for this lead before moving on');
+    else alert('Log an outcome for this lead before moving on.');
+    // Re-assert the active tab in the nav so the UI doesn't look half-switched.
+    document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === staffTab));
+    return;
+  }
   staffTab = tab;
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   if (tab === 'queue' || tab === 'chat') clearNavBadge(tab);
@@ -267,15 +278,24 @@ async function renderStaffQueue() {
       return;
     }
     const qRes = await api('/api/caller/queue');
+    const cbRes = await api('/api/caller/callbacks');
     let rows = (await qRes.json()).data;
+    const callbacks = (await cbRes.json()).data || [];
     rows = rows.filter(o => !skippedLeadIds.has(o.id) && !recentlyClaimedIds.has(o.id));
-    if (!rows.length) { body.innerHTML = skippedLeadIds.size ? skippedOnlyHtml() : radarHtml(); return; }
+    if (!rows.length && !callbacks.length) { body.innerHTML = skippedLeadIds.size ? skippedOnlyHtml() : radarHtml(); return; }
     const freshCount = rows.filter(o => !(o.call_attempts || 0)).length;
     const retryCount = rows.length - freshCount;
+    const cbStrip = callbacks.length ? \`<div style="margin-bottom:14px;padding:12px 14px;border-radius:14px;background:rgba(250,204,21,.08);border:1px solid rgba(250,204,21,.3);">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#fbbf24;margin-bottom:10px;">\${iconInline(ICONS.calendar)} Due Callbacks (\${callbacks.length})</div>
+      \${callbacks.map(l => \`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.05);">
+        <div style="min-width:0;"><div style="font-weight:600;font-size:13.5px;">\${esc(fullName(l))}</div><div class="mono" style="font-size:11.5px;color:var(--text-dim);">\${l.phone} · \${new Date(l.callback_at).toLocaleString('en-GB',{dateStyle:'short',timeStyle:'short'})}</div></div>
+        <button class="btn btn-gold btn-sm" onclick="claimLead(\${l.id})" style="flex-shrink:0;margin-left:10px;">Call Now</button>
+      </div>\`).join('')}
+    </div>\` : '';
     body.innerHTML = \`<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:14px;padding:0 2px;">
       <div style="font-size:15px;font-weight:700;font-family:'Bricolage Grotesque',sans-serif;">\${rows.length} Waiting</div>
       <div style="font-size:11.5px;color:var(--text-dim);">\${freshCount} new\${retryCount ? ' · ' + retryCount + ' retry' : ''}</div>
-    </div>\` + rows.map(o => offerCardHtml(o)).join('');
+    </div>\` + cbStrip + rows.map(o => offerCardHtml(o)).join('');
   } else if (me.role === 'finisher') {
     const qRes = await api('/api/finisher/queue');
     const rows = (await qRes.json()).data;
@@ -304,7 +324,7 @@ function offerCardHtml(o) {
     <div class="offer-label" style="color:\${labelColor};">\${labelText} <span style="color:var(--text-faint);font-weight:600;">· \${timeAgo(o.created_at)}</span></div>
     <div class="offer-name" style="font-size:23px;">\${fullName(o)}</div>
     <div class="call-lead-sub" style="margin:4px 0 16px;"><span class="mono">\${o.phone}</span>\${categoryBadgeHtml(o.lead_type)}\${o.source ? '<span class="badge not_called">' + esc(o.source) + '</span>' : ''}</div>
-    \${isRetry ? '<div style="font-size:11.5px;color:var(--text-faint);margin:-8px 0 14px;">Nobody\\'s reached them yet — no answer/voicemail last time, not a mistake.</div>' : ''}
+    \${isRetry ? '<div style="font-size:11.5px;color:var(--text-faint);margin:-8px 0 14px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' + (o.outcome ? '<span>Last attempt:</span>' + statusBadge(o.outcome) : '<span>Nobody has reached them yet — not a mistake.</span>') + '</div>' : ''}
     <div class="offer-actions"><button class="btn btn-gold" onclick="claimLead(\${o.id})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" style="width:15px;height:15px;vertical-align:-2px;margin-right:5px;"><path d="M6.6 10.8a15 15 0 006.6 6.6l2.2-2.2a1 1 0 011.1-.2 11 11 0 003.4.6 1 1 0 011 1V20a1 1 0 01-1 1A17 17 0 013 5a1 1 0 011-1h3.5a1 1 0 011 1 11 11 0 00.6 3.4 1 1 0 01-.2 1.1z"/></svg>Take Call</button><button class="btn btn-ghost" onclick="skipLead(\${o.id})">Skip</button></div>
   </div>\`;
 }
@@ -409,6 +429,7 @@ function renderActiveCallShell(body, lead, role, scripts, template) {
         <button class="outcome-btn" onclick="recordOutcome(\${lead.id},'busy')" style="padding:12px;border-radius:12px;background:rgba(255,255,255,.05);border:1px solid var(--border);color:var(--text-dim);font-size:13px;font-weight:600;cursor:pointer;">\${iconInline(ICONS.phoneOff)} Unavailable</button>
         <button class="outcome-btn" onclick="recordOutcome(\${lead.id},'cancelled')" style="padding:12px;border-radius:12px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);color:var(--danger);font-size:13px;font-weight:600;cursor:pointer;">✕ Cancel</button>
       </div>
+      <button class="outcome-btn" onclick="recordOutcome(\${lead.id},'number_not_recognised')" style="width:100%;padding:11px;border-radius:12px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);color:#f5b942;font-size:12.5px;font-weight:600;cursor:pointer;margin-bottom:8px;">\${iconInline(ICONS.warn)} Number Not Recognised</button>
       \` : \`
       <!-- On call: outcome buttons -->
       <div style="margin-bottom:14px;">
@@ -422,6 +443,15 @@ function renderActiveCallShell(body, lead, role, scripts, template) {
           <button onclick="recordOutcome(\${lead.id},'failed')" style="padding:12px;border-radius:12px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);color:var(--danger);font-size:13px;font-weight:600;cursor:pointer;">✕ Unsuccessful</button>
         </div>
         <button onclick="recordOutcome(\${lead.id},'chopped_previously')" style="width:100%;padding:10px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid var(--border);color:var(--text-faint);font-size:12.5px;font-weight:600;cursor:pointer;">Already worked</button>
+      </div>
+      <!-- Callback scheduler: lets caller record a specific date/time instead of
+           just hitting "callback" and losing when they promised to ring back. -->
+      <div style="padding:12px 14px;border-radius:14px;background:rgba(250,204,21,.05);border:1px solid rgba(250,204,21,.18);margin-bottom:14px;">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#fbbf24;margin-bottom:8px;">\${iconInline(ICONS.calendar)} Schedule Callback</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <input type="datetime-local" id="cbDate_\${lead.id}" style="flex:1;min-width:0;font-size:13px;" />
+          <button onclick="scheduleCallback(\${lead.id})" class="btn btn-ghost btn-sm" style="flex-shrink:0;color:#fbbf24;border-color:rgba(250,204,21,.3);">Book it</button>
+        </div>
       </div>
 
       <!-- Live note -->
@@ -516,10 +546,25 @@ function applyXpEarned(amount, label) {
   xpToast(amount, label);
   if (after.tier !== before.tier || after.div !== before.div) setTimeout(() => showRankUp(after), 700);
 }
+async function scheduleCallback(leadId) {
+  const input = document.getElementById('cbDate_' + leadId);
+  if (!input || !input.value) { if (typeof toast === 'function') toast('Pick a date and time first'); return; }
+  const callback_at = new Date(input.value).toISOString();
+  const res = await api('/api/caller/leads/' + leadId + '/callback', { method: 'POST', body: JSON.stringify({ callback_at }) });
+  if (!res.ok) { const d = await res.json().catch(() => ({})); alert(d.error || 'Could not schedule callback'); return; }
+  onActiveCallScreen = false;
+  if (typeof toast === 'function') toast('Callback booked — Telegram reminder sent');
+  renderStaffQueue();
+}
 async function recordOutcome(id, outcome) {
+  // 'cancelled' is the one outcome that records no real result — make it a
+  // deliberate choice rather than an accidental tap that drops the lead.
+  if (outcome === 'cancelled' && !confirm('Release this lead without logging a result?')) return;
   const res = await api('/api/caller/leads/' + id + '/outcome', { method: 'POST', body: JSON.stringify({ outcome, duration: callStart ? Math.floor((Date.now()-callStart)/1000) : 0 }) });
   const data = await res.json().catch(() => ({}));
+  if (!res.ok) { alert((data && data.error) || 'Could not save that outcome — try again.'); return; }
   callStart = null; clearInterval(callTimerInterval);
+  onActiveCallScreen = false; // outcome logged — navigation is unblocked again
   if (outcome === 'successful_call') celebrateSuccessfulCall();
   renderStaffQueue();
   applyXpEarned(data.xp_awarded, titleCase(outcome));
