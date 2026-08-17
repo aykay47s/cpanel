@@ -100,7 +100,9 @@ app.get('/control', (c) => {
   return c.html(CONTROL_PAGE);
 });
 
-app.get('/store', async (c) => {
+app.get('/store', (c) => c.redirect('/', 301));
+
+app.get('/', async (c) => {
   c.header('Cache-Control', 'no-store, no-cache, must-revalidate');
   const settingRows = await sql`SELECT key, value FROM settings WHERE key IN (
     'store_checkout_url',
@@ -125,7 +127,7 @@ app.get('/store', async (c) => {
       d30: s['buy_url_30day'] || checkoutUrl,
     },
   };
-  return c.html(STORE_PAGE(cfg));
+  return c.html(STORE_PAGE(cfg, { autoRedirect: true }));
 });
 
 app.get('/affiliate', (c) => {
@@ -192,7 +194,7 @@ app.get('/manifest.json', async (c) => {
   return c.json({
     name,
     short_name: name,
-    start_url: slug ? `/${slug}` : '/',
+    start_url: slug ? `/${slug}` : '/app',
     display: 'standalone',
     background_color: '#08080b',
     theme_color: '#08080b',
@@ -220,7 +222,7 @@ app.get('/icon-192.png', async (c) => { c.header('Content-Type', 'image/png'); r
 app.get('/icon-512.png', async (c) => { c.header('Content-Type', 'image/png'); return c.body(await Bun.file('./public/icon-512.png').arrayBuffer()); });
 app.get('/apple-touch-icon.png', async (c) => { c.header('Content-Type', 'image/png'); return c.body(await Bun.file('./public/apple-touch-icon.png').arrayBuffer()); });
 
-app.get('/', async (c) => {
+app.get('/app', async (c) => {
   c.header('Cache-Control', 'no-store, no-cache, must-revalidate');
   // Serve the self-tenant panel with its own branding. Fallback chain:
   // tenants.panel_name (new, per-tenant) -> settings.panel_name (legacy, pre-migration

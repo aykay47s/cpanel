@@ -1,11 +1,9 @@
-// ClearPanel store — marketing/pricing page. No checkout, no payment.
-// The "Get in touch" CTA opens a Telegram contact handle that the operator
-// configures in their admin panel (Settings → Store Contact URL).
-// Operator never changes this file; they change the DB setting.
-
-// ClearPanel store — marketing/pricing page for reselling call-centre panels.
-// Prices and per-tier buy links are configured by the operator in the DB
-// (settings: price_3day/7day/14day/30day, buy_url_*). Operator never edits this file.
+// ClearPanel store — the public marketing/pricing page, served at the domain
+// root. Prices and per-tier buy links come from operator-configured DB settings
+// (price_3day/7day/14day/30day, buy_url_*); the operator never edits this file.
+// Design: matches the panel's own dark violet/gold aesthetic. No emojis —
+// every icon is an inline SVG. The showcase section is a pure-CSS mockup of
+// the caller panel so buyers see what they're getting.
 
 export interface StoreConfig {
   checkoutUrl: string;
@@ -13,476 +11,313 @@ export interface StoreConfig {
   buyUrls: { d3: string; d7: string; d14: string; d30: string };
 }
 
-export function STORE_PAGE(cfg: StoreConfig | string): string {
-  // Back-compat: if called with a bare string, treat it as the checkout URL.
+export function STORE_PAGE(cfg: StoreConfig | string, opts: { autoRedirect?: boolean } = {}): string {
   const config: StoreConfig = typeof cfg === 'string'
     ? { checkoutUrl: cfg, prices: { d3: '130', d7: '300', d14: '600', d30: '1250' }, buyUrls: { d3: cfg, d7: cfg, d14: cfg, d30: cfg } }
     : cfg;
   const cta = config.checkoutUrl || 'https://t.me/clearpanelotpbot';
   const P = config.prices;
   const B = config.buyUrls;
+  // If a logged-in panel user lands on the store (their PWA start_url or an old
+  // bookmark), bounce them straight to the panel — they came here to work.
+  const redirectScript = opts.autoRedirect
+    ? `<script>try{if(localStorage.getItem('dispatch_me')){location.replace('/app');}}catch(e){}</script>`
+    : '';
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ClearPanel — Call Centre Management Platform</title>
-<link rel="icon" href="/favicon.png">
+<title>ClearPanel — Run Your Call Floor Like a Machine</title>
+<meta name="description" content="ClearPanel is a complete call-centre operations panel: smart lead queues, one-tap outcomes, scheduled callbacks, XP ranks, encrypted team messaging and AI script writing. Redeem a key, get your own panel in under a minute.">
+<link rel="icon" href="/clearpanel-icon.png">
+${redirectScript}
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Bricolage+Grotesque:wght@700;800;900&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-*{box-sizing:border-box;margin:0;padding:0;}
 :root{
-  --bg:#07070a;--bg2:#0c0c10;--s1:#12121a;--s2:#1a1a24;--s3:#222230;
-  --text:#f0f0f4;--dim:#9090a0;--faint:#55555f;
-  --violet:#7c5cff;--violet-b:#a78bfa;--pink:#f472b6;--gold:#4f8cff;
-  --success:#22c55e;--border:rgba(255,255,255,.07);--border2:rgba(255,255,255,.12);
-  --ease:cubic-bezier(.16,1,.3,1);
+  --bg:#07070a;--bg-2:#0d0d13;--panel:rgba(255,255,255,.032);--panel-2:rgba(255,255,255,.055);
+  --border:rgba(255,255,255,.08);--border-2:rgba(255,255,255,.13);
+  --text:#f2f1f7;--dim:#9b99a8;--faint:#67656f;
+  --violet:#7c5cff;--violet-soft:#a18aff;--gold:#f5b942;--gold-soft:#ffd684;
+  --success:#34d399;--r:18px;--r-lg:26px;
+  --grad:linear-gradient(135deg,var(--violet),var(--gold));
 }
+*{box-sizing:border-box;margin:0;padding:0;}
 html{scroll-behavior:smooth;}
-body{font-family:'Geist',-apple-system,sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;overflow-x:hidden;}
-h1,h2,h3,h4{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;letter-spacing:-.03em;line-height:1.1;}
+body{font-family:'Inter',-apple-system,sans-serif;background:var(--bg);color:var(--text);line-height:1.6;overflow-x:hidden;-webkit-font-smoothing:antialiased;}
+h1,h2,h3,.wordmark{font-family:'Bricolage Grotesque',sans-serif;letter-spacing:-.02em;}
 a{color:inherit;text-decoration:none;}
-button{font-family:inherit;cursor:pointer;border:none;outline:none;}
+.wrap{max-width:1120px;margin:0 auto;padding:0 22px;}
+::selection{background:rgba(124,92,255,.35);}
 
-/* NAV */
-nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:0 clamp(20px,5vw,80px);height:66px;display:flex;align-items:center;justify-content:space-between;background:rgba(7,7,10,.7);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);}
-.nav-brand{display:flex;align-items:center;gap:12px;}
-.nav-brand img{width:36px;height:36px;border-radius:50%;}
-.nav-brand span{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:20px;background:linear-gradient(135deg,#fff,var(--violet-b));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
-.nav-links{display:flex;align-items:center;gap:28px;}
-.nav-links a{font-size:13.5px;font-weight:500;color:var(--dim);transition:color .15s;}
+/* ---------- ambient background ---------- */
+.orbs{position:fixed;inset:0;z-index:-1;overflow:hidden;pointer-events:none;}
+.orb{position:absolute;border-radius:50%;filter:blur(90px);opacity:.32;animation:drift 22s ease-in-out infinite alternate;}
+.orb.a{width:520px;height:520px;background:radial-gradient(circle,#5b3df0,transparent 65%);top:-160px;left:-120px;}
+.orb.b{width:460px;height:460px;background:radial-gradient(circle,#b8862a,transparent 65%);top:22%;right:-180px;animation-delay:-8s;}
+.orb.c{width:600px;height:600px;background:radial-gradient(circle,#3d2b8f,transparent 65%);bottom:-240px;left:28%;animation-delay:-15s;}
+@keyframes drift{from{transform:translate(0,0) scale(1);}to{transform:translate(60px,40px) scale(1.12);}}
+.grain{position:fixed;inset:0;z-index:-1;opacity:.5;background-image:radial-gradient(rgba(255,255,255,.014) 1px,transparent 1px);background-size:3px 3px;pointer-events:none;}
+
+/* ---------- nav ---------- */
+nav{position:sticky;top:0;z-index:50;backdrop-filter:blur(14px) saturate(1.4);-webkit-backdrop-filter:blur(14px) saturate(1.4);background:rgba(7,7,10,.72);border-bottom:1px solid var(--border);}
+.nav-in{display:flex;align-items:center;justify-content:space-between;height:64px;}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:17px;}
+.brand img{width:30px;height:30px;border-radius:8px;}
+.nav-links{display:flex;gap:26px;font-size:13.5px;font-weight:500;color:var(--dim);}
+.nav-links a{transition:color .15s;}
 .nav-links a:hover{color:var(--text);}
-.nav-cta{padding:9px 22px;border-radius:100px;background:linear-gradient(135deg,var(--violet),var(--pink));color:#fff;font-weight:700;font-size:13px;transition:transform .15s,box-shadow .15s;}
-.nav-cta:hover{transform:translateY(-1px);box-shadow:0 8px 30px rgba(124,92,255,.4);}
+.nav-cta{display:flex;gap:10px;align-items:center;}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:11px 20px;border-radius:100px;font-size:13.5px;font-weight:600;border:none;cursor:pointer;transition:transform .16s cubic-bezier(.34,1.56,.64,1),box-shadow .16s,background .16s;white-space:nowrap;}
+.btn:active{transform:scale(.96);}
+.btn-grad{background:var(--grad);color:#fff;box-shadow:0 4px 18px rgba(124,92,255,.35);}
+.btn-grad:hover{transform:translateY(-1px);box-shadow:0 8px 26px rgba(124,92,255,.5);}
+.btn-ghost{background:var(--panel);border:1px solid var(--border-2);color:var(--text);}
+.btn-ghost:hover{background:var(--panel-2);}
+.btn-lg{padding:15px 28px;font-size:15px;}
+@media(max-width:760px){.nav-links{display:none;}}
 
-/* HERO */
-.hero{min-height:100vh;display:flex;align-items:center;justify-content:center;text-align:center;padding:120px clamp(20px,5vw,80px) 80px;position:relative;overflow:hidden;}
-.hero-bg{position:absolute;inset:0;pointer-events:none;}
-.hero-bg::before{content:'';position:absolute;width:900px;height:900px;border-radius:50%;background:radial-gradient(ellipse,rgba(124,92,255,.18) 0%,transparent 70%);top:50%;left:50%;transform:translate(-50%,-55%);}
-.hero-bg::after{content:'';position:absolute;width:700px;height:500px;border-radius:50%;background:radial-gradient(ellipse,rgba(244,114,182,.1) 0%,transparent 65%);bottom:0;right:-10%;}
-.hero-content{position:relative;max-width:860px;}
-.hero-badge{display:inline-flex;align-items:center;gap:8px;padding:6px 16px;border-radius:100px;background:rgba(124,92,255,.12);border:1px solid rgba(124,92,255,.3);font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--violet-b);margin-bottom:28px;}
-.hero-badge::before{content:'';width:7px;height:7px;border-radius:50%;background:var(--success);box-shadow:0 0 8px var(--success);}
-.hero h1{font-size:clamp(44px,8vw,88px);margin-bottom:24px;background:linear-gradient(160deg,#fff 30%,rgba(167,139,250,.7));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
-.hero-sub{font-size:clamp(16px,2.5vw,20px);color:var(--dim);line-height:1.65;max-width:620px;margin:0 auto 42px;}
-.hero-actions{display:flex;align-items:center;justify-content:center;gap:14px;flex-wrap:wrap;}
-.btn-primary{padding:16px 36px;border-radius:100px;background:linear-gradient(135deg,var(--violet),var(--pink));color:#fff;font-weight:700;font-size:15px;box-shadow:0 8px 40px rgba(124,92,255,.45);transition:transform .15s,box-shadow .15s;}
-.btn-primary:hover{transform:translateY(-2px);box-shadow:0 14px 50px rgba(124,92,255,.55);}
-.btn-ghost{padding:16px 36px;border-radius:100px;background:rgba(255,255,255,.06);border:1px solid var(--border2);color:var(--text);font-weight:600;font-size:15px;transition:background .15s,transform .15s;}
-.btn-ghost:hover{background:rgba(255,255,255,.1);transform:translateY(-2px);}
-.hero-stats{display:flex;align-items:center;justify-content:center;gap:40px;margin-top:60px;flex-wrap:wrap;}
-.hero-stat{text-align:center;}
-.hero-stat .n{font-family:'Bricolage Grotesque',sans-serif;font-size:36px;font-weight:900;background:linear-gradient(135deg,#fff,var(--violet-b));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
-.hero-stat .l{font-size:12px;color:var(--faint);text-transform:uppercase;letter-spacing:.1em;font-weight:600;margin-top:4px;}
-.stat-divider{width:1px;height:40px;background:var(--border2);}
+/* ---------- hero ---------- */
+.hero{padding:92px 0 60px;text-align:center;position:relative;}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:7px 16px;border-radius:100px;background:var(--panel);border:1px solid var(--border-2);font-size:12.5px;font-weight:600;color:var(--gold-soft);margin-bottom:26px;}
+.pill .dot{width:7px;height:7px;border-radius:50%;background:var(--success);box-shadow:0 0 10px var(--success);animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.4;}}
+.hero h1{font-size:clamp(38px,6.4vw,68px);font-weight:800;line-height:1.06;margin-bottom:22px;}
+.hero h1 .grad-text{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;}
+.hero p{font-size:clamp(15px,2vw,18px);color:var(--dim);max-width:600px;margin:0 auto 36px;}
+.hero-ctas{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;margin-bottom:56px;}
+.hero-stats{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;}
+.hstat{padding:14px 22px;border-radius:var(--r);background:var(--panel);border:1px solid var(--border);backdrop-filter:blur(8px);}
+.hstat b{display:block;font-size:20px;font-family:'Bricolage Grotesque';background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;}
+.hstat span{font-size:11.5px;color:var(--faint);font-weight:500;}
 
-/* SECTIONS */
-section{padding:100px clamp(20px,5vw,80px);max-width:1300px;margin:0 auto;}
-.section-tag{font-size:11px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--violet-b);margin-bottom:14px;}
-.section-title{font-size:clamp(32px,5vw,52px);margin-bottom:16px;}
-.section-sub{font-size:16px;color:var(--dim);line-height:1.65;max-width:540px;}
+/* ---------- reveal ---------- */
+.rv{opacity:0;transform:translateY(26px);transition:opacity .7s ease,transform .7s cubic-bezier(.22,1,.36,1);}
+.rv.in{opacity:1;transform:none;}
 
-/* FEATURES GRID */
-.features-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:20px;margin-top:56px;}
-.feat{padding:28px;border-radius:20px;background:var(--s1);border:1px solid var(--border);transition:border-color .2s,transform .2s var(--ease);}
-.feat:hover{border-color:rgba(124,92,255,.35);transform:translateY(-3px);}
-.feat-icon{width:48px;height:48px;border-radius:14px;display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:18px;}
-.feat h4{font-size:17px;margin-bottom:8px;}
-.feat p{font-size:13.5px;color:var(--dim);line-height:1.6;}
+/* ---------- section scaffolding ---------- */
+section{padding:76px 0;}
+.eyebrow{font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--violet-soft);margin-bottom:12px;}
+.sec-title{font-size:clamp(26px,4vw,40px);font-weight:800;margin-bottom:14px;}
+.sec-sub{color:var(--dim);font-size:15px;max-width:560px;margin-bottom:44px;}
+.center{text-align:center;}
+.center .sec-sub{margin-left:auto;margin-right:auto;}
 
-/* HOW IT WORKS */
-.how-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:24px;margin-top:56px;}
-.how-step{text-align:center;padding:32px 24px;}
-.how-num{width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,var(--violet),var(--pink));display:flex;align-items:center;justify-content:center;font-family:'Bricolage Grotesque',sans-serif;font-size:22px;font-weight:900;color:#fff;margin:0 auto 20px;box-shadow:0 8px 24px rgba(124,92,255,.4);}
-.how-step h4{font-size:18px;margin-bottom:10px;}
-.how-step p{font-size:13.5px;color:var(--dim);line-height:1.6;}
+/* ---------- showcase mockups ---------- */
+.showcase{display:flex;gap:34px;align-items:center;justify-content:center;flex-wrap:wrap;perspective:1400px;}
+.phone{width:300px;border-radius:38px;background:linear-gradient(180deg,#17161f,#0c0b12);border:1px solid var(--border-2);box-shadow:0 30px 80px rgba(0,0,0,.6),0 0 0 8px rgba(255,255,255,.03);padding:14px;transform:rotateY(-8deg) rotateX(3deg);animation:float 7s ease-in-out infinite;}
+.phone.p2{transform:rotateY(8deg) rotateX(2deg);animation-delay:-3.5s;}
+@keyframes float{0%,100%{translate:0 0;}50%{translate:0 -14px;}}
+.screen{border-radius:26px;background:#0a0a0f;border:1px solid var(--border);overflow:hidden;}
+.mock-top{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--border);}
+.mock-brand{font-size:13px;font-weight:700;font-family:'Bricolage Grotesque';}
+.mock-clock{font-size:10.5px;font-weight:700;padding:5px 10px;border-radius:100px;background:rgba(52,211,153,.14);color:var(--success);border:1px solid rgba(52,211,153,.3);}
+.mock-body{padding:14px;display:flex;flex-direction:column;gap:11px;}
+.mlead{border-radius:16px;background:var(--panel-2);border:1px solid var(--border-2);padding:13px;}
+.mlead .tag{display:inline-block;font-size:9px;font-weight:800;letter-spacing:.1em;color:var(--success);text-transform:uppercase;margin-bottom:6px;}
+.mlead .tag.retry{color:var(--gold);}
+.mlead b{font-size:14px;display:block;}
+.mlead span{font-size:11px;color:var(--faint);font-family:ui-monospace,monospace;}
+.mbtn{margin-top:10px;text-align:center;padding:10px;border-radius:12px;background:var(--grad);font-size:12px;font-weight:700;color:#fff;}
+.mbtn.dark{background:var(--panel);border:1px solid var(--border-2);color:var(--dim);font-weight:600;}
+.mxp{display:flex;align-items:center;gap:10px;padding:11px 13px;border-radius:14px;background:var(--panel);border:1px solid var(--border);}
+.mxp .medal{width:34px;height:34px;border-radius:50%;background:var(--grad);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.mxp .medal svg{width:17px;height:17px;color:#fff;}
+.mxp .bar{flex:1;height:7px;border-radius:100px;background:rgba(255,255,255,.08);overflow:hidden;}
+.mxp .bar i{display:block;height:100%;width:68%;border-radius:100px;background:var(--grad);animation:fillxp 2.4s cubic-bezier(.22,1,.36,1) both;}
+@keyframes fillxp{from{width:8%;}}
+.mxp small{font-size:10px;color:var(--faint);font-weight:700;white-space:nowrap;}
+.mcall{text-align:center;padding:18px 13px;}
+.mcall .avatar{width:56px;height:56px;border-radius:50%;background:var(--grad);margin:0 auto 10px;display:flex;align-items:center;justify-content:center;}
+.mcall .avatar svg{width:26px;height:26px;color:#fff;}
+.mcall b{font-size:15px;display:block;}
+.mcall .timer{font-size:24px;font-weight:800;font-family:'Bricolage Grotesque';background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;margin:8px 0 12px;}
+.mgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.mout{padding:9px 6px;border-radius:11px;font-size:10.5px;font-weight:700;text-align:center;border:1px solid;}
+.mout.good{background:rgba(52,211,153,.1);border-color:rgba(52,211,153,.3);color:var(--success);}
+.mout.mid{background:rgba(245,185,66,.08);border-color:rgba(245,185,66,.28);color:var(--gold);}
+.mout.dim2{background:var(--panel);border-color:var(--border-2);color:var(--dim);}
+@media(max-width:720px){.phone{transform:none;} .phone.p2{transform:none;}}
 
-/* TIERS */
-.tiers-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;margin-top:56px;}
-.tier{border-radius:24px;border:1px solid var(--border);overflow:hidden;position:relative;transition:transform .2s var(--ease),border-color .2s;}
-.tier:hover{transform:translateY(-4px);}
-.tier.featured{border-color:rgba(124,92,255,.5);box-shadow:0 0 0 1px rgba(124,92,255,.2),0 24px 60px rgba(124,92,255,.2);}
-.tier-badge{position:absolute;top:16px;right:16px;padding:4px 12px;border-radius:100px;background:linear-gradient(135deg,var(--violet),var(--pink));color:#fff;font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;}
-.tier-head{padding:32px 28px 24px;background:var(--s1);}
-.tier-name{font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--violet-b);margin-bottom:10px;}
-.tier-price{font-family:'Bricolage Grotesque',sans-serif;font-size:42px;font-weight:900;letter-spacing:-.03em;margin-bottom:6px;}
-.tier-price span{font-size:16px;font-weight:500;color:var(--dim);}
-.tier-desc{font-size:13.5px;color:var(--dim);line-height:1.5;}
-.tier-body{padding:28px;background:var(--bg2);}
-.tier-features{list-style:none;display:flex;flex-direction:column;gap:12px;margin-bottom:28px;}
-.tier-features li{display:flex;align-items:flex-start;gap:10px;font-size:13.5px;line-height:1.4;}
-.tier-features li::before{content:'✓';color:var(--success);font-weight:700;flex-shrink:0;margin-top:1px;}
-.tier-features li.no::before{content:'–';color:var(--faint);}
-.tier-cta{width:100%;padding:14px;border-radius:12px;font-weight:700;font-size:14px;text-align:center;display:block;transition:transform .15s,opacity .15s;}
-.tier-cta:hover{transform:translateY(-1px);opacity:.9;}
-.tier-cta.primary{background:linear-gradient(135deg,var(--violet),var(--pink));color:#fff;box-shadow:0 6px 24px rgba(124,92,255,.4);}
-.tier-cta.ghost{background:rgba(255,255,255,.07);border:1px solid var(--border2);color:var(--text);}
+/* ---------- features ---------- */
+.feat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;}
+.feat{padding:26px;border-radius:var(--r-lg);background:var(--panel);border:1px solid var(--border);transition:transform .25s cubic-bezier(.22,1,.36,1),border-color .25s,background .25s;position:relative;overflow:hidden;}
+.feat:hover{transform:translateY(-4px);border-color:rgba(124,92,255,.4);background:var(--panel-2);}
+.feat::after{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:var(--grad);opacity:0;transition:opacity .25s;}
+.feat:hover::after{opacity:.8;}
+.fic{width:44px;height:44px;border-radius:13px;background:linear-gradient(135deg,rgba(124,92,255,.18),rgba(245,185,66,.12));border:1px solid rgba(124,92,255,.3);display:flex;align-items:center;justify-content:center;margin-bottom:16px;}
+.fic svg{width:21px;height:21px;color:var(--violet-soft);}
+.feat h3{font-size:16.5px;margin-bottom:8px;}
+.feat p{font-size:13.5px;color:var(--dim);}
 
-/* SOCIAL PROOF */
-.proof-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;margin-top:56px;}
-.proof-card{padding:28px;border-radius:20px;background:var(--s1);border:1px solid var(--border);}
-.proof-stars{color:#fbbf24;font-size:14px;margin-bottom:14px;letter-spacing:2px;}
-.proof-text{font-size:14px;color:var(--dim);line-height:1.7;margin-bottom:18px;font-style:italic;}
-.proof-author{display:flex;align-items:center;gap:10px;}
-.proof-avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,var(--violet),var(--pink));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;}
-.proof-name{font-size:13px;font-weight:600;}
-.proof-role{font-size:11.5px;color:var(--faint);}
+/* ---------- how ---------- */
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;counter-reset:step;}
+.step{padding:28px 24px;border-radius:var(--r-lg);background:var(--panel);border:1px solid var(--border);position:relative;}
+.step::before{counter-increment:step;content:counter(step,decimal-leading-zero);font-family:'Bricolage Grotesque';font-size:38px;font-weight:800;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;opacity:.9;display:block;margin-bottom:12px;}
+.step h3{font-size:16px;margin-bottom:8px;}
+.step p{font-size:13.5px;color:var(--dim);}
 
-/* TELEGRAM CHANNEL BANNER */
-.tg-banner{margin:80px clamp(20px,5vw,80px);border-radius:24px;background:linear-gradient(135deg,rgba(124,92,255,.15),rgba(244,114,182,.1));border:1px solid rgba(124,92,255,.25);padding:48px clamp(24px,5vw,64px);display:flex;align-items:center;justify-content:space-between;gap:28px;flex-wrap:wrap;}
-.tg-banner-left h3{font-size:clamp(24px,4vw,36px);margin-bottom:10px;}
-.tg-banner-left p{font-size:15px;color:var(--dim);max-width:480px;line-height:1.6;}
-.tg-icon{font-size:48px;flex-shrink:0;}
+/* ---------- pricing ---------- */
+.plans{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px;align-items:stretch;}
+.plan{padding:28px 24px;border-radius:var(--r-lg);background:var(--panel);border:1px solid var(--border);display:flex;flex-direction:column;transition:transform .25s cubic-bezier(.22,1,.36,1),border-color .25s;}
+.plan:hover{transform:translateY(-4px);}
+.plan.hot{background:linear-gradient(180deg,rgba(124,92,255,.14),var(--panel));border-color:rgba(124,92,255,.5);position:relative;}
+.plan.hot .hot-tag{position:absolute;top:-11px;left:50%;transform:translateX(-50%);padding:4px 14px;border-radius:100px;background:var(--grad);font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#fff;white-space:nowrap;}
+.plan .dur{font-size:13px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;}
+.plan .price{font-family:'Bricolage Grotesque';font-size:40px;font-weight:800;line-height:1;margin-bottom:4px;}
+.plan .price small{font-size:16px;font-weight:700;color:var(--dim);}
+.plan .per{font-size:11.5px;color:var(--faint);margin-bottom:20px;}
+.plan ul{list-style:none;margin-bottom:24px;flex:1;}
+.plan li{font-size:12.5px;color:var(--dim);padding:5px 0;display:flex;align-items:center;gap:8px;}
+.plan li svg{width:14px;height:14px;color:var(--success);flex-shrink:0;}
+.plan .btn{width:100%;}
 
-/* FAQ */
-.faq{display:flex;flex-direction:column;gap:12px;margin-top:48px;}
-.faq-item{border-radius:16px;background:var(--s1);border:1px solid var(--border);overflow:hidden;}
-.faq-q{padding:20px 24px;font-weight:600;font-size:14.5px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:12px;user-select:none;}
-.faq-q::after{content:'+';font-size:20px;color:var(--violet-b);flex-shrink:0;transition:transform .2s;}
-.faq-item.open .faq-q::after{transform:rotate(45deg);}
-.faq-a{padding:0 24px;max-height:0;overflow:hidden;font-size:14px;color:var(--dim);line-height:1.7;transition:max-height .3s ease,padding .3s ease;}
-.faq-item.open .faq-a{max-height:300px;padding:0 24px 20px;}
+/* ---------- faq ---------- */
+.faq{max-width:680px;margin:0 auto;}
+.faq details{border:1px solid var(--border);border-radius:var(--r);background:var(--panel);margin-bottom:10px;overflow:hidden;}
+.faq summary{padding:18px 22px;font-size:14.5px;font-weight:600;cursor:pointer;list-style:none;display:flex;justify-content:space-between;align-items:center;gap:12px;}
+.faq summary::-webkit-details-marker{display:none;}
+.faq summary::after{content:'+';font-size:20px;color:var(--dim);transition:transform .2s;flex-shrink:0;}
+.faq details[open] summary::after{transform:rotate(45deg);}
+.faq .a{padding:0 22px 18px;font-size:13.5px;color:var(--dim);}
 
-/* CTA SECTION */
-.cta-section{text-align:center;padding:120px clamp(20px,5vw,80px);position:relative;overflow:hidden;}
-.cta-section::before{content:'';position:absolute;width:800px;height:800px;border-radius:50%;background:radial-gradient(ellipse,rgba(124,92,255,.15) 0%,transparent 70%);top:50%;left:50%;transform:translate(-50%,-50%);pointer-events:none;}
-.cta-section h2{font-size:clamp(36px,6vw,64px);margin-bottom:18px;}
-.cta-section p{font-size:17px;color:var(--dim);margin-bottom:40px;max-width:520px;margin-left:auto;margin-right:auto;line-height:1.6;}
-
-/* FOOTER */
-footer{border-top:1px solid var(--border);padding:40px clamp(20px,5vw,80px);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;}
-.footer-brand{display:flex;align-items:center;gap:10px;font-size:13px;color:var(--faint);}
-.footer-brand img{width:24px;height:24px;border-radius:50%;}
-.footer-links{display:flex;gap:20px;}
-.footer-links a{font-size:12.5px;color:var(--faint);transition:color .15s;}
-.footer-links a:hover{color:var(--text);}
-
-@media(max-width:640px){.nav-links{display:none;}.hero-stats{gap:24px;}.stat-divider{display:none;}.tg-banner{flex-direction:column;text-align:center;}.tg-banner-left p{margin:0 auto;}}
+/* ---------- final cta + footer ---------- */
+.final{border-radius:var(--r-lg);background:linear-gradient(135deg,rgba(124,92,255,.16),rgba(245,185,66,.08));border:1px solid rgba(124,92,255,.35);padding:56px 28px;text-align:center;}
+footer{border-top:1px solid var(--border);padding:34px 0;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;font-size:12.5px;color:var(--faint);}
+footer .flinks{display:flex;gap:20px;}
+footer a:hover{color:var(--text);}
 </style>
 </head>
 <body>
+<div class="orbs"><div class="orb a"></div><div class="orb b"></div><div class="orb c"></div></div>
+<div class="grain"></div>
 
-<nav>
-  <a href="/" class="nav-brand">
-    <img src="/clearpanel-icon.png" alt="ClearPanel">
-    <span>ClearPanel</span>
-  </a>
+<nav><div class="wrap nav-in">
+  <a class="brand" href="/"><img src="/clearpanel-logo.png" alt=""><span class="wordmark">ClearPanel</span></a>
   <div class="nav-links">
-    <a href="#features">Features</a>
-    <a href="#how">How it works</a>
-    <a href="#pricing">Pricing</a>
-    <a href="#faq">FAQ</a>
+    <a href="#showcase">Showcase</a><a href="#features">Features</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a>
   </div>
-  <a href="#pricing" class="nav-cta">Get Your Panel</a>
-</nav>
-
-<div class="hero">
-  <div class="hero-bg"></div>
-  <div class="hero-content">
-    <div class="hero-badge">CCMP — Your own Call Centre Management Platform · <a href="https://t.me/clearpanelotpbot" target="_blank" style="color:inherit;text-decoration:underline;opacity:.8;">@clearpanelotpbot</a></div>
-    <h1>Your own call centre.<br>Fully branded. Yours.</h1>
-    <p class="hero-sub">ClearPanel isn't a tool you rent a seat on — you get your <b>own</b> fully-branded panel: your name, your logo, your subdomain, your team. Live lead pipeline, real-time scripts, call tracking, and a leaderboard that actually drives the floor. Redeem a key and you're running in minutes.</p>
-    <div class="hero-actions">
-      <a href="#pricing" class="btn-primary">See pricing</a>
-      <a href="#features" class="btn-ghost">See what's included</a>
-    </div>
-    <div class="hero-stats">
-      <div class="hero-stat"><div class="n">3CX</div><div class="l">Inbound ready</div></div>
-      <div class="stat-divider"></div>
-      <div class="hero-stat"><div class="n">Live</div><div class="l">Real-time board</div></div>
-      <div class="stat-divider"></div>
-      <div class="hero-stat"><div class="n">IVR</div><div class="l">Twilio routing</div></div>
-      <div class="stat-divider"></div>
-      <div class="hero-stat"><div class="n">XP</div><div class="l">Caller progression</div></div>
-    </div>
+  <div class="nav-cta">
+    <a class="btn btn-ghost" href="/app">Panel Login</a>
+    <a class="btn btn-grad" href="/redeem">Redeem Key</a>
   </div>
-</div>
+</div></nav>
 
-<section id="features">
-  <div class="section-tag">Built for performance</div>
-  <h2 class="section-title">Everything your team needs.<br>Nothing they don't.</h2>
-  <p class="section-sub">No bloat. No generic CRM. ClearPanel is built from the ground up for outbound calling teams who need speed, visibility, and motivation built in.</p>
-  <div class="features-grid">
-    <div class="feat">
-      <div class="feat-icon" style="background:rgba(124,92,255,.15);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="12" height="17" rx="2"/><path d="M9 4V3a1 1 0 011-1h4a1 1 0 011 1v1M9 11h6M9 15h4"/></svg></div>
-      <h4>Live Lead Pipeline</h4>
-      <p>Every lead tracked from first dial to completion. Callers see exactly what to work, admins see exactly what's happening — in real time, no refresh needed.</p>
-    </div>
-    <div class="feat">
-      <div class="feat-icon" style="background:rgba(79,140,255,.15);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4f8cff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h4l2 6-3 2a13 13 0 006 6l2-3 6 2v4a2 2 0 01-2 2A17 17 0 012 6a2 2 0 012-2z"/></svg></div>
-      <h4>3CX Inbound Integration</h4>
-      <p>Connect your 3CX PBX and route inbound calls directly to available agents. Call control, hold, transfer — managed from inside the panel.</p>
-    </div>
-    <div class="feat">
-      <div class="feat-icon" style="background:rgba(244,114,182,.15);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f472b6" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg></div>
-      <h4>Twilio IVR Routing</h4>
-      <p>Build intelligent IVR menus that route callers to the right agent or queue. Configure digits, hold music, and ring behaviour from the admin panel.</p>
-    </div>
-    <div class="feat">
-      <div class="feat-icon" style="background:rgba(34,197,94,.15);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4 12.5-12.5z"/></svg></div>
-      <h4>Script Library</h4>
-      <p>Admins write scripts, callers follow them live. No switching tabs, no looking away from the lead. Script suggestions update based on call stage.</p>
-    </div>
-    <div class="feat">
-      <div class="feat-icon" style="background:rgba(251,191,36,.15);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10v5a5 5 0 01-10 0V4z"/><path d="M7 5H4a3 3 0 003 5M17 5h3a3 3 0 01-3 5M9 19h6M12 14v5"/></svg></div>
-      <h4>XP and Caller Ranks</h4>
-      <p>Every dial, callback booked, and successful call earns XP. Callers progress from New Dialer to Legend. Real rank-up moments keep the floor competitive.</p>
-    </div>
-    <div class="feat">
-      <div class="feat-icon" style="background:rgba(239,68,68,.15);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z"/></svg></div>
-      <h4>Live Leaderboard</h4>
-      <p>Floor-wide leaderboard with weekly and all-time views. Team goals, top performer spotlight, and XP history — motivation baked into the product.</p>
-    </div>
-    <div class="feat">
-      <div class="feat-icon" style="background:rgba(124,92,255,.15);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v11H8l-4 4V5z"/></svg></div>
-      <h4>Team Chat</h4>
-      <p>Built-in floor chat with admin announcements, disappearing messages, and push notifications. No Slack tab required.</p>
-    </div>
-    <div class="feat">
-      <div class="feat-icon" style="background:rgba(79,140,255,.15);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#4f8cff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/></svg></div>
-      <h4>Your Brand, Your App</h4>
-      <p>Upload your logo, set your panel name — the whole interface becomes your product. Tenants get a fully branded call centre, not a white-label with seams showing.</p>
-    </div>
-    <div class="feat">
-      <div class="feat-icon" style="background:rgba(34,197,94,.15);"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10a6 6 0 1112 0c0 5 2 6 2 6H4s2-1 2-6z"/><path d="M10 20a2 2 0 004 0"/></svg></div>
-      <h4>Telegram Announcements</h4>
-      <p>Push updates to every verified caller individually via Telegram. Admin posts once, every team member gets a personal DM — even if they're off the panel.</p>
-    </div>
+<header class="hero wrap">
+  <div class="pill"><span class="dot"></span>Panels activate instantly — no setup calls, no waiting</div>
+  <h1>Run your call floor<br><span class="grad-text">like a machine.</span></h1>
+  <p>ClearPanel hands your callers a queue, a script and a one-tap outcome flow — and hands you the numbers. Your own private panel, live in under a minute.</p>
+  <div class="hero-ctas">
+    <a class="btn btn-grad btn-lg" href="#pricing">See Pricing</a>
+    <a class="btn btn-ghost btn-lg" href="/redeem">I Have a Key</a>
   </div>
-</section>
-
-<section id="how">
-  <div class="section-tag">Simple by design</div>
-  <h2 class="section-title">Up and running<br>same day.</h2>
-  <p class="section-sub">No engineers needed. No week-long onboarding. You get access, you set up your team, and your callers are working leads within the hour.</p>
-  <div class="how-grid">
-    <div class="how-step">
-      <div class="how-num">1</div>
-      <h4>Get access</h4>
-      <p>Message us and we'll set up your tenant. You get an admin login, your subdomain, and your team PIN list — nothing to install.</p>
-    </div>
-    <div class="how-step">
-      <div class="how-num">2</div>
-      <h4>Upload your leads</h4>
-      <p>Paste a list, pick the bank or category, and your pipeline is live. Callers see leads the moment they clock in.</p>
-    </div>
-    <div class="how-step">
-      <div class="how-num">3</div>
-      <h4>Add your scripts</h4>
-      <p>Write your call scripts in the admin panel. They appear live on the caller's screen, matched to the current lead.</p>
-    </div>
-    <div class="how-step">
-      <div class="how-num">4</div>
-      <h4>Watch the floor work</h4>
-      <p>Real-time dashboard shows who's on a call, who's idle, what's in the finishing queue, and how the team is tracking against the daily goal.</p>
-    </div>
+  <div class="hero-stats">
+    <div class="hstat"><b>&lt; 60s</b><span>from key to live panel</span></div>
+    <div class="hstat"><b>1-tap</b><span>call outcomes &amp; callbacks</span></div>
+    <div class="hstat"><b>E2E</b><span>encrypted direct messages</span></div>
   </div>
-</section>
+</header>
 
-<!-- Telegram channel banner -->
-<div class="tg-banner">
-  <div class="tg-icon" style="color:#29a9eb;"><svg width="42" height="42" viewBox="0 0 24 24" fill="currentColor"><path d="M21.94 4.3a1.3 1.3 0 00-1.35-.2L3.3 10.98c-.86.34-.83 1.58.05 1.87l4.35 1.42 1.66 5.14a1 1 0 001.62.42l2.4-2.16 4.36 3.2a1.3 1.3 0 002.03-.82l3.2-14.5a1.3 1.3 0 00-.5-1.28zM9.5 14.13l8.1-5.9-6.6 6.9-.06 3.1-1.44-4.1z"/></svg></div>
-  <div class="tg-banner-left">
-    <h3>Stay in the loop.</h3>
-    <p>Product updates, new features, and platform announcements go to our Telegram channel. Every ClearPanel operator gets individual DMs for critical updates — the channel is for everything else.</p>
-  </div>
-  <div style="display:flex;flex-direction:column;gap:10px;align-items:flex-start;"><a href="https://t.me/+M-aK0jz4wDI5Nzdh" target="_blank" class="btn-primary" style="white-space:nowrap;">Join the updates channel</a><a href="https://t.me/clearpanelotpbot" target="_blank" class="btn-ghost" style="white-space:nowrap;font-size:13px;">@clearpanelotpbot</a></div>
-</div>
-
-<section id="pricing">
-  <div class="section-tag">Pricing</div>
-  <h2 class="section-title">Your own panel.<br>One flat price.</h2>
-  <p class="section-sub">This isn't a subscription to someone else's tool — you get your <b>own fully-branded call centre panel</b>: your name, your logo, your subdomain, your team. Pick how long you want access. Every tier is the complete platform — no features held back, no per-caller fees.</p>
-  <div class="tiers-grid">
-    <div class="tier">
-      <div class="tier-head">
-        <div class="tier-name">3 Days</div>
-        <div class="tier-price">£${P.d3}<span></span></div>
-        <div class="tier-desc">Run a short campaign or trial the full platform with your whole team.</div>
+<section id="showcase"><div class="wrap">
+  <div class="center rv"><div class="eyebrow">Showcase</div>
+  <h2 class="sec-title">This is what your callers open every morning</h2>
+  <p class="sec-sub">A live queue that feeds them leads, a call screen that logs everything in one tap, and ranks that keep them competing.</p></div>
+  <div class="showcase rv">
+    <div class="phone"><div class="screen">
+      <div class="mock-top"><span class="mock-brand">Your Panel</span><span class="mock-clock">CLOCKED IN 03:41:22</span></div>
+      <div class="mock-body">
+        <div class="mxp"><div class="medal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2l2.6 5.6 6 .7-4.5 4.1 1.2 5.9L12 15.4l-5.3 2.9 1.2-5.9L3.4 8.3l6-.7z"/></svg></div><div style="flex:1;"><div style="font-size:11px;font-weight:700;margin-bottom:4px;">Closer II</div><div class="bar"><i></i></div></div><small>2,140 XP</small></div>
+        <div class="mlead"><span class="tag">New Lead</span><b>Margaret W.</b><span>+44 7911 ••• •38</span><div class="mbtn">Claim &amp; Call</div></div>
+        <div class="mlead"><span class="tag retry">Called 1 time</span><b>Derek H.</b><span>+44 7700 ••• •92</span><div class="mbtn dark">Voicemail last time</div></div>
       </div>
-      <div class="tier-body">
-        <ul class="tier-features">
-          <li>Your own branded panel</li>
-          <li>Unlimited callers</li>
-          <li>Live lead pipeline &amp; vault</li>
-          <li>Scripts, XP, leaderboard</li>
-          <li>Team chat &amp; Telegram</li>
-          <li>3CX &amp; Twilio ready</li>
-        </ul>
-        <a href="${B.d3}" target="_blank" class="tier-cta ghost">Get 3-day access</a>
-      </div>
-    </div>
-    <div class="tier">
-      <div class="tier-head">
-        <div class="tier-name">7 Days</div>
-        <div class="tier-price">£${P.d7}<span></span></div>
-        <div class="tier-desc">A full week to run your floor at full capacity.</div>
-      </div>
-      <div class="tier-body">
-        <ul class="tier-features">
-          <li>Your own branded panel</li>
-          <li>Unlimited callers</li>
-          <li>Live lead pipeline &amp; vault</li>
-          <li>Scripts, XP, leaderboard</li>
-          <li>Team chat &amp; Telegram</li>
-          <li>3CX &amp; Twilio ready</li>
-        </ul>
-        <a href="${B.d7}" target="_blank" class="tier-cta ghost">Get 7-day access</a>
-      </div>
-    </div>
-    <div class="tier featured">
-      <div class="tier-badge">Best value</div>
-      <div class="tier-head">
-        <div class="tier-name">30 Days</div>
-        <div class="tier-price">£${P.d30}<span></span></div>
-        <div class="tier-desc">A full month running your own call centre, top to bottom.</div>
-      </div>
-      <div class="tier-body">
-        <ul class="tier-features">
-          <li>Your own branded panel</li>
-          <li>Unlimited callers</li>
-          <li>Live lead pipeline &amp; vault</li>
-          <li>Scripts, XP, leaderboard</li>
-          <li>Team chat &amp; Telegram DMs</li>
-          <li>3CX inbound &amp; Twilio IVR</li>
-          <li>Priority setup support</li>
-        </ul>
-        <a href="${B.d30}" target="_blank" class="tier-cta primary">Get 30-day access</a>
-      </div>
-    </div>
-    <div class="tier">
-      <div class="tier-head">
-        <div class="tier-name">14 Days</div>
-        <div class="tier-price">£${P.d14}<span></span></div>
-        <div class="tier-desc">Two weeks of full access for a sustained push.</div>
-      </div>
-      <div class="tier-body">
-        <ul class="tier-features">
-          <li>Your own branded panel</li>
-          <li>Unlimited callers</li>
-          <li>Live lead pipeline &amp; vault</li>
-          <li>Scripts, XP, leaderboard</li>
-          <li>Team chat &amp; Telegram</li>
-          <li>3CX &amp; Twilio ready</li>
-        </ul>
-        <a href="${B.d14}" target="_blank" class="tier-cta ghost">Get 14-day access</a>
-      </div>
-    </div>
-  </div>
-  <p style="text-align:center;color:var(--faint);font-size:12.5px;margin-top:28px;">Access is delivered as a one-time key you redeem at <b>/redeem</b> to spin up your panel instantly.</p>
-</section>
-
-<section>
-  <div class="section-tag">What teams say</div>
-  <h2 class="section-title">Built around<br>how floors actually work.</h2>
-  <div class="proof-grid">
-    <div class="proof-card">
-      <div class="proof-stars">★★★★★</div>
-      <p class="proof-text">"The leaderboard alone changed the energy on the floor. Callers are competing for top spot every week — that drive used to take constant management."</p>
-      <div class="proof-author">
-        <div class="proof-avatar">S</div>
-        <div>
-          <div class="proof-name">Sales Manager</div>
-          <div class="proof-role">Financial services team, UK</div>
+    </div></div>
+    <div class="phone p2"><div class="screen">
+      <div class="mock-top"><span class="mock-brand">On Call</span><span class="mock-clock" style="background:rgba(245,185,66,.12);color:var(--gold);border-color:rgba(245,185,66,.3);">LIVE</span></div>
+      <div class="mock-body">
+        <div class="mcall">
+          <div class="avatar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
+          <b>Margaret W.</b>
+          <div class="timer">04:52</div>
+          <div class="mgrid">
+            <div class="mout good">Successful</div>
+            <div class="mout mid">Callback</div>
+            <div class="mout dim2">No Answer</div>
+            <div class="mout dim2">Voicemail</div>
+          </div>
         </div>
+        <div class="mxp" style="border-color:rgba(52,211,153,.3);background:rgba(52,211,153,.06);"><div class="medal" style="background:var(--success);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg></div><div style="flex:1;font-size:11.5px;font-weight:700;">+100 XP — outcome logged</div></div>
       </div>
-    </div>
-    <div class="proof-card">
-      <div class="proof-stars">★★★★★</div>
-      <p class="proof-text">"Having scripts live on the same screen as the lead changed everything. No more switching tabs mid-call, no more callers going off-script."</p>
-      <div class="proof-author">
-        <div class="proof-avatar">T</div>
-        <div>
-          <div class="proof-name">Team Lead</div>
-          <div class="proof-role">Outbound calling team, EU</div>
-        </div>
-      </div>
-    </div>
-    <div class="proof-card">
-      <div class="proof-stars">★★★★★</div>
-      <p class="proof-text">"The Telegram integration is the thing that surprised me most. I push an update from the panel and every single caller gets a personal DM within seconds."</p>
-      <div class="proof-author">
-        <div class="proof-avatar">M</div>
-        <div>
-          <div class="proof-name">Operations Director</div>
-          <div class="proof-role">Multi-team setup</div>
-        </div>
-      </div>
-    </div>
+    </div></div>
   </div>
-</section>
+</div></section>
 
-<section id="faq">
-  <div class="section-tag">Questions</div>
-  <h2 class="section-title">Straight answers.</h2>
-  <div class="faq">
-    <div class="faq-item">
-      <div class="faq-q">How do my callers access the panel?</div>
-      <div class="faq-a">They go to your panel URL and enter their PIN. No account creation, no email needed. You create PINs from the admin panel and hand them out. Callers link their Telegram account on first login — takes 30 seconds.</div>
-    </div>
-    <div class="faq-item">
-      <div class="faq-q">Does it work on mobile?</div>
-      <div class="faq-a">Yes — ClearPanel is a fully responsive web app. Callers can add it to their home screen (Android or iOS) and it runs like a native app, with push notifications for announcements.</div>
-    </div>
-    <div class="faq-item">
-      <div class="faq-q">How does 3CX integration work?</div>
-      <div class="faq-a">You connect your 3CX instance from the Telephony settings in the admin panel. Once connected, inbound calls route to available agents directly through the panel. No separate app, no softphone required.</div>
-    </div>
-    <div class="faq-item">
-      <div class="faq-q">Can I have multiple teams on separate panels?</div>
-      <div class="faq-a">Yes — Enterprise tier supports multiple tenants, each with their own branding, lead pipeline, callers, and settings. Completely isolated from each other.</div>
-    </div>
-    <div class="faq-item">
-      <div class="faq-q">How do I get support?</div>
-      <div class="faq-a">All plans include Telegram support. Professional and Enterprise get a dedicated support channel with priority response. Enterprise gets an SLA with defined response times.</div>
-    </div>
-    <div class="faq-item">
-      <div class="faq-q">Is my data stored securely?</div>
-      <div class="faq-a">Yes — your tenant's data is completely isolated from other tenants at the database level. All traffic is encrypted in transit. We do not share or sell any data.</div>
-    </div>
+<section id="features"><div class="wrap">
+  <div class="center rv"><div class="eyebrow">Everything included</div>
+  <h2 class="sec-title">Built for floors that actually dial</h2>
+  <p class="sec-sub">Every panel ships with the full toolkit. No add-ons, no per-seat pricing, no feature gates.</p></div>
+  <div class="feat-grid">
+    <div class="feat rv"><div class="fic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div><h3>Smart lead queue</h3><p>Leads flow to callers automatically. Attempt caps stop dead numbers circulating, callbacks resurface at exactly the right time, and nothing gets called twice by accident.</p></div>
+    <div class="feat rv"><div class="fic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></div><h3>One-tap outcomes</h3><p>Successful, callback, voicemail, no answer — one tap logs it, awards XP and pulls the next lead. Outcomes are mandatory, so your data is never full of holes.</p></div>
+    <div class="feat rv"><div class="fic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.6 5.6 6 .7-4.5 4.1 1.2 5.9L12 15.4l-5.3 2.9 1.2-5.9L3.4 8.3l6-.7z"/></svg></div><h3>Ranks &amp; leaderboards</h3><p>Eleven rank tiers from Seed to Legend. XP for every logged call, live leaderboards, celebration animations on closes — your floor competes with itself.</p></div>
+    <div class="feat rv"><div class="fic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg></div><h3>Encrypted messaging</h3><p>Team chat with disappearing messages, plus true end-to-end encrypted DMs — sealed on the device, unreadable by the server. Your floor talk stays yours.</p></div>
+    <div class="feat rv"><div class="fic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2.5L2.8 9.7c-.9.35-.85 1.65.08 1.92l4.62 1.34 1.7 5.5c.27.87 1.4.98 1.85.18l2.3-4.1 4.9 3.6c.75.55 1.8.13 1.97-.78l3.1-13.3c.2-.9-.68-1.65-1.52-1.32z"/></svg></div><h3>Telegram-verified staff</h3><p>Every caller verifies through Telegram before they can dial. Clock-in tracking, clock-out reminders, and broadcast announcements straight to their phones.</p></div>
+    <div class="feat rv"><div class="fic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2M20 14h2M15 13v2M9 13v2"/></svg></div><h3>AI script writer</h3><p>Describe the pitch, pick the audience, get a full call script — opener, qualifying questions, objection handling and close — in seconds. Multi-provider failover keeps it up.</p></div>
   </div>
-</section>
+</div></section>
 
-<div class="cta-section">
-  <h2>Ready to run your own floor?</h2>
-  <p>Pick a plan, redeem your key, and your fully-branded panel is live in minutes. Questions first? Message us on Telegram.</p>
-  <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
-    <a href="#pricing" class="btn-primary" style="font-size:16px;padding:18px 44px;">See pricing</a>
-    <a href="${cta}" target="_blank" class="btn-ghost" style="font-size:15px;padding:18px 36px;">Talk to us first</a>
+<section><div class="wrap">
+  <div class="center rv"><div class="eyebrow">How it works</div>
+  <h2 class="sec-title">Key to live panel in three steps</h2></div>
+  <div class="steps">
+    <div class="step rv"><h3>Buy an access key</h3><p>Pick a duration below. You get a one-time license key — yours to redeem whenever you're ready.</p></div>
+    <div class="step rv"><h3>Redeem it</h3><p>Enter the key, name your call centre, done. Your own panel spins up instantly with a fresh admin PIN.</p></div>
+    <div class="step rv"><h3>Add your floor</h3><p>Create callers, drop in leads, set your scripts. Your team logs in from any phone or laptop — nothing to install.</p></div>
   </div>
-</div>
+</div></section>
 
-<footer>
-  <div class="footer-brand">
-    <img src="/clearpanel-icon.png" alt="">
-    <span>ClearPanel · CCMP · Call Centre Management Platform</span>
+<section id="pricing"><div class="wrap">
+  <div class="center rv"><div class="eyebrow">Pricing</div>
+  <h2 class="sec-title">Pay for the days, own everything in them</h2>
+  <p class="sec-sub">Every tier is the full product — every feature, unlimited callers and leads. The only difference is how long the panel stays live.</p></div>
+  <div class="plans">
+    <div class="plan rv"><div class="dur">3 days</div><div class="price"><small>£</small>${P.d3}</div><div class="per">Perfect for a trial run</div><ul><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>Full feature set</li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>Unlimited callers</li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>Instant activation</li></ul><a class="btn btn-ghost" href="${B.d3}" target="_blank" rel="noopener">Get 3 Days</a></div>
+    <div class="plan rv"><div class="dur">7 days</div><div class="price"><small>£</small>${P.d7}</div><div class="per">A full working week</div><ul><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>Full feature set</li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>Unlimited callers</li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>Instant activation</li></ul><a class="btn btn-ghost" href="${B.d7}" target="_blank" rel="noopener">Get 7 Days</a></div>
+    <div class="plan hot rv"><span class="hot-tag">Most popular</span><div class="dur">14 days</div><div class="price"><small>£</small>${P.d14}</div><div class="per">Two weeks of full throughput</div><ul><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>Full feature set</li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>Unlimited callers</li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>Instant activation</li></ul><a class="btn btn-grad" href="${B.d14}" target="_blank" rel="noopener">Get 14 Days</a></div>
+    <div class="plan rv"><div class="dur">30 days</div><div class="price"><small>£</small>${P.d30}</div><div class="per">Best value per day</div><ul><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>Full feature set</li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>Unlimited callers</li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>Instant activation</li></ul><a class="btn btn-ghost" href="${B.d30}" target="_blank" rel="noopener">Get 30 Days</a></div>
   </div>
-  <div class="footer-links">
-    <a href="#features">Features</a>
-    <a href="#pricing">Pricing</a>
-    <a href="https://t.me/+M-aK0jz4wDI5Nzdh" target="_blank">Updates Channel</a><a href="https://t.me/clearpanelotpbot" target="_blank">Get Access</a>
+</div></section>
+
+<section id="faq"><div class="wrap">
+  <div class="center rv"><div class="eyebrow">FAQ</div><h2 class="sec-title">Quick answers</h2></div>
+  <div class="faq rv">
+    <details><summary>How fast is my panel live after I redeem a key?</summary><div class="a">Immediately. Redemption creates your panel, your URL and your admin PIN in one step — most people are inviting callers within the first minute.</div></details>
+    <details><summary>Do my callers need to install anything?</summary><div class="a">No. The panel runs in any browser and installs to a phone home screen like a native app. Callers just need the link and their PIN.</div></details>
+    <details><summary>What happens when my access period ends?</summary><div class="a">The panel pauses — data stays intact. Redeem another key or renew to pick up exactly where you left off.</div></details>
+    <details><summary>Is there a limit on callers or leads?</summary><div class="a">No. Every tier includes unlimited callers, unlimited leads and every feature. Tiers only differ in duration.</div></details>
   </div>
-</footer>
+</div></section>
+
+<section><div class="wrap"><div class="final rv">
+  <h2 class="sec-title">Ready when you are</h2>
+  <p class="sec-sub" style="margin:0 auto 28px;">Grab a key, redeem it, and your floor is dialing today.</p>
+  <div class="hero-ctas" style="margin:0;">
+    <a class="btn btn-grad btn-lg" href="${cta}" target="_blank" rel="noopener">Get a Key</a>
+    <a class="btn btn-ghost btn-lg" href="/redeem">Redeem a Key</a>
+  </div>
+</div></div></section>
+
+<footer><div class="wrap" style="display:contents;">
+  <span>ClearPanel</span>
+  <div class="flinks"><a href="/app">Panel Login</a><a href="/redeem">Redeem</a><a href="/affiliate">Affiliates</a></div>
+</div></footer>
 
 <script>
-// FAQ accordion
-document.querySelectorAll('.faq-q').forEach(q => {
-  q.addEventListener('click', () => {
-    const item = q.parentElement;
-    const isOpen = item.classList.contains('open');
-    document.querySelectorAll('.faq-item.open').forEach(i => i.classList.remove('open'));
-    if (!isOpen) item.classList.add('open');
-  });
-});
-// Smooth scroll
-document.querySelectorAll('a[href^="#"]').forEach(a => {
-  a.addEventListener('click', e => {
-    e.preventDefault();
-    const target = document.querySelector(a.getAttribute('href'));
-    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  });
-});
+(function(){
+  var io = new IntersectionObserver(function(es){ es.forEach(function(e){ if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }); }, { threshold: 0.12 });
+  document.querySelectorAll('.rv').forEach(function(el){ io.observe(el); });
+})();
 </script>
 </body>
 </html>`;

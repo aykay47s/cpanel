@@ -15,8 +15,13 @@ function generateKeyCode(): string {
   return groups.join('-');
 }
 
+// Slugs that are real routes on this server — a tenant slug matching one of
+// these would be shadowed by the route (or worse, shadow it), so redemption
+// must never produce them.
+const RESERVED_SLUGS = new Set(['app', 'store', 'master', 'control', 'redeem', 'affiliate', 'api', 'js', 'icons', 'manifest', 'sw', 'admin']);
 function slugify(name: string): string {
-  return name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 40) || 'tenant';
+  const s = name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 40) || 'tenant';
+  return RESERVED_SLUGS.has(s) ? s + '-panel' : s;
 }
 
 // The operator generates a key themselves for any number of days they want (they
