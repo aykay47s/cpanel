@@ -1527,6 +1527,15 @@ input.toggle-switch{width:44px;height:26px;padding:0;border-radius:100px;backgro
 input.toggle-switch::after{content:'';position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.4);transition:transform .2s cubic-bezier(.34,1.56,.64,1);}
 input.toggle-switch:checked{background:var(--success);border-color:transparent;}
 input.toggle-switch:checked::after{transform:translateX(18px);}
+/* Proper checkbox for bulk-select — the global input reset (width:100%,
+   appearance:none, pill radius) turns a bare native checkbox into an ambiguous
+   stretched circle with NO visible checked state. This gives it a fixed square
+   box, an unmissable gradient fill + white tick when checked, and a press
+   animation so taps are obviously registering. */
+input.cp-check{width:22px;height:22px;min-width:22px;padding:0;margin:0;border-radius:7px;border:1.5px solid rgba(255,255,255,.28);background:rgba(255,255,255,.05);position:relative;cursor:pointer;flex-shrink:0;box-shadow:none;transition:background .15s ease,border-color .15s ease,box-shadow .15s ease,transform .12s ease;}
+input.cp-check:active{transform:scale(.85);}
+input.cp-check:checked{background:linear-gradient(135deg,var(--violet-bright),var(--gold));border-color:transparent;box-shadow:0 0 0 3px rgba(124,92,255,.25);}
+input.cp-check:checked::after{content:'';position:absolute;left:7px;top:3.5px;width:5px;height:10px;border:solid #fff;border-width:0 2.5px 2.5px 0;transform:rotate(45deg);}
 input:focus,select:focus,textarea:focus{border-color:var(--gold);background:rgba(255,255,255,.05);box-shadow:inset 0 1px 2px rgba(0,0,0,.12), 0 0 0 3px var(--gold-glow);}
 label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.7px;display:block;margin-bottom:7px;font-weight:600;}
 .field{margin-bottom:15px;}
