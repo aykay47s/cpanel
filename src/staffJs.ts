@@ -316,15 +316,19 @@ function skipLead(id) { skippedLeadIds.add(id); renderStaffQueue(); }
 function unskipAll() { skippedLeadIds.clear(); renderStaffQueue(); }
 function radarHtml() { return \`<div class="radar-zone panel fade-up"><div class="radar"><div class="radar-ring"></div><div class="radar-ring"></div><div class="radar-ring"></div><div class="radar-sweep"></div><div class="radar-core"></div></div><div class="waiting-title">Listening for leads</div><div class="waiting-sub">You'll be notified the instant one comes in</div></div>\`; }
 function offerCardHtml(o) {
-  const isRetry = (o.call_attempts || 0) > 0;
-  const labelText = isRetry ? 'Retry — Attempt #' + (o.call_attempts + 1) : 'New Lead';
+  const attempts = o.call_attempts || 0;
+  const isRetry = attempts > 0;
+  // call_attempts is now the real completed-outcome count (no longer double-counted
+  // from the claim step too). MAX_ATTEMPTS is 3 — cap is server-enforced so if this
+  // card is showing, it has fewer than 3 genuine attempts behind it.
+  const labelText = isRetry ? 'Called ' + attempts + ' time' + (attempts === 1 ? '' : 's') + ' — no success yet' : 'New Lead';
   const labelColor = isRetry ? 'var(--gold-bright)' : 'var(--success)';
   return \`<div class="offer-card fade-up" data-lead-id="\${o.id}">
     <div class="pulse-dot" style="background:\${labelColor};"></div>
     <div class="offer-label" style="color:\${labelColor};">\${labelText} <span style="color:var(--text-faint);font-weight:600;">· \${timeAgo(o.created_at)}</span></div>
     <div class="offer-name" style="font-size:23px;">\${fullName(o)}</div>
     <div class="call-lead-sub" style="margin:4px 0 16px;"><span class="mono">\${o.phone}</span>\${categoryBadgeHtml(o.lead_type)}\${o.source ? '<span class="badge not_called">' + esc(o.source) + '</span>' : ''}</div>
-    \${isRetry ? '<div style="font-size:11.5px;color:var(--text-faint);margin:-8px 0 14px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' + (o.outcome ? '<span>Last attempt:</span>' + statusBadge(o.outcome) : '<span>Nobody has reached them yet — not a mistake.</span>') + '</div>' : ''}
+    \${isRetry ? '<div style="font-size:11.5px;color:var(--text-faint);margin:-8px 0 14px;display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' + (o.outcome ? '<span>Last attempt:</span>' + statusBadge(o.outcome) : '<span>Has been attempted but no outcome logged.</span>') + '</div>' : ''}
     <div class="offer-actions"><button class="btn btn-gold" onclick="claimLead(\${o.id})"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" style="width:15px;height:15px;vertical-align:-2px;margin-right:5px;"><path d="M6.6 10.8a15 15 0 006.6 6.6l2.2-2.2a1 1 0 011.1-.2 11 11 0 003.4.6 1 1 0 011 1V20a1 1 0 01-1 1A17 17 0 013 5a1 1 0 011-1h3.5a1 1 0 011 1 11 11 0 00.6 3.4 1 1 0 01-.2 1.1z"/></svg>Take Call</button><button class="btn btn-ghost" onclick="skipLead(\${o.id})">Skip</button></div>
   </div>\`;
 }

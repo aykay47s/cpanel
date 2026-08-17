@@ -245,6 +245,9 @@ leads.get('/api/admin/dashboard', requireRole('admin'), async (c) => {
       COUNT(*)::int as total,
       COUNT(*) FILTER (WHERE status = 'not_called')::int as uncalled,
       COUNT(*) FILTER (WHERE status = 'attempted')::int as attempted,
+      -- Leads that have hit the max-attempts cap and dropped out of the caller
+      -- queue entirely — admin needs to see these so they know what to reassign.
+      COUNT(*) FILTER (WHERE status IN ('not_called','attempted') AND call_attempts >= 3)::int as exhausted,
       COUNT(*) FILTER (WHERE status IN ('calling','active_call'))::int as active_calls,
       COUNT(*) FILTER (WHERE status IN ('completed'))::int as completed,
       COUNT(*) FILTER (WHERE status = 'successful_call')::int as successful,
@@ -332,7 +335,9 @@ leads.post('/api/admin/leads/:id/override-status', requireRole('admin'), async (
 // ================= CALLER LIFECYCLE =================
 leads.get('/api/caller/queue', requireRole('caller'), async (c) => {
   const user = c.get('user');
-  const rows = await sql`SELECT * FROM leads WHERE status IN ('not_called','attempted') AND tenant_id = ${user.tenant_id} AND (assigned_caller_id IS NULL OR assigned_caller_id = ${user.id}) AND merged_into_id IS NULL ORDER BY (assigned_caller_id = ${user.id}) DESC, (status = 'not_called') DESC, created_at ASC LIMIT 20`;
+  const MAX_ATTEMPTS = 3; // Leads attempted this many times drop out of the caller queue
+  // and become admin-only to recirculate. Keeps callers off dead leads.
+  const rows = await sql`SELECT * FROM leads WHERE status IN ('not_called','attempted') AND tenant_id = ${user.tenant_id} AND (assigned_caller_id IS NULL OR assigned_caller_id = ${user.id}) AND merged_into_id IS NULL AND call_attempts < ${MAX_ATTEMPTS} ORDER BY (assigned_caller_id = ${user.id}) DESC, (status = 'not_called') DESC, created_at ASC LIMIT 20`;
   return c.json({ data: rows });
 });
 
@@ -365,7 +370,7 @@ leads.post('/api/caller/leads/:id/claim', requireRole('caller'), async (c) => {
   const id = c.req.param('id');
   // Claimable if genuinely open, OR if an admin specifically sent it to this caller -
   // and never across a tenant boundary, regardless of what id is guessed/passed in.
-  const [updated] = await sql`UPDATE leads SET status = 'calling', assigned_caller_id = ${user.id}, call_started_at = now(), updated_at = now(), call_attempts = call_attempts + 1
+  const [updated] = await sql`UPDATE leads SET status = 'calling', assigned_caller_id = ${user.id}, call_started_at = now(), updated_at = now()
     WHERE id = ${id} AND tenant_id = ${user.tenant_id} AND status IN ('not_called','attempted') AND (assigned_caller_id IS NULL OR assigned_caller_id = ${user.id}) RETURNING *`;
   if (!updated) return c.json({ claimed: false, reason: 'Already taken' }, 409);
   await logEvent(updated.id, 'claimed', user, 'not_called', 'calling', {});

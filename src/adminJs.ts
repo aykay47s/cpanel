@@ -80,6 +80,7 @@ async function renderAdminDashboard(el) {
     <div class="stat-grid stagger">
       <div class="stat-box panel accent"><div class="num" data-count="\${d.total}">0</div><div class="lbl">Total Leads</div></div>
       <div class="stat-box panel"><div class="num" data-count="\${d.uncalled}">0</div><div class="lbl">Not Called</div></div>
+      <div class="stat-box panel" style="\${d.exhausted > 0 ? 'border-color:var(--gold-glow);cursor:pointer;' : ''}" onclick="\${d.exhausted > 0 ? 'filterExhaustedLeads()' : ''}"><div class="num" data-count="\${d.exhausted}" style="\${d.exhausted > 0 ? 'color:var(--gold-bright);' : ''}">0</div><div class="lbl">Max Attempts\${d.exhausted > 0 ? ' ⚠' : ''}</div></div>
       <div class="stat-box panel" style="border-color:\${d.active_calls > 0 ? 'var(--gold-glow)' : ''};"><div class="num" data-count="\${d.active_calls}" style="display:inline-block;">0</div>\${d.active_calls > 0 ? '<span class="live-dot"></span>' : ''}<div class="lbl">On Call Now</div></div>
       <div class="stat-box panel"><div class="num" data-count="\${d.successful}">0</div><div class="lbl">Successful</div></div>
       <div class="stat-box panel"><div class="num" data-count="\${d.awaiting_finishing}">0</div><div class="lbl">Awaiting Finishing</div></div>
@@ -99,6 +100,16 @@ async function renderAdminDashboard(el) {
     </div>\`;
   animateCountUps(el);
   startOnCallTimers();
+}
+function filterExhaustedLeads() {
+  switchAdminTab('leads');
+  // After the leads tab renders, filter to show only exhausted leads so admin
+  // can bulk-reassign or vault them.
+  setTimeout(() => {
+    const statusEl = document.getElementById('leadStatusFilter');
+    if (statusEl) { statusEl.value = 'attempted'; statusEl.dispatchEvent(new Event('change')); }
+    if (typeof toast === 'function') toast('Showing leads that hit the 3-attempt cap — reassign or vault them');
+  }, 600);
 }
 let _maintenanceActive = false;
 async function toggleMaintenance() {
