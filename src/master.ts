@@ -339,7 +339,32 @@ async function renderStore() {
       </div>\`).join('')}
       <button class="btn btn-primary" style="margin-top:16px;" onclick="saveStore()">Save Store Config</button>
       <div id="stStatus" style="font-size:12.5px;margin-top:10px;"></div>
+    </div>
+    <div class="panel" style="margin-top:16px;">
+      <h3 style="margin-bottom:6px;">Security</h3>
+      <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:16px;">Change the master password. Takes effect immediately — stored encrypted (argon2id hash), never in plain text. All other logged-in sessions are signed out when it changes.</p>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;align-items:end;">
+        <div><label style="font-size:11px;color:var(--text-dim);display:block;margin-bottom:4px;">Current password</label><input id="mp_current" type="password" autocomplete="current-password" /></div>
+        <div><label style="font-size:11px;color:var(--text-dim);display:block;margin-bottom:4px;">New password</label><input id="mp_new" type="password" autocomplete="new-password" /></div>
+        <div><label style="font-size:11px;color:var(--text-dim);display:block;margin-bottom:4px;">Confirm new</label><input id="mp_confirm" type="password" autocomplete="new-password" /></div>
+      </div>
+      <button class="btn btn-primary" style="margin-top:14px;" onclick="changeMasterPassword()">Change Password</button>
+      <div id="mpStatus" style="font-size:12.5px;margin-top:10px;"></div>
     </div>\`;
+}
+async function changeMasterPassword() {
+  const cur = $('#mp_current').value, nw = $('#mp_new').value, cf = $('#mp_confirm').value;
+  const st = $('#mpStatus');
+  st.style.color = 'var(--danger)';
+  if (!cur || !nw) { st.textContent = 'Fill in both the current and new password.'; return; }
+  if (nw !== cf) { st.textContent = 'New password and confirmation do not match.'; return; }
+  if (nw.length < 4) { st.textContent = 'New password must be at least 4 characters.'; return; }
+  st.textContent = 'Changing…'; st.style.color = 'var(--text-dim)';
+  const res = await api('/api/master/change-password', { method: 'POST', body: JSON.stringify({ current_password: cur, new_password: nw }) });
+  const d = await res.json().catch(() => ({}));
+  if (!res.ok) { st.textContent = d.error || 'Change failed.'; st.style.color = 'var(--danger)'; return; }
+  st.textContent = 'Password changed ✓ — use the new one from your next login.'; st.style.color = '#5eeaa0';
+  $('#mp_current').value = ''; $('#mp_new').value = ''; $('#mp_confirm').value = '';
 }
 async function saveStore() {
   const body = {

@@ -367,6 +367,29 @@ async function resolveTenantAudience(tenantId: number, audience: string): Promis
 
 // ============ MASTER PANEL (cross-tenant) ============
 
+// The master password lives in the DATABASE as an argon2id hash (Bun.password),
+// so it can be changed from the master UI at any time without a redeploy, and a
+// database leak exposes only the hash, never the password itself. The
+// MASTER_PASSWORD env var acts purely as the first-boot seed: the first
+// successful env-password login writes the hash, and from then on the DB hash
+// is the single source of truth (the env var is ignored once a hash exists).
+async function verifyMasterPassword(password: string): Promise<boolean> {
+  const [row] = await sql`SELECT value FROM settings WHERE key = 'master_password_hash'`;
+  if (row?.value) {
+    try { return await Bun.password.verify(password || '', row.value); } catch { return false; }
+  }
+  if (!MASTER_PASSWORD) return false;
+  if (!timingSafeEqual(password || '', MASTER_PASSWORD)) return false;
+  const hash = await Bun.password.hash(password);
+  await sql`INSERT INTO settings (key, value) VALUES ('master_password_hash', ${hash})
+    ON CONFLICT (key) DO UPDATE SET value = ${hash}`;
+  return true;
+}
+async function masterIsConfigured(): Promise<boolean> {
+  const [row] = await sql`SELECT 1 FROM settings WHERE key = 'master_password_hash'`;
+  return !!row || !!MASTER_PASSWORD;
+}
+
 telegram.post('/api/master/login', async (c) => {
   const { password } = await c.req.json().catch(() => ({}));
   const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || c.req.header('x-real-ip') || 'unknown';
@@ -375,13 +398,11 @@ telegram.post('/api/master/login', async (c) => {
     const mins = Math.ceil((new Date(lock.locked_until).getTime() - Date.now()) / 60000);
     return c.json({ error: `Locked out. Try again in ${mins} minutes.` }, 429);
   }
-  if (!MASTER_PASSWORD) {
-    console.error('[master] MASTER_PASSWORD is not set — refusing all master logins');
+  if (!(await masterIsConfigured())) {
+    console.error('[master] no master password configured (no DB hash, no MASTER_PASSWORD env) — refusing all master logins');
     return c.json({ error: 'Master panel is not configured' }, 503);
   }
-  // Length-independent comparison so a wrong guess takes the same time as a
-  // right one; avoids leaking the password a character at a time.
-  if (!timingSafeEqual(password || '', MASTER_PASSWORD)) {
+  if (!(await verifyMasterPassword(password || ''))) {
     const newCount = (lock?.fail_count || 0) + 1;
     const lockedUntil = newCount >= 3 ? new Date(Date.now() + 15 * 60 * 1000).toISOString() : null;
     await sql`INSERT INTO master_login_attempts (ip, fail_count, locked_until) VALUES (${ip}, ${newCount}, ${lockedUntil})
@@ -394,6 +415,25 @@ telegram.post('/api/master/login', async (c) => {
   const token = makeSessionToken();
   masterSessions.set(token, { createdAt: Date.now() });
   return c.json({ data: { token, expires_in_ms: MASTER_SESSION_TTL_MS } });
+});
+
+// Change the master password from the UI — requires a valid session AND the
+// current password again (so a stolen unattended session can't silently take
+// over). Stores a fresh argon2id hash; effective immediately, no redeploy.
+// Every other active session is revoked on change.
+telegram.post('/api/master/change-password', requireMaster, async (c) => {
+  const { current_password, new_password } = await c.req.json().catch(() => ({}));
+  if (!(await verifyMasterPassword(current_password || ''))) {
+    return c.json({ error: 'Current password is wrong' }, 403);
+  }
+  const np = String(new_password || '');
+  if (np.length < 4 || np.length > 200) return c.json({ error: 'New password must be 4-200 characters' }, 400);
+  const hash = await Bun.password.hash(np);
+  await sql`INSERT INTO settings (key, value) VALUES ('master_password_hash', ${hash})
+    ON CONFLICT (key) DO UPDATE SET value = ${hash}`;
+  const keep = c.req.header('x-master-token') || '';
+  for (const [tok] of masterSessions) { if (tok !== keep) masterSessions.delete(tok); }
+  return c.json({ ok: true });
 });
 
 telegram.post('/api/master/logout', requireMaster, async (c) => {
