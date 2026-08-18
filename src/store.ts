@@ -268,6 +268,71 @@ footer .flinks{display:flex;gap:20px;}
 footer a:hover{color:var(--text);}
 
 /* ================================================================
+   IMMERSION WAVE — aurora, particles, marquee, magnetics, physics
+   ================================================================ */
+/* aurora behind hero */
+.aurora{position:absolute;inset:-20% -10% auto;height:130%;z-index:-1;overflow:hidden;pointer-events:none;filter:blur(60px) saturate(1.3);opacity:.5;}
+.aurora i{position:absolute;border-radius:50%;mix-blend-mode:screen;}
+.aurora i:nth-child(1){width:52vw;height:46vh;left:-6%;top:8%;background:radial-gradient(ellipse,rgba(124,92,255,.55),transparent 65%);animation:aur1 16s ease-in-out infinite alternate;}
+.aurora i:nth-child(2){width:44vw;height:42vh;right:-4%;top:2%;background:radial-gradient(ellipse,rgba(79,140,255,.45),transparent 65%);animation:aur2 19s ease-in-out infinite alternate;}
+.aurora i:nth-child(3){width:36vw;height:34vh;left:28%;top:34%;background:radial-gradient(ellipse,rgba(45,212,191,.22),transparent 65%);animation:aur3 22s ease-in-out infinite alternate;}
+@keyframes aur1{from{transform:translate(0,0) scale(1);}to{transform:translate(9vw,6vh) scale(1.18);}}
+@keyframes aur2{from{transform:translate(0,0) scale(1.1);}to{transform:translate(-7vw,8vh) scale(.95);}}
+@keyframes aur3{from{transform:translate(0,0) scale(1);}to{transform:translate(6vw,-5vh) scale(1.22);}}
+.hero{position:relative;}
+#heroParticles{position:absolute;inset:0;z-index:-1;pointer-events:none;}
+
+/* hero headline word cascade */
+.hw{display:inline-block;opacity:0;transform:translateY(26px) rotate(2deg);animation:hwIn .8s var(--ease-spring) forwards;}
+@keyframes hwIn{to{opacity:1;transform:none;}}
+
+/* infinite marquee */
+.marquee{overflow:hidden;border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:15px 0;background:rgba(255,255,255,.015);position:relative;margin-top:30px;}
+.marquee::before,.marquee::after{content:'';position:absolute;top:0;bottom:0;width:120px;z-index:2;pointer-events:none;}
+.marquee::before{left:0;background:linear-gradient(90deg,var(--bg),transparent);}
+.marquee::after{right:0;background:linear-gradient(-90deg,var(--bg),transparent);}
+.marquee-track{display:flex;gap:44px;width:max-content;animation:marq 34s linear infinite;}
+.marquee-track span{display:flex;align-items:center;gap:10px;font-size:12.5px;font-weight:600;color:var(--text-faint);white-space:nowrap;letter-spacing:.02em;text-transform:uppercase;}
+.marquee-track span i{width:5px;height:5px;border-radius:50%;background:var(--grad);font-style:normal;flex-shrink:0;}
+@keyframes marq{to{transform:translateX(-50%);}}
+.marquee:hover .marquee-track{animation-play-state:paused;}
+
+/* shimmering animated border on premium plan cards */
+.plan.hot::after,.plan.life::after{content:'';position:absolute;inset:-1px;border-radius:inherit;padding:1px;background:conic-gradient(from var(--shim,0deg),transparent 8%,rgba(196,176,255,.9) 14%,rgba(122,171,255,.9) 20%,transparent 28%);-webkit-mask:linear-gradient(#fff 0 0) content-box,linear-gradient(#fff 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none;animation:shimSpin 4.5s linear infinite;}
+@property --shim{syntax:'<angle>';initial-value:0deg;inherits:false;}
+@keyframes shimSpin{to{--shim:360deg;}}
+
+/* smooth FAQ open */
+.faq details .a{display:grid;grid-template-rows:0fr;transition:grid-template-rows .4s var(--ease-smooth);padding-top:0;padding-bottom:0;}
+.faq details .a > div{overflow:hidden;}
+.faq details[open] .a{grid-template-rows:1fr;padding-bottom:18px;}
+.faq summary{transition:color .2s ease;}
+.faq details[open] summary{color:var(--gold-bright);}
+
+/* scrollspy underline */
+.nav-links a{position:relative;padding-bottom:3px;}
+.nav-links a::after{content:'';position:absolute;left:0;bottom:-2px;height:2px;width:0;background:var(--grad);border-radius:2px;transition:width .3s var(--ease-smooth);}
+.nav-links a.now::after{width:100%;}
+.nav-links a.now{color:var(--text);}
+
+/* magnetic buttons get GPU transforms */
+.btn-grad,.btn-lg{will-change:transform;}
+
+/* parallax layers */
+.plx{will-change:transform;}
+
+/* softer, longer reveal ease for the oiled feel */
+.rv{transition:opacity 1s cubic-bezier(.22,1,.36,1),transform 1s cubic-bezier(.22,1,.36,1);}
+
+@media(prefers-reduced-motion:reduce){
+  .aurora i{animation:none;}
+  .hw{animation:none;opacity:1;transform:none;}
+  .marquee-track{animation:none;}
+  .plan.hot::after,.plan.life::after{animation:none;display:none;}
+}
+
+
+/* ================================================================
    PHENOMENAL WAVE — motion, interactivity, persuasion sections
    ================================================================ */
 /* scroll progress bar */
@@ -399,6 +464,16 @@ footer a:hover{color:var(--text);}
 .badge.gold{background:rgba(79,140,255,.14);color:var(--gold-bright);border-color:rgba(79,140,255,.3);}
 .badge.dim{background:rgba(190,190,200,.09);color:#c6c6d2;border-color:rgba(190,190,200,.16);}
 .btn-gold{position:relative;background:var(--grad);color:#fff;border:none;font-weight:700;box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 2px 4px rgba(0,0,0,.25),0 8px 22px rgba(124,92,255,.38);}
+.offer-card{position:relative;padding:18px;border-radius:20px;margin-bottom:12px;overflow:hidden;background:rgba(28,26,40,.9);border:1px solid rgba(255,255,255,.09);box-shadow:inset 0 1px 0 rgba(255,255,255,.07), 0 2px 4px rgba(0,0,0,.3), 0 12px 28px rgba(0,0,0,.3);}
+.pulse-dot{position:absolute;top:16px;right:16px;width:9px;height:9px;border-radius:50%;background:var(--success);box-shadow:0 0 0 0 rgba(34,197,94,.55);animation:liveDotPulse 1.8s ease-out infinite;}
+.offer-label{font-size:9.5px;color:var(--text-faint);text-transform:uppercase;letter-spacing:1px;font-weight:700;margin-bottom:8px;}
+.offer-name{font-size:19px;font-weight:700;font-family:'Bricolage Grotesque',sans-serif;letter-spacing:-.01em;margin-bottom:4px;}
+.offer-actions{display:flex;gap:8px;}
+.win-btn{width:100%;display:flex;align-items:center;justify-content:center;gap:8px;padding:13px;font-size:13px;font-weight:700;border-radius:16px;background:linear-gradient(180deg,#3ee87f,var(--success));color:#04170a;border:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.25), 0 6px 18px rgba(34,197,94,.32);}
+.review-btn{width:100%;padding:11px;font-size:11px;font-weight:700;border-radius:14px;background:rgba(79,140,255,.12);color:var(--gold-bright);border:1px solid rgba(79,140,255,.3);}
+.fail-btn{width:100%;padding:11px;font-size:11px;font-weight:700;border-radius:14px;background:rgba(239,68,68,.1);color:var(--danger);border:1px solid rgba(239,68,68,.28);}
+.outcome-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px;}
+.outcome-grid button{padding:11px 4px;font-size:10.5px;font-weight:700;border-radius:14px;letter-spacing:-.005em;background:var(--s3);border:1px solid var(--border-2);color:var(--text-dim);font-family:inherit;box-shadow:0 2px 4px rgba(0,0,0,.2), 0 6px 14px rgba(0,0,0,.18);}
 .btn-block{width:100%;}
 
 /* ---------- device chrome (ours — the frame around the real UI, not part of the app) ---------- */
@@ -439,8 +514,10 @@ footer a:hover{color:var(--text);}
 
 <div class="scroll-progress" id="scrollProgress"></div>
 <header class="hero wrap">
+  <div class="aurora"><i></i><i></i><i></i></div>
+  <canvas id="heroParticles"></canvas>
   <div class="pill"><span class="dot"></span>Panels activate instantly — no setup calls, no waiting</div>
-  <h1>Run your call floor<br><span class="grad-text">like a machine.</span></h1>
+  <h1><span class="hw" style="animation-delay:.05s;">Run</span> <span class="hw" style="animation-delay:.13s;">your</span> <span class="hw" style="animation-delay:.21s;">call</span> <span class="hw" style="animation-delay:.29s;">floor</span><br><span class="grad-text hw" style="animation-delay:.42s;">like a machine.</span></h1>
   <p>ClearPanel hands your callers a queue, a script and a one-tap outcome flow — and hands you the numbers. Your own private panel, live in under a minute.</p>
   <div class="hero-ctas">
     <a class="btn btn-grad btn-lg" href="#pricing">See Pricing</a>
@@ -462,6 +539,10 @@ footer a:hover{color:var(--text);}
     <div class="trust-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>Your data stays yours — renewals never reset anything</div>
   </div>
 </header>
+
+<div class="marquee"><div class="marquee-track" id="marqueeTrack">
+  <span><i></i>Smart lead queue</span><span><i></i>Mandatory outcomes</span><span><i></i>Scheduled callbacks</span><span><i></i>E2E encrypted DMs</span><span><i></i>XP ranks</span><span><i></i>Live dashboard</span><span><i></i>Bulk lead tools</span><span><i></i>AI script writer</span><span><i></i>Telephony &amp; IVR</span><span><i></i>Your branding</span><span><i></i>Unlimited callers</span><span><i></i>Instant key delivery</span>
+</div></div>
 
 <section id="showcase"><div class="wrap">
   <div class="center rv"><div class="eyebrow">This is the actual product</div>
@@ -534,23 +615,25 @@ footer a:hover{color:var(--text);}
           <div class="panel p" style="padding:11px 13px;margin-bottom:10px;background:rgba(129,140,248,.07);border-color:rgba(129,140,248,.25);">
             <span style="font-size:9px;font-weight:800;letter-spacing:.1em;color:#a5b4fc;text-transform:uppercase;display:block;margin-bottom:6px;">Due Callback</span>
             <div style="display:flex;justify-content:space-between;align-items:center;">
-              <span style="font-size:12px;font-weight:600;">Sandra P. — 2:00 PM</span>
+              <span style="font-size:12px;font-weight:600;">Sandra P. \u2014 2:00 PM</span>
               <span class="badge warn" style="font-size:9px;">Call Now</span>
             </div>
           </div>
-          <div class="panel p" style="padding:13px;margin-bottom:10px;">
-            <span style="font-size:9px;font-weight:800;letter-spacing:.1em;color:var(--success);text-transform:uppercase;">New Lead</span>
-            <b style="font-size:14px;display:block;margin:4px 0 2px;">Margaret W.</b>
-            <span class="mono" style="font-size:11px;color:var(--text-faint);">+44 7911 ••• •38</span>
-            <div class="btn btn-gold btn-block" style="margin-top:10px;padding:10px;text-align:center;font-size:12.5px;">Claim &amp; Call</div>
+          <div class="offer-card">
+            <div class="pulse-dot"></div>
+            <div class="offer-label" style="color:var(--success);">New Lead <span style="color:var(--text-faint);font-weight:600;">\u00b7 2m ago</span></div>
+            <div class="offer-name">Margaret Whitfield</div>
+            <div style="margin:2px 0 12px;display:flex;align-items:center;gap:7px;flex-wrap:wrap;"><span class="mono" style="font-size:11px;color:var(--text-dim);">+44 7911 042 738</span><span class="badge gold" style="font-size:8.5px;">Barclays</span></div>
+            <div class="offer-actions"><button class="btn btn-gold" style="flex:1;padding:11px;font-size:12px;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" style="width:13px;height:13px;vertical-align:-2px;margin-right:5px;"><path d="M6.6 10.8a15 15 0 006.6 6.6l2.2-2.2a1 1 0 011.1-.2 11 11 0 003.4.6 1 1 0 011 1V20a1 1 0 01-1 1A17 17 0 013 5a1 1 0 011-1h3.5a1 1 0 011 1 11 11 0 00.6 3.4 1 1 0 01-.2 1.1z"/></svg>Take Call</button><button class="btn btn-ghost" style="padding:11px 14px;font-size:12px;">Skip</button></div>
           </div>
-          <div class="panel p" style="padding:13px;">
-            <span style="font-size:9px;font-weight:800;letter-spacing:.1em;color:var(--gold-bright);text-transform:uppercase;">Called 1 time — no success yet</span>
-            <b style="font-size:14px;display:block;margin:4px 0 2px;">Derek H.</b>
-            <span class="mono" style="font-size:11px;color:var(--text-faint);">+44 7700 ••• •92</span>
-            <div style="margin-top:8px;"><span class="badge dim">Last: Voicemail</span></div>
+          <div class="offer-card">
+            <div class="pulse-dot" style="background:var(--gold-bright);"></div>
+            <div class="offer-label" style="color:var(--gold-bright);">Called 1 time \u2014 no success yet <span style="color:var(--text-faint);font-weight:600;">\u00b7 3h ago</span></div>
+            <div class="offer-name">Derek Hughes</div>
+            <div style="margin:2px 0 8px;"><span class="mono" style="font-size:11px;color:var(--text-dim);">+44 7700 900 192</span></div>
+            <div style="font-size:10.5px;color:var(--text-faint);display:flex;align-items:center;gap:6px;">Last attempt: <span class="badge dim" style="font-size:8.5px;">Voicemail</span></div>
           </div>
-          </div>
+          </div>          </div>
         </div>
         <div class="bottom-nav" style="position:absolute;">
           <button class="nav-btn active" data-rp="queue"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>Queue</button>
@@ -723,10 +806,10 @@ footer a:hover{color:var(--text);}
 <section id="faq"><div class="wrap">
   <div class="center rv"><div class="eyebrow">FAQ</div><h2 class="sec-title">Quick answers</h2></div>
   <div class="faq rv">
-    <details><summary>How fast is my panel live after I redeem a key?</summary><div class="a">Immediately. Redemption creates your panel, your URL and your admin PIN in one step — most people are inviting callers within the first minute.</div></details>
-    <details><summary>Do my callers need to install anything?</summary><div class="a">No. The panel runs in any browser and installs to a phone home screen like a native app. Callers just need the link and their PIN.</div></details>
-    <details><summary>What happens when my access period ends?</summary><div class="a">The panel pauses — data stays intact. Redeem another key or renew to pick up exactly where you left off.</div></details>
-    <details><summary>Is there a limit on callers or leads?</summary><div class="a">No. Every tier includes unlimited callers, unlimited leads and every feature. Tiers only differ in duration.</div></details>
+    <details><summary>How fast is my panel live after I redeem a key?</summary><div class="a"><div>Immediately. Redemption creates your panel, your URL and your admin PIN in one step — most people are inviting callers within the first minute.</div></div></details>
+    <details><summary>Do my callers need to install anything?</summary><div class="a"><div>No. The panel runs in any browser and installs to a phone home screen like a native app. Callers just need the link and their PIN.</div></div></details>
+    <details><summary>What happens when my access period ends?</summary><div class="a"><div>The panel pauses — data stays intact. Redeem another key or renew to pick up exactly where you left off.</div></div></details>
+    <details><summary>Is there a limit on callers or leads?</summary><div class="a"><div>No. Every tier includes unlimited callers and unlimited leads. Longer tiers additionally unlock premium features — your own Telegram bot from 7 days, the AI script writer from 14, telephony &amp; IVR from 30.</div></div></details>
   </div>
 </div></section>
 
@@ -756,15 +839,19 @@ footer a:hover{color:var(--text);}
 
   // ---- interactive phone demo: real bottom-nav switches real screens ----
   var RP_SCREENS = {
-    call: '<div class="panel p" style="padding:16px 13px;text-align:center;margin-bottom:10px;">'
-      + '<div style="width:48px;height:48px;border-radius:50%;background:var(--grad);margin:0 auto 8px;display:flex;align-items:center;justify-content:center;"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" style="width:22px;height:22px;"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>'
-      + '<b style="font-size:14px;display:block;">Margaret W.</b>'
-      + '<div style="font-family:\\'Bricolage Grotesque\\';font-size:21px;font-weight:800;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;margin:6px 0 12px;">04:52</div>'
-      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;">'
-      + '<span class="badge ok" style="justify-content:center;">Successful</span><span class="badge warn" style="justify-content:center;">Callback</span>'
-      + '<span class="badge dim" style="justify-content:center;">No Answer</span><span class="badge dim" style="justify-content:center;">Voicemail</span>'
+    call: '<div class="offer-card" style="text-align:center;padding:16px 14px;">'
+      + '<div class="offer-label" style="color:var(--success);">On Call \u00b7 04:52</div>'
+      + '<div class="offer-name" style="font-size:20px;">Margaret Whitfield</div>'
+      + '<div class="mono" style="font-size:11px;color:var(--text-dim);margin-bottom:12px;">+44 7911 042 738</div>'
+      + '<button class="win-btn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" style="width:15px;height:15px;"><path d="M20 6L9 17l-5-5"/></svg>Successful Call</button>'
+      + '<div class="outcome-grid" style="margin-top:8px;">'
+      + '<button>Hung Up</button><button>Chopped Previously</button><button>Cancel</button>'
+      + '</div>'
+      + '<button class="review-btn" style="margin-top:8px;">Callback Requested</button>'
+      + '<div class="outcome-grid" style="grid-template-columns:1fr 1fr;margin-top:8px;">'
+      + '<button class="fail-btn">Unsuccessful</button><button class="review-btn" style="margin:0;">Requires Review</button>'
       + '</div></div>'
-      + '<div style="font-size:10px;color:var(--text-faint);text-align:center;padding:0 8px;">An outcome is required before moving on \u2014 no skipped logs.</div>',
+      + '<div style="font-size:10px;color:var(--text-faint);text-align:center;padding:0 8px;">An outcome is required before the next lead \u2014 no skipped logs, ever.</div>',
     chat: '<div style="display:flex;gap:4px;padding:4px;border-radius:100px;background:rgba(255,255,255,.05);border:1px solid var(--border);margin-bottom:12px;">'
       + '<span style="flex:1;text-align:center;padding:7px;border-radius:100px;font-size:11px;font-weight:700;background:var(--grad);color:#fff;">Team</span>'
       + '<span style="flex:1;text-align:center;padding:7px;border-radius:100px;font-size:11px;font-weight:700;color:var(--text-dim);">Direct</span></div>'
@@ -920,6 +1007,102 @@ footer a:hover{color:var(--text);}
       el.addEventListener('pointerleave', function(){ el.style.transform = ''; });
     });
   }
+
+  // ---- marquee: duplicate the track so the -50% loop is seamless ----
+  var mtrack = document.getElementById('marqueeTrack');
+  if (mtrack) mtrack.innerHTML += mtrack.innerHTML;
+
+  // ---- hero particle field (canvas, GPU-cheap, skipped for reduced motion) ----
+  var pc = document.getElementById('heroParticles');
+  if (pc && !reduced) {
+    var ctx = pc.getContext('2d');
+    var pts = [];
+    function pcSize(){
+      var r = pc.parentElement.getBoundingClientRect();
+      pc.width = r.width; pc.height = r.height;
+    }
+    pcSize();
+    window.addEventListener('resize', pcSize, { passive: true });
+    var N = Math.min(46, Math.floor(window.innerWidth / 30));
+    for (var i = 0; i < N; i++) {
+      pts.push({ x: Math.random(), y: Math.random(), vx: (Math.random() - .5) * .0004, vy: (Math.random() - .5) * .0004, r: Math.random() * 1.6 + .4 });
+    }
+    (function pcTick(){
+      ctx.clearRect(0, 0, pc.width, pc.height);
+      for (var i = 0; i < pts.length; i++) {
+        var a = pts[i];
+        a.x += a.vx; a.y += a.vy;
+        if (a.x < 0 || a.x > 1) a.vx *= -1;
+        if (a.y < 0 || a.y > 1) a.vy *= -1;
+        ctx.beginPath();
+        ctx.arc(a.x * pc.width, a.y * pc.height, a.r, 0, 6.283);
+        ctx.fillStyle = 'rgba(164,142,255,.35)';
+        ctx.fill();
+        for (var j = i + 1; j < pts.length; j++) {
+          var b = pts[j];
+          var dx = (a.x - b.x) * pc.width, dy = (a.y - b.y) * pc.height;
+          var d2 = dx * dx + dy * dy;
+          if (d2 < 12000) {
+            ctx.beginPath();
+            ctx.moveTo(a.x * pc.width, a.y * pc.height);
+            ctx.lineTo(b.x * pc.width, b.y * pc.height);
+            ctx.strokeStyle = 'rgba(124,92,255,' + (0.10 * (1 - d2 / 12000)).toFixed(3) + ')';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+          }
+        }
+      }
+      requestAnimationFrame(pcTick);
+    })();
+  }
+
+  // ---- scroll-linked parallax: orbs + hero drift at different rates (the oil) ----
+  if (!reduced) {
+    var orbEls = document.querySelectorAll('.orb');
+    var heroEl = document.querySelector('.hero');
+    var lastY = -1;
+    (function plxTick(){
+      var y = window.scrollY;
+      if (y !== lastY) {
+        lastY = y;
+        for (var i = 0; i < orbEls.length; i++) {
+          orbEls[i].style.transform = 'translateY(' + (y * (0.06 + i * 0.05)).toFixed(1) + 'px)';
+        }
+        if (heroEl && y < window.innerHeight) {
+          heroEl.style.transform = 'translateY(' + (y * 0.18).toFixed(1) + 'px)';
+          heroEl.style.opacity = String(Math.max(0, 1 - y / (window.innerHeight * 0.85)));
+        }
+      }
+      requestAnimationFrame(plxTick);
+    })();
+  }
+
+  // ---- magnetic pull on primary buttons (fine pointers only) ----
+  if (window.matchMedia && window.matchMedia('(hover:hover) and (pointer:fine)').matches && !reduced) {
+    document.querySelectorAll('.btn-grad').forEach(function(btn){
+      btn.addEventListener('pointermove', function(ev){
+        var r = btn.getBoundingClientRect();
+        var dx = ev.clientX - (r.left + r.width / 2);
+        var dy = ev.clientY - (r.top + r.height / 2);
+        btn.style.transform = 'translate(' + (dx * 0.14).toFixed(1) + 'px,' + (dy * 0.3).toFixed(1) + 'px)';
+      });
+      btn.addEventListener('pointerleave', function(){ btn.style.transform = ''; });
+    });
+  }
+
+  // ---- scrollspy: highlight the nav link for the section in view ----
+  var spyLinks = Array.prototype.slice.call(document.querySelectorAll('.nav-links a[href^="#"]'));
+  var spyIo = new IntersectionObserver(function(es){
+    es.forEach(function(e){
+      if (!e.isIntersecting) return;
+      var id = '#' + e.target.id;
+      spyLinks.forEach(function(l){ l.classList.toggle('now', l.getAttribute('href') === id); });
+    });
+  }, { rootMargin: '-30% 0px -55% 0px' });
+  spyLinks.forEach(function(l){
+    var sec = document.querySelector(l.getAttribute('href'));
+    if (sec) spyIo.observe(sec);
+  });
 
   // ---- sticky mini CTA appears after scrolling past the showcase ----
   var miniCta = document.getElementById('miniCta');

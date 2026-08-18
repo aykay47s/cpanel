@@ -265,13 +265,13 @@ async function renderPanels() {
             <div style="font-size:11.5px;color:var(--text-dim);margin-top:4px;">\${r.plan?esc(r.plan)+' · ':''}\${r.price_paid?money(r.price_paid)+' · ':''}\${r.expires_at?'expires '+new Date(r.expires_at).toLocaleDateString():'no expiry'}</div>
           </div>
           <div style="display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;">
-            \${r.status !== 'terminated' && r.expires_at ? '<button class="btn btn-ghost btn-sm" onclick="extendPanel(' + r.id + ')">+ Days</button>' : ''}
+            <button class="btn btn-ghost btn-sm" onclick="extendPanel(\${r.id})">+ Days</button>
             \${r.status === 'active'
               ? '<button class="btn btn-danger btn-sm" onclick="terminatePanel(' + r.id + ', \\'' + esc(r.panel_name||r.name).replace(/'/g,"") + '\\')">Terminate</button>'
               : '<button class="btn btn-ok btn-sm" onclick="reactivatePanel(' + r.id + ')">Reactivate</button>'}
           </div>
         </div>
-      </div>\`).join('') : '<div style="color:var(--text-dim);">No resold panels yet.</div>'}
+      </div>\`).join('') : '<div style="color:var(--text-dim);">No resold panels yet — panels appear here once a key is redeemed. The + Days button lives on each panel row.</div>'}
     </div>\`;
 }
 async function terminatePanel(id, name) {
