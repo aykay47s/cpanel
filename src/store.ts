@@ -18,7 +18,7 @@ export function STORE_PAGE(cfg: StoreConfig | string, opts: { autoRedirect?: boo
   const cta = config.checkoutUrl || 'https://t.me/clearpanelotpbot';
   const P = config.prices;
   const B = config.buyUrls;
-  const TICK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>';
+  const TICK = '<span class="plan-tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2"><path d="M20 6L9 17l-5-5"/></svg></span>';
   // If a logged-in panel user lands on the store (their PWA start_url or an old
   // bookmark), bounce them straight to the panel — they came here to work.
   const redirectScript = opts.autoRedirect
@@ -217,23 +217,33 @@ section{padding:76px 0;}
 .step p{font-size:13.5px;color:var(--text-dim);}
 
 /* ---------- pricing ---------- */
-.plans{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;align-items:stretch;}
-@media(max-width:980px){.plans{grid-template-columns:repeat(2,1fr);}}
-@media(max-width:560px){.plans{grid-template-columns:1fr;}}
-.plan{padding:26px 22px;display:flex;flex-direction:column;transition:transform .2s var(--ease-smooth);}
-.plan:hover{transform:translateY(-4px);}
-.plan.hot{border-color:rgba(79,140,255,.5);box-shadow:inset 0 1px 0 rgba(255,255,255,.10),0 0 0 1px rgba(79,140,255,.15),0 16px 40px rgba(0,0,0,.4);position:relative;}
-.plan.life{border-color:rgba(196,176,255,.5);position:relative;}
-.plan-tag{position:absolute;top:-11px;left:50%;transform:translateX(-50%);padding:4px 14px;border-radius:var(--r-full);font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#fff;white-space:nowrap;background:var(--grad);}
-.plan .dur{font-size:12.5px;font-weight:700;color:var(--text-dim);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;}
-.plan .price{font-family:'Bricolage Grotesque';font-size:34px;font-weight:700;line-height:1;margin-bottom:4px;}
-.plan .price small{font-size:15px;font-weight:700;color:var(--text-dim);}
-.plan .per{font-size:11.5px;color:var(--text-faint);margin-bottom:18px;min-height:15px;}
-.plan ul{list-style:none;margin-bottom:20px;flex:1;}
-.plan li{font-size:12px;color:var(--text-dim);padding:5px 0;display:flex;align-items:flex-start;gap:7px;line-height:1.4;}
-.plan li svg{width:13px;height:13px;color:#5eeaa0;flex-shrink:0;margin-top:2px;}
-.plan li.inherit{color:var(--violet-bright);font-weight:700;padding-left:0;}
-.plan .btn{width:100%;}
+.plans{display:grid;grid-template-columns:repeat(5,1fr);gap:16px;align-items:stretch;}
+@media(max-width:1180px){.plans{grid-template-columns:repeat(3,1fr);}}
+@media(max-width:720px){.plans{grid-template-columns:repeat(2,1fr);}}
+@media(max-width:460px){.plans{grid-template-columns:1fr;}}
+.plan{padding:0;display:flex;flex-direction:column;position:relative;overflow:hidden;transition:transform .3s var(--ease-spring),border-color .3s var(--ease-smooth),box-shadow .3s var(--ease-smooth);}
+.plan-top{height:3px;background:linear-gradient(90deg,transparent,var(--border-2),transparent);}
+.plan-in{padding:24px 20px 22px;display:flex;flex-direction:column;flex:1;}
+.plan:hover{transform:translateY(-6px);border-color:rgba(255,255,255,.22);box-shadow:0 20px 50px rgba(0,0,0,.5);}
+.plan.hot{border-color:rgba(79,140,255,.55);box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 0 0 1px rgba(79,140,255,.18),0 20px 50px rgba(79,140,255,.12);}
+.plan.hot .plan-top{background:linear-gradient(90deg,transparent,var(--gold-bright),transparent);}
+.plan.hot:hover{transform:translateY(-6px) scale(1.015);box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 0 0 1px rgba(79,140,255,.3),0 28px 64px rgba(79,140,255,.22);}
+.plan.life{border-color:rgba(196,176,255,.55);background:linear-gradient(155deg,rgba(45,32,74,.94),rgba(20,19,30,.94) 62%);box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 0 0 1px rgba(196,176,255,.16),0 20px 50px rgba(124,92,255,.14);}
+.plan.life .plan-top{background:linear-gradient(90deg,transparent,var(--violet-bright),var(--gold-bright),transparent);}
+.plan.life:hover{transform:translateY(-6px) scale(1.015);box-shadow:inset 0 1px 0 rgba(255,255,255,.12),0 0 0 1px rgba(196,176,255,.3),0 28px 64px rgba(124,92,255,.24);}
+.plan-tag{position:absolute;top:14px;left:50%;transform:translateX(-50%);padding:5px 13px;border-radius:var(--r-full);font-size:9.5px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:#fff;white-space:nowrap;background:var(--grad);box-shadow:0 4px 14px rgba(124,92,255,.45);z-index:2;}
+.plan.hot .plan-in,.plan.life .plan-in{padding-top:38px;}
+.plan .dur{font-size:11.5px;font-weight:700;color:var(--text-faint);text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px;}
+.plan .price{font-family:'Bricolage Grotesque';font-size:32px;font-weight:700;line-height:1;margin-bottom:3px;letter-spacing:-.01em;}
+.plan .price small{font-size:14px;font-weight:700;color:var(--text-dim);margin-right:1px;}
+.plan .per{font-size:11px;color:var(--text-faint);margin-bottom:20px;min-height:14px;}
+.plan ul{list-style:none;margin-bottom:22px;flex:1;}
+.plan li{font-size:12px;color:var(--text-dim);padding:6px 0;display:flex;align-items:center;gap:9px;line-height:1.35;}
+.plan-tick{width:16px;height:16px;border-radius:50%;background:rgba(94,234,160,.14);display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.plan-tick svg{width:9px;height:9px;color:#5eeaa0;}
+.plan .btn{width:100%;margin-top:auto;}
+.plan .btn-ghost{background:rgba(255,255,255,.06);}
+.plan .btn:hover{transform:translateY(-1px);}
 
 /* ---------- faq ---------- */
 .faq{max-width:680px;margin:0 auto;}
@@ -257,7 +267,7 @@ footer a:hover{color:var(--text);}
    ================================================================ */
 .panel{position:relative;background:linear-gradient(155deg, rgba(30,27,45,.92), rgba(20,19,30,.94) 62%);border:1px solid var(--border-2);border-radius:var(--r-xl);box-shadow:inset 0 1px 0 rgba(255,255,255,.10), 0 2px 4px rgba(0,0,0,.3), 0 16px 40px rgba(0,0,0,.4);}
 .p{padding:24px;}
-.admin-shell{display:flex;min-height:600px;}
+.admin-shell{display:flex;}
 .admin-sidebar{width:220px;flex-shrink:0;background:linear-gradient(180deg, rgba(147,112,255,.035), rgba(255,255,255,.015));border-right:1px solid rgba(255,255,255,.09);padding:20px 14px;overflow-y:auto;}
 .side-link{display:flex;align-items:center;gap:11px;padding:9px 12px;border-radius:var(--r-sm);font-size:13px;font-weight:500;color:var(--text-dim);cursor:default;margin-bottom:1px;position:relative;}
 .side-link.active{background:linear-gradient(135deg,rgba(124,92,255,.2),rgba(79,140,255,.1));color:#fff;font-weight:600;box-shadow:inset 0 1px 0 rgba(255,255,255,.08), 0 2px 12px rgba(124,92,255,.18);border:1px solid rgba(167,139,250,.28);}
@@ -295,18 +305,23 @@ footer a:hover{color:var(--text);}
 .btn-block{width:100%;}
 
 /* ---------- device chrome (ours — the frame around the real UI, not part of the app) ---------- */
-.rp-devices{display:flex;gap:40px;align-items:flex-start;justify-content:center;flex-wrap:wrap;}
-.rp-mac{width:min(680px,100%);border-radius:14px;overflow:hidden;background:#0b0b0f;border:1px solid var(--border-2);box-shadow:0 40px 100px rgba(0,0,0,.65);}
+.showcase-glow{position:relative;}
+.showcase-glow::before{content:'';position:absolute;top:10%;left:50%;transform:translateX(-50%);width:900px;height:500px;background:radial-gradient(ellipse,rgba(124,92,255,.16),rgba(79,140,255,.06) 45%,transparent 70%);filter:blur(40px);pointer-events:none;z-index:-1;}
+.rp-devices{display:flex;gap:44px;align-items:center;justify-content:center;flex-wrap:wrap;padding:20px 0;}
+.rp-mac{width:min(680px,100%);border-radius:14px;overflow:hidden;background:#0b0b0f;border:1px solid var(--border-2);box-shadow:0 30px 70px rgba(0,0,0,.55),0 8px 20px rgba(124,92,255,.1);animation:floatMac 7s ease-in-out infinite;}
 .rp-mac-bar{display:flex;align-items:center;gap:7px;padding:11px 14px;background:#15151b;border-bottom:1px solid var(--border);}
 .rp-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
 .rp-dot.r{background:#ff5f57;} .rp-dot.y{background:#febc2e;} .rp-dot.g{background:#28c840;}
 .rp-mac-url{margin:0 auto;font-size:11px;color:var(--text-faint);font-family:'Geist Mono',monospace;}
-.rp-mac-screen{background:var(--bg);max-height:520px;overflow:hidden;}
-.rp-phone{width:300px;flex-shrink:0;border-radius:44px;background:linear-gradient(180deg,#1c1c23,#0b0b0f);border:1px solid var(--border-2);box-shadow:0 30px 80px rgba(0,0,0,.6),0 0 0 8px rgba(255,255,255,.03);padding:14px 10px;position:relative;}
+.rp-mac-screen{background:var(--bg);}
+.rp-phone{width:290px;flex-shrink:0;border-radius:44px;background:linear-gradient(180deg,#1c1c23,#0b0b0f);border:1px solid var(--border-2);box-shadow:0 26px 60px rgba(0,0,0,.5),0 6px 20px rgba(79,140,255,.1),0 0 0 8px rgba(255,255,255,.03);padding:14px 10px;position:relative;animation:floatPhone 8s ease-in-out infinite;animation-delay:-2.6s;}
 .rp-phone-notch{position:absolute;top:14px;left:50%;transform:translateX(-50%);width:90px;height:22px;background:#0b0b0f;border-radius:0 0 16px 16px;z-index:2;}
-.rp-phone-screen{border-radius:32px;background:var(--bg);border:1px solid var(--border);overflow:hidden;position:relative;height:600px;}
-.rp-caption{text-align:center;font-size:12.5px;color:var(--text-faint);margin-top:24px;max-width:560px;margin-left:auto;margin-right:auto;}
-@media(max-width:760px){.rp-mac{display:none;}}
+.rp-phone-screen{border-radius:32px;background:var(--bg);border:1px solid var(--border);overflow:hidden;position:relative;height:600px;display:flex;flex-direction:column;}
+.rp-caption{text-align:center;font-size:12.5px;color:var(--text-faint);margin-top:28px;max-width:560px;margin-left:auto;margin-right:auto;}
+@keyframes floatMac{0%,100%{transform:translateY(0) rotate(0deg);}50%{transform:translateY(-12px) rotate(-.15deg);}}
+@keyframes floatPhone{0%,100%{transform:translateY(0);}50%{transform:translateY(-16px);}}
+@media(max-width:760px){.rp-mac{display:none;}.showcase-glow::before{width:400px;height:400px;}}
+@media(prefers-reduced-motion:reduce){.rp-mac,.rp-phone{animation:none;}}
 
 </style>
 </head>
@@ -344,7 +359,7 @@ footer a:hover{color:var(--text);}
   <div class="center rv"><div class="eyebrow">This is the actual product</div>
   <h2 class="sec-title">Not a mockup. The real interface.</h2>
   <p class="sec-sub">Every class, colour and pixel below is lifted straight from the live app — the admin dashboard as it looks on a laptop, the caller queue as it looks on a phone.</p></div>
-  <div class="rp-devices rv">
+  <div class="rp-devices rv showcase-glow">
     <div class="rp-mac">
       <div class="rp-mac-bar"><span class="rp-dot r"></span><span class="rp-dot y"></span><span class="rp-dot g"></span><span class="rp-mac-url">clearpanel.up.railway.app/app</span></div>
       <div class="rp-mac-screen">
@@ -398,7 +413,22 @@ footer a:hover{color:var(--text);}
             <button class="clock-toggle"><span class="clock-dot"></span>04:12:08</button>
           </div>
         </div>
-        <div class="staff-body" style="padding:14px 12px 90px;">
+        <div class="staff-body" style="padding:14px 12px 90px;flex:1;overflow:hidden;">
+          <div class="panel p" style="padding:12px 13px;margin-bottom:10px;display:flex;align-items:center;gap:10px;">
+            <div style="width:32px;height:32px;border-radius:50%;background:var(--grad);display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" style="width:15px;height:15px;"><path d="M12 2l2.6 5.6 6 .7-4.5 4.1 1.2 5.9L12 15.4l-5.3 2.9 1.2-5.9L3.4 8.3l6-.7z"/></svg></div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:11px;font-weight:700;margin-bottom:4px;">Closer II</div>
+              <div style="height:6px;border-radius:100px;background:rgba(255,255,255,.08);overflow:hidden;"><div style="height:100%;width:68%;border-radius:100px;background:var(--grad);"></div></div>
+            </div>
+            <span style="font-size:9.5px;color:var(--text-faint);font-weight:700;white-space:nowrap;">2,140 XP</span>
+          </div>
+          <div class="panel p" style="padding:11px 13px;margin-bottom:10px;background:rgba(129,140,248,.07);border-color:rgba(129,140,248,.25);">
+            <span style="font-size:9px;font-weight:800;letter-spacing:.1em;color:#a5b4fc;text-transform:uppercase;display:block;margin-bottom:6px;">Due Callback</span>
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+              <span style="font-size:12px;font-weight:600;">Sandra P. — 2:00 PM</span>
+              <span class="badge warn" style="font-size:9px;">Call Now</span>
+            </div>
+          </div>
           <div class="panel p" style="padding:13px;margin-bottom:10px;">
             <span style="font-size:9px;font-weight:800;letter-spacing:.1em;color:var(--success);text-transform:uppercase;">New Lead</span>
             <b style="font-size:14px;display:block;margin:4px 0 2px;">Margaret W.</b>
@@ -485,7 +515,7 @@ footer a:hover{color:var(--text);}
   <h2 class="sec-title">Pick your runway</h2>
   <p class="sec-sub">Unlimited callers and leads on every tier. Longer keys unlock more of the platform — and Lifetime unlocks all of it, forever.</p></div>
   <div class="plans plans-5">
-    <div class="plan rv panel-card"><div class="dur">3 days</div><div class="price"><small>£</small>${P.d3}</div><div class="per">The trial run</div><ul>
+    <div class="plan rv panel-card"><div class="plan-top"></div><div class="plan-in"><div class="dur">3 days</div><div class="price"><small>£</small>${P.d3}</div><div class="per">The trial run</div><ul>
       <li>${TICK}Smart lead queue + attempt caps</li>
       <li>${TICK}One-tap mandatory outcomes &amp; callbacks</li>
       <li>${TICK}Team chat + E2E encrypted DMs</li>
@@ -493,8 +523,8 @@ footer a:hover{color:var(--text);}
       <li>${TICK}Bulk import + bank categories</li>
       <li>${TICK}Telegram-verified staff &amp; clock-in</li>
       <li>${TICK}Unlimited callers &amp; leads</li>
-    </ul><a class="btn btn-ghost" href="${B.d3}" target="_blank" rel="noopener">Get 3 Days</a></div>
-    <div class="plan rv panel-card"><div class="dur">7 days</div><div class="price"><small>£</small>${P.d7}</div><div class="per">A full working week</div><ul>
+    </ul><a class="btn btn-ghost" href="${B.d3}" target="_blank" rel="noopener">Get 3 Days</a></div></div>
+    <div class="plan rv panel-card"><div class="plan-top"></div><div class="plan-in"><div class="dur">7 days</div><div class="price"><small>£</small>${P.d7}</div><div class="per">A full working week</div><ul>
       <li>${TICK}Smart lead queue + attempt caps</li>
       <li>${TICK}One-tap mandatory outcomes &amp; callbacks</li>
       <li>${TICK}Team chat + E2E encrypted DMs</li>
@@ -503,8 +533,8 @@ footer a:hover{color:var(--text);}
       <li>${TICK}Telegram-verified staff &amp; clock-in</li>
       <li>${TICK}Unlimited callers &amp; leads</li>
       <li>${TICK}Your own dedicated Telegram bot</li>
-    </ul><a class="btn btn-ghost" href="${B.d7}" target="_blank" rel="noopener">Get 7 Days</a></div>
-    <div class="plan hot rv panel-card"><span class="plan-tag">Most popular</span><div class="dur">14 days</div><div class="price"><small>£</small>${P.d14}</div><div class="per">Two weeks, AI included</div><ul>
+    </ul><a class="btn btn-ghost" href="${B.d7}" target="_blank" rel="noopener">Get 7 Days</a></div></div>
+    <div class="plan hot rv panel-card"><div class="plan-top"></div><span class="plan-tag">Most popular</span><div class="plan-in"><div class="dur">14 days</div><div class="price"><small>£</small>${P.d14}</div><div class="per">Two weeks, AI included</div><ul>
       <li>${TICK}Smart lead queue + attempt caps</li>
       <li>${TICK}One-tap mandatory outcomes &amp; callbacks</li>
       <li>${TICK}Team chat + E2E encrypted DMs</li>
@@ -514,8 +544,8 @@ footer a:hover{color:var(--text);}
       <li>${TICK}Unlimited callers &amp; leads</li>
       <li>${TICK}Your own dedicated Telegram bot</li>
       <li>${TICK}AI script writer with objection handling</li>
-    </ul><a class="btn btn-grad" href="${B.d14}" target="_blank" rel="noopener">Get 14 Days</a></div>
-    <div class="plan rv panel-card"><div class="dur">30 days</div><div class="price"><small>£</small>${P.d30}</div><div class="per">The serious floor</div><ul>
+    </ul><a class="btn btn-grad" href="${B.d14}" target="_blank" rel="noopener">Get 14 Days</a></div></div>
+    <div class="plan rv panel-card"><div class="plan-top"></div><div class="plan-in"><div class="dur">30 days</div><div class="price"><small>£</small>${P.d30}</div><div class="per">The serious floor</div><ul>
       <li>${TICK}Smart lead queue + attempt caps</li>
       <li>${TICK}One-tap mandatory outcomes &amp; callbacks</li>
       <li>${TICK}Team chat + E2E encrypted DMs</li>
@@ -526,8 +556,8 @@ footer a:hover{color:var(--text);}
       <li>${TICK}Your own dedicated Telegram bot</li>
       <li>${TICK}AI script writer with objection handling</li>
       <li>${TICK}Telephony &amp; IVR — Twilio / Telnyx routing</li>
-    </ul><a class="btn btn-ghost" href="${B.d30}" target="_blank" rel="noopener">Get 30 Days</a></div>
-    <div class="plan life rv panel-card"><span class="plan-tag">Own it</span><div class="dur">Lifetime</div><div class="price"><small>£</small>${P.life}</div><div class="per">One key. Never expires.</div><ul>
+    </ul><a class="btn btn-ghost" href="${B.d30}" target="_blank" rel="noopener">Get 30 Days</a></div></div>
+    <div class="plan life rv panel-card"><div class="plan-top"></div><span class="plan-tag">Own it</span><div class="plan-in"><div class="dur">Lifetime</div><div class="price"><small>£</small>${P.life}</div><div class="per">One key. Never expires.</div><ul>
       <li>${TICK}Smart lead queue + attempt caps</li>
       <li>${TICK}One-tap mandatory outcomes &amp; callbacks</li>
       <li>${TICK}Team chat + E2E encrypted DMs</li>
@@ -540,7 +570,7 @@ footer a:hover{color:var(--text);}
       <li>${TICK}Telephony &amp; IVR — Twilio / Telnyx routing</li>
       <li>${TICK}Panel never expires — no renewals, ever</li>
       <li>${TICK}Every future feature, automatically included</li>
-    </ul><a class="btn btn-grad" href="${B.life}" target="_blank" rel="noopener">Get Lifetime</a></div>
+    </ul><a class="btn btn-grad" href="${B.life}" target="_blank" rel="noopener">Get Lifetime</a></div></div>
   </div>
 </div></section>
 
