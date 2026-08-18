@@ -12,22 +12,22 @@ export const MASTER_PAGE = `<!DOCTYPE html>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&family=Bricolage+Grotesque:wght@700;800&display=swap" rel="stylesheet">
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700;800&family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Geist+Mono:wght@500;600;700&display=swap');
   :root{
-    --bg:#07070a; --bg-2:#0d0d12; --s1:#12121a; --s2:#1a1a24; --s3:#232330;
-    --text:#f2f2f4; --text-dim:#a0a0aa; --text-faint:#66666e;
-    --violet:#7c5cff; --violet-bright:#a78bfa; --gold:#f5b942; --gold-bright:#ffd684;
-    --success:#34d399; --danger:#ef4444; --amber:#f5c744;
-    --border:rgba(255,255,255,.08); --border-2:rgba(255,255,255,.14);
-    --grad:linear-gradient(135deg,var(--violet),var(--gold));
+    --bg:#050507; --bg-2:#0b0b0f; --s1:#141419; --s2:#1c1c23; --s3:#26262f;
+    --text:#f0f0f3; --text-dim:#9494a0; --text-faint:#5c5c66;
+    --violet:#a78bfa; --violet-bright:#c4b0ff; --gold:#4f8cff; --gold-bright:#7aabff;
+    --success:#22c55e; --danger:#ef4444; --amber:#eab308;
+    --border:rgba(255,255,255,.065); --border-2:rgba(255,255,255,.12);
+    --grad:linear-gradient(135deg,var(--violet-bright),var(--gold-bright) 55%,var(--gold));
     --ease-smooth:cubic-bezier(.16,1,.3,1);
-    --r:16px; --r-lg:22px;
+    --r:16px; --r-lg:20px;
   }
   *{box-sizing:border-box;}
-  body{margin:0;font-family:'Inter',-apple-system,sans-serif;color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased;background:
-    radial-gradient(ellipse 80% 50% at 12% -10%,rgba(124,92,255,.14),transparent 55%),
-    radial-gradient(ellipse 70% 50% at 100% 8%,rgba(245,185,66,.07),transparent 55%),
-    #07070a;}
+  body{margin:0;font-family:'Geist',-apple-system,sans-serif;color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased;background:
+    radial-gradient(ellipse 80% 50% at 12% -10%,rgba(167,139,250,.12),transparent 55%),
+    radial-gradient(ellipse 70% 50% at 100% 8%,rgba(79,140,255,.08),transparent 55%),
+    #050507;}
   h1,h2,h3,.brand{font-family:'Bricolage Grotesque',sans-serif;letter-spacing:-.02em;}
   h3{margin:0 0 4px;font-size:16px;}
   a{color:var(--violet-bright);}
