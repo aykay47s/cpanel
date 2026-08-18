@@ -76,8 +76,9 @@ async function api(url, opts = {}) {
       // invalid, so don't log someone out over it. 401, or any more specific
       // message (suspended, tenant expired), does mean the session is dead.
       if (res.status === 403 && msg === 'Unauthorized') return;
-      const reason = msg || 'Your session is no longer valid. Please log in again.';
       logout();
+      if (d && d.expired) { showRenewScreen(); return; }
+      const reason = msg || 'Your session is no longer valid. Please log in again.';
       const errEl = document.getElementById('loginError');
       if (errEl) errEl.textContent = reason;
     }).catch(() => {});
@@ -113,12 +114,39 @@ async function api(url, opts = {}) {
   });
 })();
 function renderPinDots() { document.querySelectorAll('.pin-dot').forEach((d, i) => { d.classList.remove('error'); d.classList.toggle('filled', i < pinBuffer.length); }); }
+function showRenewScreen() {
+  const login = document.getElementById('loginScreen');
+  const renew = document.getElementById('renewScreen');
+  if (login) login.classList.add('hidden');
+  if (renew) renew.classList.remove('hidden');
+  const pin = document.getElementById('renewPinInput');
+  if (pin) setTimeout(() => pin.focus(), 50);
+}
+async function submitRenewal() {
+  const pinEl = document.getElementById('renewPinInput');
+  const keyEl = document.getElementById('renewKeyInput');
+  const errEl = document.getElementById('renewError');
+  const pin = pinEl.value.trim();
+  const key = keyEl.value.trim();
+  if (!pin || !key) { errEl.textContent = 'Enter both the admin PIN and the key.'; return; }
+  errEl.textContent = '';
+  const slug = document.getElementById('cp-slug')?.content || '';
+  try {
+    const res = await fetch('/api/tenant/renew', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slug, admin_pin: pin, key }) });
+    const data = await res.json();
+    if (!res.ok) { errEl.textContent = data.error || 'Could not renew.'; return; }
+    errEl.style.color = 'var(--success)';
+    errEl.textContent = 'Renewed — reloading…';
+    setTimeout(() => location.reload(), 900);
+  } catch (e) { errEl.textContent = 'Something went wrong — try again.'; }
+}
 async function attemptLogin() {
   const errEl = document.getElementById('loginError');
   const _cpSlug = document.getElementById('cp-slug')?.content || null;
   const res = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pin: pinBuffer, slug: _cpSlug }) });
   const data = await res.json();
   if (!res.ok) {
+    if (data.expired) { showRenewScreen(); pinBuffer = ''; return; }
     errEl.textContent = data.error || 'Invalid PIN';
     document.querySelectorAll('.pin-dot').forEach(d => d.classList.add('error'));
     setTimeout(() => { pinBuffer = ''; renderPinDots(); errEl.textContent = ''; }, 500);
@@ -2019,6 +2047,26 @@ tr.clickable:active{background:rgba(255,255,255,.05);}
     </div>
   </div>
 </div>
+<!-- Shown instead of the login screen the moment a panel's access has run out —
+     for everyone, admin or caller, whether they land here fresh or are already
+     mid-session when it lapses. The ONLY way back in is redeeming a key here;
+     nothing about the tenant's data (leads, callers, history) is touched. -->
+<div id="renewScreen" class="hidden">
+  <div class="login-card panel fade-up">
+    <div class="crest" style="color:var(--gold-bright);"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg></div>
+    <div class="login-title">Access Expired</div>
+    <div class="login-sub" id="renewSub" style="max-width:280px;margin:0 auto 20px;line-height:1.55;">Redeem a new key to pick back up — same panel, same leads, same callers, nothing lost.</div>
+    <div style="text-align:left;">
+      <label style="display:block;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-faint);margin-bottom:6px;">Admin PIN</label>
+      <input id="renewPinInput" inputmode="numeric" maxlength="4" placeholder="••••" style="margin-bottom:14px;" />
+      <label style="display:block;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--text-faint);margin-bottom:6px;">New license key</label>
+      <input id="renewKeyInput" placeholder="XXXX-XXXX-XXXX-XXXX" style="text-transform:uppercase;margin-bottom:16px;" />
+      <button class="btn btn-gold btn-block" onclick="submitRenewal()">Renew Access</button>
+      <div class="login-error" id="renewError"></div>
+    </div>
+    <div style="margin-top:16px;text-align:center;font-size:11.5px;color:var(--text-faint);">Don't have a key yet? <a href="/" style="color:var(--gold-bright);">Get one on the store</a></div>
+  </div>
+</div>
 <div id="onboardingScreen" class="hidden" style="position:fixed;inset:0;z-index:500;display:flex;align-items:center;justify-content:center;padding:24px;background:linear-gradient(135deg, #07070a, #0a0a10);">
   <div class="panel p fade-up" style="max-width:360px;width:100%;">
     <div class="crest" style="margin-bottom:16px;"><svg viewBox="0 0 24 24" fill="none" stroke-width="1.5"><path d="M12 2l7 4v6c0 5-3.5 8-7 10-3.5-2-7-5-7-10V6l7-4z"/></svg></div>
@@ -2202,6 +2250,13 @@ document.addEventListener('visibilitychange', () => {
 // displaying a completely different tenant's URL - not a server-side leak,
 // since every API call really was for the stored session's genuine tenant,
 // but indistinguishable from one at a glance.
+// If the server rendered this page for an already-expired tenant, go straight
+// to the renewal screen — before any session-restore logic below gets a
+// chance to try (and fail) to resume a session that can no longer exist.
+if (document.getElementById('cp-expired')) {
+  showRenewScreen();
+} else {
+
 const _cpPageTenantId = document.getElementById('cp-tenant-id')?.content || '';
 if (me && String(me.tenant_id ?? '') !== String(_cpPageTenantId)) {
   localStorage.removeItem('dispatch_me');
@@ -2228,6 +2283,7 @@ if (me && sessionIsFresh()) {
   //  no API call will succeed until the PIN is re-entered and a new session starts.)
   localStorage.removeItem('dispatch_me');
 }
+} // end: cp-expired else branch
 
 // Branding is now handled by applyBranding() + server-side name injection.
 // The slug is read from the cp-slug meta tag.

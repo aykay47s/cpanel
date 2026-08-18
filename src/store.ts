@@ -282,8 +282,10 @@ footer a:hover{color:var(--text);}
 .section-title{font-size:12px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.8px;margin:24px 0 12px;font-weight:600;}
 .live-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--success);margin-left:6px;position:relative;top:-2px;box-shadow:0 0 0 0 rgba(34,197,94,.6);animation:liveDotPulse 1.8s ease-out infinite;}
 @keyframes liveDotPulse{0%{box-shadow:0 0 0 0 rgba(34,197,94,.55);}70%{box-shadow:0 0 0 8px rgba(34,197,94,0);}100%{box-shadow:0 0 0 0 rgba(34,197,94,0);}}
-.brand{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:15.5px;display:flex;align-items:center;gap:10px;letter-spacing:-.02em;color:var(--text);}
-.brand-mark{width:22px;height:22px;border-radius:7px;background:var(--grad);position:relative;flex-shrink:0;box-shadow:0 2px 10px rgba(124,92,255,.4), inset 0 1px 0 rgba(255,255,255,.3);}
+.rp-brand{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:15.5px;display:flex;align-items:center;gap:10px;letter-spacing:-.02em;color:var(--text);line-height:1;}
+.rp-brand-mark{width:24px;height:24px;border-radius:7px;background:rgba(255,255,255,.06);position:relative;flex-shrink:0;overflow:hidden;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 10px rgba(124,92,255,.25), inset 0 1px 0 rgba(255,255,255,.15);}
+.rp-brand-mark img{width:100%;height:100%;object-fit:contain;display:block;}
+.topbar{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;background:linear-gradient(180deg, rgba(147,112,255,.09), rgba(255,255,255,.02) 70%, transparent);border-bottom:1px solid rgba(255,255,255,.08);}
 .icon-btn{width:38px;height:38px;border-radius:50%;background:var(--s2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--text-dim);flex-shrink:0;}
 .clock-toggle{display:flex;align-items:center;gap:8px;padding:9px 16px 9px 13px;border-radius:100px;font-size:12.5px;font-weight:600;background:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,.03));border:1px solid var(--border-2);color:var(--text-dim);}
 .clock-dot{width:8px;height:8px;border-radius:50%;background:#34d399;flex-shrink:0;box-shadow:0 0 0 0 rgba(34,197,94,.55);animation:liveDotPulse 1.8s ease-out infinite;}
@@ -380,7 +382,7 @@ footer a:hover{color:var(--text);}
           </div>
           <div class="admin-main">
             <div class="topbar">
-              <div class="brand"><div class="brand-mark"></div>ClearPanel <span class="mono" style="color:var(--text-faint);font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;margin-left:6px;display:inline-flex;align-items:center;gap:5px;"><span style="width:5px;height:5px;border-radius:50%;background:var(--success);box-shadow:0 0 0 0 rgba(34,197,94,.55);animation:liveDotPulse 2.2s ease-out infinite;"></span>Control Room</span></div>
+              <div class="rp-brand"><div class="rp-brand-mark"><img src="/clearpanel-logo.png" alt="" /></div>ClearPanel <span class="mono" style="color:var(--text-faint);font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;margin-left:6px;display:inline-flex;align-items:center;gap:5px;"><span style="width:5px;height:5px;border-radius:50%;background:var(--success);box-shadow:0 0 0 0 rgba(34,197,94,.55);animation:liveDotPulse 2.2s ease-out infinite;"></span>Control Room</span></div>
               <div class="topbar-actions"><div class="icon-btn"><svg class="ic" viewBox="0 0 24 24"><path d="M6 10a6 6 0 1112 0c0 5 2 6 2 6H4s2-1 2-6z"/><path d="M10 20a2 2 0 004 0"/></svg></div></div>
             </div>
             <div class="admin-content">
@@ -407,13 +409,14 @@ footer a:hover{color:var(--text);}
       <div class="rp-phone-notch"></div>
       <div class="rp-phone-screen">
         <div class="topbar" style="padding:20px 16px 12px;">
-          <div class="brand"><div class="brand-mark"></div>ClearPanel</div>
+          <div class="rp-brand"><div class="rp-brand-mark"><img src="/clearpanel-logo.png" alt="" /></div>ClearPanel</div>
           <div class="topbar-actions">
             <div class="icon-btn" style="width:32px;height:32px;"><svg class="ic" viewBox="0 0 24 24"><path d="M6 10a6 6 0 1112 0c0 5 2 6 2 6H4s2-1 2-6z"/><path d="M10 20a2 2 0 004 0"/></svg></div>
             <button class="clock-toggle"><span class="clock-dot"></span>04:12:08</button>
           </div>
         </div>
-        <div class="staff-body" style="padding:14px 12px 90px;flex:1;overflow:hidden;">
+        <div class="staff-body" style="padding:14px 12px 90px;flex:1;overflow:hidden;" id="rpPhoneBody">
+          <div id="rpScreenQueue">
           <div class="panel p" style="padding:12px 13px;margin-bottom:10px;display:flex;align-items:center;gap:10px;">
             <div style="width:32px;height:32px;border-radius:50%;background:var(--grad);display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" style="width:15px;height:15px;"><path d="M12 2l2.6 5.6 6 .7-4.5 4.1 1.2 5.9L12 15.4l-5.3 2.9 1.2-5.9L3.4 8.3l6-.7z"/></svg></div>
             <div style="flex:1;min-width:0;">
@@ -441,12 +444,13 @@ footer a:hover{color:var(--text);}
             <span class="mono" style="font-size:11px;color:var(--text-faint);">+44 7700 ••• •92</span>
             <div style="margin-top:8px;"><span class="badge dim">Last: Voicemail</span></div>
           </div>
+          </div>
         </div>
         <div class="bottom-nav" style="position:absolute;">
-          <button class="nav-btn active"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>Queue</button>
-          <button class="nav-btn"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.9v3a2 2 0 01-2.2 2 19.8 19.8 0 01-8.6-3 19.5 19.5 0 01-6-6 19.8 19.8 0 01-3-8.7A2 2 0 014.1 2h3a2 2 0 012 1.7c.1 1 .4 2 .7 2.8a2 2 0 01-.4 2.1L8.1 9.9a16 16 0 006 6l1.3-1.3a2 2 0 012.1-.4c.9.3 1.9.5 2.8.7a2 2 0 011.7 2z"/></svg>Call</button>
-          <button class="nav-btn"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16v11H8l-4 4V5z"/></svg>Chat</button>
-          <button class="nav-btn"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/></svg>Board</button>
+          <button class="nav-btn active" data-rp="queue"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>Queue</button>
+          <button class="nav-btn" data-rp="call"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.9v3a2 2 0 01-2.2 2 19.8 19.8 0 01-8.6-3 19.5 19.5 0 01-6-6 19.8 19.8 0 01-3-8.7A2 2 0 014.1 2h3a2 2 0 012 1.7c.1 1 .4 2 .7 2.8a2 2 0 01-.4 2.1L8.1 9.9a16 16 0 006 6l1.3-1.3a2 2 0 012.1-.4c.9.3 1.9.5 2.8.7a2 2 0 011.7 2z"/></svg>Call</button>
+          <button class="nav-btn" data-rp="chat"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16v11H8l-4 4V5z"/></svg>Chat</button>
+          <button class="nav-btn" data-rp="board"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/></svg>Board</button>
         </div>
       </div>
     </div>
@@ -603,43 +607,44 @@ footer a:hover{color:var(--text);}
   var io = new IntersectionObserver(function(es){ es.forEach(function(e){ if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }); }, { threshold: 0.12 });
   document.querySelectorAll('.rv').forEach(function(el){ io.observe(el); });
 
-  // ---- interactive panel demo ----
-  var SCREENS = {
-    queue: { title: 'Your Panel', chip: 'CLOCKED IN 03:41:22', chipStyle: '', html: ''
-      + '<div class="mxp"><div class="medal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2l2.6 5.6 6 .7-4.5 4.1 1.2 5.9L12 15.4l-5.3 2.9 1.2-5.9L3.4 8.3l6-.7z"/></svg></div><div style="flex:1;"><div style="font-size:11px;font-weight:700;margin-bottom:4px;">Closer II</div><div class="bar"><i></i></div></div><small>2,140 XP</small></div>'
-      + '<div class="mcb"><b>Due Callbacks (1)</b><div style="display:flex;justify-content:space-between;align-items:center;"><span>Sandra P. — 2:00 PM today</span><span class="mbadge warn">CALL NOW</span></div></div>'
-      + '<div class="mlead"><span class="tag">New Lead</span><b>Margaret W.</b><span>+44 7911 ... .38 &middot; Barclays</span><div class="mbtn">Claim &amp; Call</div></div>'
-      + '<div class="mlead"><span class="tag retry">Called 1 time &mdash; no success yet</span><b>Derek H.</b><span>+44 7700 ... .92 &middot; HSBC</span><div style="display:flex;gap:6px;align-items:center;margin-top:6px;"><span class="mbadge dim">Last: Voicemail</span></div><div class="mbtn dark">Claim &amp; Retry</div></div>' },
-    call: { title: 'On Call', chip: 'LIVE 04:52', chipStyle: 'background:rgba(245,185,66,.12);color:#f5b942;border-color:rgba(245,185,66,.3);', html: ''
-      + '<div class="mcall"><div class="avatar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div><b>Margaret W.</b><div class="timer">04:52</div>'
-      + '<div class="mgrid"><div class="mout good">Successful</div><div class="mout mid">Callback</div><div class="mout dim2">No Answer</div><div class="mout dim2">Voicemail</div><div class="mout dim2">Busy</div><div class="mout dim2">Hung Up</div></div>'
-      + '<div class="mout mid" style="margin-top:8px;">Number Not Recognised</div></div>'
-      + '<div class="mcb"><b>Schedule Callback</b><div style="display:flex;justify-content:space-between;align-items:center;"><span>Tomorrow 2:00 PM</span><span class="mbadge warn">BOOK IT</span></div></div>'
-      + '<div style="font-size:10px;color:var(--faint);text-align:center;">An outcome is required before moving on &mdash; no skipped logs.</div>' },
-    chat: { title: 'Messages', chip: '4 ONLINE', chipStyle: '', html: ''
-      + '<div class="mchat-toggle"><span class="on">Team</span><span>Direct</span></div>'
-      + '<div class="mbub">Anyone got the closer script for the HSBC batch?<small>Jamie &middot; 2:14 PM</small></div>'
-      + '<div class="mbub own">Scripts tab, second one down. Updated today.<small>You &middot; 2:15 PM</small></div>'
-      + '<div class="mbub">Margaret W. closed. 4th today.<small>Jamie &middot; 2:31 PM</small></div>'
-      + '<div class="mlock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>Direct messages are end-to-end encrypted</div>' },
-    admin: { title: 'Admin', chip: 'FLOOR OPEN', chipStyle: 'background:rgba(52,211,153,.14);color:#34d399;border-color:rgba(52,211,153,.3);', html: ''
-      + '<div class="mstat2"><div class="ms"><b>214</b><span>Uncalled</span></div><div class="ms"><b>38</b><span>Attempted</span></div><div class="ms"><b>12</b><span>Successful</span></div><div class="ms"><b>3</b><span>Max Attempts</span></div></div>'
-      + '<div class="mbulk"><i>4 leads selected</i><span style="margin-left:auto;">Assign</span><span>Vault</span><span>Reset</span></div>'
-      + '<div class="mrow"><span>Margaret W.</span><span class="mbadge ok">Successful</span></div>'
-      + '<div class="mrow"><span>Derek H.</span><span class="mbadge warn">Attempted &middot; 2</span></div>'
-      + '<div class="mrow"><span>Sandra P.</span><span class="mbadge warn">Callback 2PM</span></div>'
-      + '<div class="mrow"><span>Alan T.</span><span class="mbadge dim">Not Called</span></div>' }
+  // ---- interactive phone demo: real bottom-nav switches real screens ----
+  var RP_SCREENS = {
+    call: '<div class="panel p" style="padding:16px 13px;text-align:center;margin-bottom:10px;">'
+      + '<div style="width:48px;height:48px;border-radius:50%;background:var(--grad);margin:0 auto 8px;display:flex;align-items:center;justify-content:center;"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" style="width:22px;height:22px;"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>'
+      + '<b style="font-size:14px;display:block;">Margaret W.</b>'
+      + '<div style="font-family:\\'Bricolage Grotesque\\';font-size:21px;font-weight:800;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;margin:6px 0 12px;">04:52</div>'
+      + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:7px;">'
+      + '<span class="badge ok" style="justify-content:center;">Successful</span><span class="badge warn" style="justify-content:center;">Callback</span>'
+      + '<span class="badge dim" style="justify-content:center;">No Answer</span><span class="badge dim" style="justify-content:center;">Voicemail</span>'
+      + '</div></div>'
+      + '<div style="font-size:10px;color:var(--text-faint);text-align:center;padding:0 8px;">An outcome is required before moving on \u2014 no skipped logs.</div>',
+    chat: '<div style="display:flex;gap:4px;padding:4px;border-radius:100px;background:rgba(255,255,255,.05);border:1px solid var(--border);margin-bottom:12px;">'
+      + '<span style="flex:1;text-align:center;padding:7px;border-radius:100px;font-size:11px;font-weight:700;background:var(--grad);color:#fff;">Team</span>'
+      + '<span style="flex:1;text-align:center;padding:7px;border-radius:100px;font-size:11px;font-weight:700;color:var(--text-dim);">Direct</span></div>'
+      + '<div class="panel p" style="padding:9px 12px;margin-bottom:8px;max-width:82%;font-size:11.5px;">Anyone got the closer script for the HSBC batch?<small style="display:block;font-size:9px;color:var(--text-faint);margin-top:3px;">Jamie &middot; 2:14 PM</small></div>'
+      + '<div class="panel p" style="padding:9px 12px;margin-bottom:8px;max-width:82%;margin-left:auto;font-size:11.5px;background:rgba(79,140,255,.1);border-color:rgba(79,140,255,.28);">Scripts tab, second one down.<small style="display:block;font-size:9px;color:var(--text-faint);margin-top:3px;">You &middot; 2:15 PM</small></div>'
+      + '<div style="display:flex;align-items:center;gap:6px;font-size:9.5px;color:var(--success);font-weight:700;justify-content:center;padding:10px 0;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" style="width:11px;height:11px;"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>Direct messages are end-to-end encrypted</div>',
+    board: '<div class="panel p" style="padding:14px;margin-bottom:8px;display:flex;align-items:center;gap:12px;">'
+      + '<b style="font-size:15px;color:var(--gold-bright);width:16px;">1</b><div style="width:30px;height:30px;border-radius:50%;background:var(--grad);"></div><div style="flex:1;"><b style="font-size:12.5px;display:block;">Jamie R.</b><span style="font-size:10px;color:var(--text-faint);">Grandmaster</span></div><span class="mono" style="font-size:12px;font-weight:700;">4,820</span></div>'
+      + '<div class="panel p" style="padding:14px;margin-bottom:8px;display:flex;align-items:center;gap:12px;background:rgba(79,140,255,.06);border-color:rgba(79,140,255,.25);">'
+      + '<b style="font-size:15px;color:var(--text-dim);width:16px;">2</b><div style="width:30px;height:30px;border-radius:50%;background:var(--grad);"></div><div style="flex:1;"><b style="font-size:12.5px;display:block;">You</b><span style="font-size:10px;color:var(--text-faint);">Closer II</span></div><span class="mono" style="font-size:12px;font-weight:700;">2,140</span></div>'
+      + '<div class="panel p" style="padding:14px;display:flex;align-items:center;gap:12px;">'
+      + '<b style="font-size:15px;color:var(--text-dim);width:16px;">3</b><div style="width:30px;height:30px;border-radius:50%;background:var(--grad);"></div><div style="flex:1;"><b style="font-size:12.5px;display:block;">Priya S.</b><span style="font-size:10px;color:var(--text-faint);">Closer I</span></div><span class="mono" style="font-size:12px;font-weight:700;">1,905</span></div>'
   };
-  var body = document.getElementById('dBody'), title = document.getElementById('dTitle'), chip = document.getElementById('dChip');
-  function show(k){
-    var sc = SCREENS[k]; if (!sc || !body) return;
-    body.innerHTML = sc.html; title.textContent = sc.title;
-    chip.textContent = sc.chip; chip.setAttribute('style', sc.chipStyle);
-    document.querySelectorAll('.mnav').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-s') === k); });
-    document.querySelectorAll('.dn').forEach(function(n){ n.classList.toggle('on', n.getAttribute('data-for') === k); });
+  var _rpQueueHtml = null;
+  function showRpScreen(key){
+    var body = document.getElementById('rpPhoneBody');
+    if (!body) return;
+    if (_rpQueueHtml === null) {
+      var q = document.getElementById('rpScreenQueue');
+      if (q) _rpQueueHtml = q.outerHTML;
+    }
+    body.innerHTML = key === 'queue' ? _rpQueueHtml : (RP_SCREENS[key] || _rpQueueHtml);
+    document.querySelectorAll('.rp-phone .nav-btn').forEach(function(b){ b.classList.toggle('active', b.getAttribute('data-rp') === key); });
   }
-  document.querySelectorAll('.mnav').forEach(function(b){ b.addEventListener('click', function(){ show(b.getAttribute('data-s')); }); });
-  show('queue');
+  document.querySelectorAll('.rp-phone .nav-btn').forEach(function(b){
+    b.addEventListener('click', function(){ showRpScreen(b.getAttribute('data-rp')); });
+  });
 })();
 </script>
 </body>

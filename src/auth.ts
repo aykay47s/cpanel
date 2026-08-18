@@ -51,24 +51,33 @@ export async function authenticate(c: Context): Promise<AuthUser | null> {
 // authenticate() returns null uniformly for every denial reason (wrong pin,
 // expired tenant, suspended) - that's correct for security, never special-
 // case around it there. This is purely for messaging: when a request was
-// denied, look up whether suspension specifically was why, so the person
-// sees the actual reason instead of a bare "Unauthorized" on every screen
-// that happens to hit an API call after they've been suspended mid-session.
-async function suspensionMessageFor(c: Context): Promise<string | null> {
+// denied, look up whether suspension or tenant expiry specifically was why,
+// so the client can react correctly (a suspended user just sees a message;
+// an expired tenant should be routed straight into the renewal screen).
+async function denialInfoFor(c: Context): Promise<{ message: string; expired?: boolean } | null> {
   const uid = c.req.header('x-user-id') || c.req.query('uid');
   const pin = c.req.header('x-user-pin') || c.req.query('pin');
   if (!uid || !pin) return null;
-  const [row] = await sql`SELECT suspended_at, suspended_reason FROM users WHERE id = ${uid} AND pin = ${pin}`;
-  if (!row?.suspended_at) return null;
-  return row.suspended_reason ? `Your access has been suspended: ${row.suspended_reason}` : 'Your access has been suspended. Contact your admin.';
+  const [row] = await sql`
+    SELECT users.suspended_at, users.suspended_reason, tenants.expires_at as tenant_expires_at
+    FROM users LEFT JOIN tenants ON tenants.id = users.tenant_id
+    WHERE users.id = ${uid} AND users.pin = ${pin}`;
+  if (!row) return null;
+  if (row.tenant_expires_at && new Date(row.tenant_expires_at) < new Date()) {
+    return { message: 'Access to this panel has expired. Redeem a new key to continue.', expired: true };
+  }
+  if (row.suspended_at) {
+    return { message: row.suspended_reason ? `Your access has been suspended: ${row.suspended_reason}` : 'Your access has been suspended. Contact your admin.' };
+  }
+  return null;
 }
 
 export function requireRole(...roles: Array<'admin' | 'manager' | 'caller' | 'finisher'>) {
   return async (c: Context, next: Next) => {
     const user = await authenticate(c);
     if (!user || !roles.includes(user.role)) {
-      const reason = await suspensionMessageFor(c);
-      return c.json({ error: reason || 'Unauthorized' }, 403);
+      const info = await denialInfoFor(c);
+      return c.json({ error: info?.message || 'Unauthorized', expired: !!info?.expired }, 403);
     }
     c.set('user', user);
     await next();
@@ -83,8 +92,8 @@ export function requireSuperAdmin() {
   return async (c: Context, next: Next) => {
     const user = await authenticate(c);
     if (!user || user.role !== 'admin' || !user.is_super_admin) {
-      const reason = await suspensionMessageFor(c);
-      return c.json({ error: reason || 'Unauthorized' }, 403);
+      const info = await denialInfoFor(c);
+      return c.json({ error: info?.message || 'Unauthorized', expired: !!info?.expired }, 403);
     }
     c.set('user', user);
     await next();

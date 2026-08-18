@@ -272,61 +272,28 @@ app.get('/app', async (c) => {
 // those are global settings that belong to the self tenant, not shared out.
 app.get('/:slug', async (c) => {
   const slug = c.req.param('slug');
-  const [tenant] = await sql`SELECT * FROM tenants WHERE slug = ${slug} AND status = 'active'`;
+  const [tenant] = await sql`SELECT * FROM tenants WHERE slug = ${slug} AND status IN ('active', 'expired')`;
   if (!tenant) return c.notFound();
   if (tenant.expires_at && new Date(tenant.expires_at) < new Date()) {
     await sql`UPDATE tenants SET status = 'expired' WHERE id = ${tenant.id}`;
-    const safeName = String(tenant.name).replace(/&/g,'&amp;').replace(/</g,'&lt;');
-    const safeSlug = String(tenant.slug).replace(/[^a-z0-9-]/g, '');
-    return c.html(`<!DOCTYPE html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Panel Expired</title><style>
-*{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:-apple-system,sans-serif;background:#050507;color:#f0f0f3;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;}
-.card{text-align:center;max-width:380px;width:100%;}
-h1{font-size:20px;margin-bottom:8px;}
-p{font-size:13px;color:#9494a0;line-height:1.6;margin-bottom:22px;}
-.renew{text-align:left;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.12);border-radius:18px;padding:20px;margin-top:8px;}
-.renew h2{font-size:13px;font-weight:700;margin-bottom:14px;text-align:center;}
-label{display:block;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#5c5c66;margin-bottom:5px;}
-input{width:100%;padding:11px 13px;border-radius:11px;border:1px solid rgba(255,255,255,.14);background:rgba(255,255,255,.05);color:#f0f0f3;font-size:13.5px;outline:none;margin-bottom:12px;}
-input:focus{border-color:#4f8cff;}
-button{width:100%;padding:12px;border-radius:100px;border:none;background:linear-gradient(135deg,#c4b0ff,#7aabff 55%,#4f8cff);color:#fff;font-size:13.5px;font-weight:700;cursor:pointer;}
-button:active{transform:scale(.98);}
-.msg{font-size:12px;margin-top:12px;min-height:16px;text-align:center;}
-.msg.err{color:#f87171;}
-.msg.ok{color:#22c55e;}
-.foot{font-size:11.5px;color:#5c5c66;margin-top:16px;}
-.foot a{color:#7aabff;}
-</style></head><body><div class="card">
-<h1>Access Expired</h1>
-<p>The access period for <strong>${safeName}</strong> has ended. Enter a new key below to pick up exactly where you left off — same panel, same leads, same callers.</p>
-<div class="renew">
-<h2>Renew this panel</h2>
-<label>Admin PIN</label>
-<input id="rPin" inputmode="numeric" maxlength="4" placeholder="••••" />
-<label>New license key</label>
-<input id="rKey" placeholder="XXXX-XXXX-XXXX-XXXX" style="text-transform:uppercase;" />
-<button id="rBtn">Renew Access</button>
-<div class="msg" id="rMsg"></div>
-</div>
-<div class="foot">Don't have a key yet? <a href="/">Get one on the store</a></div>
-</div>
-<script>
-document.getElementById('rBtn').addEventListener('click', async function(){
-  var pin = document.getElementById('rPin').value.trim();
-  var key = document.getElementById('rKey').value.trim();
-  var msg = document.getElementById('rMsg');
-  if (!pin || !key) { msg.textContent = 'Enter both your admin PIN and the key.'; msg.className = 'msg err'; return; }
-  msg.textContent = 'Renewing…'; msg.className = 'msg';
-  try {
-    var res = await fetch('/api/tenant/renew', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ slug: '${safeSlug}', admin_pin: pin, key: key }) });
-    var data = await res.json();
-    if (!res.ok) { msg.textContent = data.error || 'Could not renew.'; msg.className = 'msg err'; return; }
-    msg.textContent = 'Renewed — taking you back in…'; msg.className = 'msg ok';
-    setTimeout(function(){ location.reload(); }, 900);
-  } catch (e) { msg.textContent = 'Something went wrong — try again.'; msg.className = 'msg err'; }
-});
-</script>
-</body></html>`);
+  }
+  if (tenant.status === 'expired' || (tenant.expires_at && new Date(tenant.expires_at) < new Date())) {
+    // Renders the REAL panel shell (same branding, fonts, components as an
+    // active tenant) rather than a separate bespoke page — the renewal form
+    // lives inside the actual app, not somewhere that feels like leaving it.
+    // frontend.ts detects the cp-expired meta tag on load and shows the
+    // renewal screen immediately instead of the normal PIN pad.
+    c.header('Cache-Control', 'no-store, no-cache, must-revalidate');
+    let expTenantName = tenant.panel_name || tenant.name || 'ClearPanel';
+    if (BLOCKED_PANEL_NAMES.has(String(expTenantName).trim().toLowerCase())) expTenantName = tenant.name || 'ClearPanel';
+    const expLogo = safeLogoUrl(tenant.panel_logo) || '/clearpanel-icon.png';
+    const expLogoTag = `<img src="${esc(expLogo)}" style="width:100%;height:100%;object-fit:contain;border-radius:inherit;" />`;
+    let expHtml = page
+      .replace(/<title>[^<]*<\/title>/, `<title>${esc(expTenantName)}</title>`)
+      .replace('<div class="brand-mark"></div>', `<div class="brand-mark">${expLogoTag}</div>`)
+      .replace('<div id="loginTitle">ClearPanel</div>', `<div id="loginTitle">${esc(expTenantName)}</div>`);
+    expHtml = expHtml.replace('</head>', `<meta id="cp-slug" content="${slug}"><meta id="cp-tenant-id" content="${tenant.id}"><meta id="cp-expired" content="1"></head>`);
+    return c.html(expHtml);
   }
   c.header('Cache-Control', 'no-store, no-cache, must-revalidate');
   let tenantName = tenant.panel_name || tenant.name || 'ClearPanel';

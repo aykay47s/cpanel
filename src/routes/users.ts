@@ -30,14 +30,16 @@ users.post('/api/auth/login', async (c) => {
     if (tenant.status === 'terminated') {
       return bad(c, tenant.termination_reason ? `This panel has been terminated: ${tenant.termination_reason}` : 'This panel has been terminated. Contact whoever set this up.', 403);
     }
-    if (tenant.status !== 'active') return bad(c, 'This call center panel could not be found', 404);
-    // This is what actually enforces "access for X days" from a redeemed key -
-    // once expires_at has passed, the panel stops being reachable at all, not just
-    // visually marked as expired somewhere in Master Control.
-    if (tenant.expires_at && new Date(tenant.expires_at) < new Date()) {
+    // Expiry is checked before the strict active-only gate below, and against
+    // both 'active' and already-flipped 'expired' status — otherwise the
+    // first failed login after expiry flips the status, and every login
+    // attempt after that falls through to a generic 404 instead of the
+    // renewal message, since it no longer reads as 'active'.
+    if ((tenant.status === 'active' || tenant.status === 'expired') && tenant.expires_at && new Date(tenant.expires_at) < new Date()) {
       await sql`UPDATE tenants SET status = 'expired' WHERE id = ${tenant.id}`;
-      return bad(c, 'Access to this panel has expired. Contact whoever set this up to renew it.', 403);
+      return c.json({ error: 'Access to this panel has expired. Redeem a new key to continue.', expired: true }, 403);
     }
+    if (tenant.status !== 'active') return bad(c, 'This call center panel could not be found', 404);
     tenantId = tenant.id;
   } else {
     const [selfTenant] = await sql`SELECT id FROM tenants WHERE is_self = true`;
