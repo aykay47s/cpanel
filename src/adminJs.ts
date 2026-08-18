@@ -1021,10 +1021,19 @@ async function renderAdminLeaderboard(el) {
 
 
 async function renderAdminBranding(el) {
-  const [bRes, tbRes] = await Promise.all([api('/api/branding'), api('/api/admin/telegram-bot')]);
+  const [bRes, tbRes, asRes] = await Promise.all([api('/api/branding'), api('/api/admin/telegram-bot'), api('/api/admin/access-status')]);
   const b = (await bRes.json()).data;
   const tb = (await tbRes.json()).data;
-  el.innerHTML = \`
+  const as = (await asRes.json()).data;
+  const renewCard = as && as.renewable ? \`<div class="panel p fade-up">
+      <div class="section-title" style="margin-top:0;">Panel Access</div>
+      \${as.expires_at ? '<p style="font-size:12.5px;color:var(--text-dim);margin-bottom:14px;">Access runs until <b style="color:var(--text);">' + new Date(as.expires_at).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'}) + '</b>. Bought a new key? Redeem it here to add more time \u2014 same panel, nothing resets.</p>' : '<p style="font-size:12.5px;color:var(--success);margin-bottom:14px;">This panel never expires.</p>'}
+      <div class="field"><label>New license key</label><input id="renewKey" placeholder="XXXX-XXXX-XXXX-XXXX" style="text-transform:uppercase;" /></div>
+      <button class="btn btn-gold" onclick="renewPanelAccess()">Redeem &amp; Extend</button>
+      <div id="renewStatus" style="font-size:12px;margin-top:10px;"></div>
+    </div>\` : '';
+    el.innerHTML = \`
+    \${renewCard}
     <div class="panel p fade-up">
       <div class="section-title" style="margin-top:0;">Panel Branding</div>
       <p style="font-size:12px;color:var(--text-dim);margin-bottom:16px;">Sets the name and logo shown across the whole app - title bar, login screen, topbar, and home screen icon on mobile.</p>
@@ -1055,6 +1064,19 @@ async function renderAdminBranding(el) {
       <button class="btn btn-gold" onclick="saveTenantBot()">\${tb.configured ? 'Update Token' : 'Connect Bot'}</button>
       <div id="tgBotStatus" style="font-size:12px;margin-top:10px;"></div>
     </div>\`;
+}
+async function renewPanelAccess() {
+  const keyEl = document.getElementById('renewKey');
+  const s = document.getElementById('renewStatus');
+  const key = keyEl.value.trim();
+  if (!key) { s.textContent = 'Enter a key first.'; s.style.color = 'var(--danger)'; return; }
+  s.textContent = 'Redeeming…'; s.style.color = 'var(--text-dim)';
+  const res = await api('/api/tenant/renew', { method: 'POST', body: JSON.stringify({ slug: location.pathname.split('/')[1] || '', admin_pin: me.pin, key }) });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { s.textContent = data.error || 'Could not renew.'; s.style.color = 'var(--danger)'; return; }
+  s.textContent = 'Extended ✓ — new expiry: ' + (data.data.expires_at ? new Date(data.data.expires_at).toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'}) : 'never'); s.style.color = 'var(--success)';
+  keyEl.value = '';
+  setTimeout(() => renderAdminTab('branding'), 1200);
 }
 async function saveTenantBot() {
   const token = document.getElementById('tgBotToken').value.trim();

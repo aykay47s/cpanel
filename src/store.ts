@@ -249,6 +249,65 @@ section{padding:76px 0;}
 footer{border-top:1px solid var(--border);padding:34px 0;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;font-size:12.5px;color:var(--text-faint);}
 footer .flinks{display:flex;gap:20px;}
 footer a:hover{color:var(--text);}
+
+/* ================================================================
+   REAL PANEL CSS — copied verbatim from src/frontend.ts so the
+   showcase below is not a recreation but the actual component code
+   the live app ships. Class names are intentionally identical.
+   ================================================================ */
+.panel{position:relative;background:linear-gradient(155deg, rgba(30,27,45,.92), rgba(20,19,30,.94) 62%);border:1px solid var(--border-2);border-radius:var(--r-xl);box-shadow:inset 0 1px 0 rgba(255,255,255,.10), 0 2px 4px rgba(0,0,0,.3), 0 16px 40px rgba(0,0,0,.4);}
+.p{padding:24px;}
+.admin-shell{display:flex;min-height:600px;}
+.admin-sidebar{width:220px;flex-shrink:0;background:linear-gradient(180deg, rgba(147,112,255,.035), rgba(255,255,255,.015));border-right:1px solid rgba(255,255,255,.09);padding:20px 14px;overflow-y:auto;}
+.side-link{display:flex;align-items:center;gap:11px;padding:9px 12px;border-radius:var(--r-sm);font-size:13px;font-weight:500;color:var(--text-dim);cursor:default;margin-bottom:1px;position:relative;}
+.side-link.active{background:linear-gradient(135deg,rgba(124,92,255,.2),rgba(79,140,255,.1));color:#fff;font-weight:600;box-shadow:inset 0 1px 0 rgba(255,255,255,.08), 0 2px 12px rgba(124,92,255,.18);border:1px solid rgba(167,139,250,.28);}
+.side-sec{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:var(--text-faint);font-weight:600;margin:18px 10px 8px;}
+.admin-main{flex:1;min-width:0;}
+.admin-content{padding:24px 26px;}
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:22px;}
+.stat-box{padding:16px 18px;border-radius:var(--r-lg);}
+.stat-box .num{font-family:'Bricolage Grotesque';font-size:22px;font-weight:800;line-height:1.2;}
+.stat-box .lbl{font-size:10.5px;color:var(--text-faint);font-weight:600;margin-top:3px;letter-spacing:.02em;}
+.stat-box.accent{border-color:rgba(79,140,255,.3);}
+.section-title{font-size:12px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.8px;margin:24px 0 12px;font-weight:600;}
+.live-dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--success);margin-left:6px;position:relative;top:-2px;box-shadow:0 0 0 0 rgba(34,197,94,.6);animation:liveDotPulse 1.8s ease-out infinite;}
+@keyframes liveDotPulse{0%{box-shadow:0 0 0 0 rgba(34,197,94,.55);}70%{box-shadow:0 0 0 8px rgba(34,197,94,0);}100%{box-shadow:0 0 0 0 rgba(34,197,94,0);}}
+.brand{font-family:'Bricolage Grotesque',sans-serif;font-weight:800;font-size:15.5px;display:flex;align-items:center;gap:10px;letter-spacing:-.02em;color:var(--text);}
+.brand-mark{width:22px;height:22px;border-radius:7px;background:var(--grad);position:relative;flex-shrink:0;box-shadow:0 2px 10px rgba(124,92,255,.4), inset 0 1px 0 rgba(255,255,255,.3);}
+.icon-btn{width:38px;height:38px;border-radius:50%;background:var(--s2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;color:var(--text-dim);flex-shrink:0;}
+.clock-toggle{display:flex;align-items:center;gap:8px;padding:9px 16px 9px 13px;border-radius:100px;font-size:12.5px;font-weight:600;background:linear-gradient(180deg,rgba(255,255,255,.07),rgba(255,255,255,.03));border:1px solid var(--border-2);color:var(--text-dim);}
+.clock-dot{width:8px;height:8px;border-radius:50%;background:#34d399;flex-shrink:0;box-shadow:0 0 0 0 rgba(34,197,94,.55);animation:liveDotPulse 1.8s ease-out infinite;}
+.staff-body{max-width:600px;margin:0 auto;}
+.bottom-nav{display:flex;align-items:stretch;background-color:#0c0c12;background-image:linear-gradient(180deg, rgba(20,18,30,.72), rgba(12,12,18,.86));border-top:1px solid rgba(255,255,255,.10);padding:8px 8px 10px;left:0;right:0;bottom:0;}
+.nav-btn{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:6px 2px;border-radius:14px;background:transparent;color:var(--text-faint);font-size:9.5px;font-weight:600;position:relative;border:none;}
+.nav-btn .ic{width:20px;height:20px;}
+.nav-btn.active{color:var(--gold-bright);}
+.nav-btn.active .ic{filter:drop-shadow(0 3px 8px var(--gold-glow));}
+.nav-btn.active::after{content:'';position:absolute;bottom:-2px;left:50%;transform:translateX(-50%);width:5px;height:5px;border-radius:50%;background:var(--gold-bright);box-shadow:0 0 8px var(--gold-glow);}
+.ic{width:17px;height:17px;display:inline-block;vertical-align:-3px;stroke:currentColor;stroke-width:1.7;fill:none;stroke-linecap:round;stroke-linejoin:round;}
+.badge{position:relative;padding:5px 11px 5px 9px;font-size:10px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;display:inline-flex;align-items:center;gap:6px;border-radius:var(--r-full);background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);}
+.badge::before{content:'';width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0;box-shadow:0 0 7px currentColor,0 0 1px currentColor;}
+.badge.ok{background:rgba(34,197,94,.14);color:#5eeaa0;border-color:rgba(34,197,94,.3);}
+.badge.warn{background:rgba(129,140,248,.12);color:#a5b4fc;border-color:rgba(129,140,248,.28);}
+.badge.gold{background:rgba(79,140,255,.14);color:var(--gold-bright);border-color:rgba(79,140,255,.3);}
+.badge.dim{background:rgba(190,190,200,.09);color:#c6c6d2;border-color:rgba(190,190,200,.16);}
+.btn-gold{position:relative;background:var(--grad);color:#fff;border:none;font-weight:700;box-shadow:inset 0 1px 0 rgba(255,255,255,.3),0 2px 4px rgba(0,0,0,.25),0 8px 22px rgba(124,92,255,.38);}
+.btn-block{width:100%;}
+
+/* ---------- device chrome (ours — the frame around the real UI, not part of the app) ---------- */
+.rp-devices{display:flex;gap:40px;align-items:flex-start;justify-content:center;flex-wrap:wrap;}
+.rp-mac{width:min(680px,100%);border-radius:14px;overflow:hidden;background:#0b0b0f;border:1px solid var(--border-2);box-shadow:0 40px 100px rgba(0,0,0,.65);}
+.rp-mac-bar{display:flex;align-items:center;gap:7px;padding:11px 14px;background:#15151b;border-bottom:1px solid var(--border);}
+.rp-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;}
+.rp-dot.r{background:#ff5f57;} .rp-dot.y{background:#febc2e;} .rp-dot.g{background:#28c840;}
+.rp-mac-url{margin:0 auto;font-size:11px;color:var(--text-faint);font-family:'Geist Mono',monospace;}
+.rp-mac-screen{background:var(--bg);max-height:520px;overflow:hidden;}
+.rp-phone{width:300px;flex-shrink:0;border-radius:44px;background:linear-gradient(180deg,#1c1c23,#0b0b0f);border:1px solid var(--border-2);box-shadow:0 30px 80px rgba(0,0,0,.6),0 0 0 8px rgba(255,255,255,.03);padding:14px 10px;position:relative;}
+.rp-phone-notch{position:absolute;top:14px;left:50%;transform:translateX(-50%);width:90px;height:22px;background:#0b0b0f;border-radius:0 0 16px 16px;z-index:2;}
+.rp-phone-screen{border-radius:32px;background:var(--bg);border:1px solid var(--border);overflow:hidden;position:relative;height:600px;}
+.rp-caption{text-align:center;font-size:12.5px;color:var(--text-faint);margin-top:24px;max-width:560px;margin-left:auto;margin-right:auto;}
+@media(max-width:760px){.rp-mac{display:none;}}
+
 </style>
 </head>
 <body>
@@ -282,27 +341,87 @@ footer a:hover{color:var(--text);}
 </header>
 
 <section id="showcase"><div class="wrap">
-  <div class="center rv"><div class="eyebrow">Live showcase</div>
-  <h2 class="sec-title">Tap through the actual panel</h2>
-  <p class="sec-sub">This is a working replica of the caller app — same screens, same buttons, same flow your team gets. Use the bottom navigation to move around.</p></div>
-  <div class="demo-wrap rv">
-    <div class="phone demo"><div class="screen">
-      <div class="mock-top"><span class="mock-brand" id="dTitle">Your Panel</span><span class="mock-chip" id="dChip">CLOCKED IN 03:41:22</span></div>
-      <div class="mock-body" id="dBody"></div>
-      <div class="mock-nav">
-        <button class="mnav on" data-s="queue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span>Queue</span></button>
-        <button class="mnav" data-s="call"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.9v3a2 2 0 01-2.2 2 19.8 19.8 0 01-8.6-3 19.5 19.5 0 01-6-6 19.8 19.8 0 01-3-8.7A2 2 0 014.1 2h3a2 2 0 012 1.7c.1 1 .4 2 .7 2.8a2 2 0 01-.4 2.1L8.1 9.9a16 16 0 006 6l1.3-1.3a2 2 0 012.1-.4c.9.3 1.9.5 2.8.7a2 2 0 011.7 2z"/></svg><span>On Call</span></button>
-        <button class="mnav" data-s="chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg><span>Chat</span></button>
-        <button class="mnav" data-s="admin"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg><span>Admin</span></button>
+  <div class="center rv"><div class="eyebrow">This is the actual product</div>
+  <h2 class="sec-title">Not a mockup. The real interface.</h2>
+  <p class="sec-sub">Every class, colour and pixel below is lifted straight from the live app — the admin dashboard as it looks on a laptop, the caller queue as it looks on a phone.</p></div>
+  <div class="rp-devices rv">
+    <div class="rp-mac">
+      <div class="rp-mac-bar"><span class="rp-dot r"></span><span class="rp-dot y"></span><span class="rp-dot g"></span><span class="rp-mac-url">clearpanel.up.railway.app/app</span></div>
+      <div class="rp-mac-screen">
+        <div class="admin-shell">
+          <div class="admin-sidebar">
+            <div class="side-link active"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg> Dashboard</div>
+            <div class="side-sec">Leads</div>
+            <div class="side-link"><svg class="ic" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r="1.2" fill="currentColor" stroke="none"/><circle cx="3.5" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="3.5" cy="18" r="1.2" fill="currentColor" stroke="none"/></svg> All Leads</div>
+            <div class="side-link"><svg class="ic" viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M4 20h16"/></svg> Import</div>
+            <div class="side-link"><svg class="ic" viewBox="0 0 24 24"><path d="M5 21V4M5 5h13l-3 4 3 4H5"/></svg> Lead Vault</div>
+            <div class="side-sec">Team</div>
+            <div class="side-link"><svg class="ic" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><circle cx="17.5" cy="9" r="2.6"/><path d="M15.5 14.2c2.7.3 4.7 2.3 5.5 4.8"/></svg> Roster</div>
+            <div class="side-link"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/></svg> Leaderboard</div>
+            <div class="side-link"><svg class="ic" viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4V5z"/></svg> Team Chat</div>
+            <div class="side-sec">Configuration</div>
+            <div class="side-link"><svg class="ic" viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7V3z"/><path d="M14 3v5h5M9 12h6M9 16h6"/></svg> Scripts</div>
+            <div class="side-link"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg> Branding</div>
+          </div>
+          <div class="admin-main">
+            <div class="topbar">
+              <div class="brand"><div class="brand-mark"></div>ClearPanel <span class="mono" style="color:var(--text-faint);font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;margin-left:6px;display:inline-flex;align-items:center;gap:5px;"><span style="width:5px;height:5px;border-radius:50%;background:var(--success);box-shadow:0 0 0 0 rgba(34,197,94,.55);animation:liveDotPulse 2.2s ease-out infinite;"></span>Control Room</span></div>
+              <div class="topbar-actions"><div class="icon-btn"><svg class="ic" viewBox="0 0 24 24"><path d="M6 10a6 6 0 1112 0c0 5 2 6 2 6H4s2-1 2-6z"/><path d="M10 20a2 2 0 004 0"/></svg></div></div>
+            </div>
+            <div class="admin-content">
+              <div class="stat-grid">
+                <div class="stat-box panel accent"><div class="num">1,842</div><div class="lbl">Total Leads</div></div>
+                <div class="stat-box panel"><div class="num">214</div><div class="lbl">Not Called</div></div>
+                <div class="stat-box panel"><div class="num" style="display:inline-block;">6</div><span class="live-dot"></span><div class="lbl">On Call Now</div></div>
+                <div class="stat-box panel"><div class="num">37</div><div class="lbl">Successful</div></div>
+              </div>
+              <div class="section-title">Recent Leads</div>
+              <div class="panel p" style="padding:0;overflow:hidden;">
+                <table style="width:100%;border-collapse:collapse;font-size:12.5px;">
+                  <tr style="border-bottom:1px solid var(--border);"><td style="padding:11px 16px;">Margaret W.</td><td style="padding:11px 0;"><span class="badge ok">Successful</span></td></tr>
+                  <tr style="border-bottom:1px solid var(--border);"><td style="padding:11px 16px;">Derek H.</td><td style="padding:11px 0;"><span class="badge warn">Attempted · 2</span></td></tr>
+                  <tr><td style="padding:11px 16px;">Sandra P.</td><td style="padding:11px 0;"><span class="badge gold">Callback 2PM</span></td></tr>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
-    </div></div>
-    <div class="demo-notes">
-      <div class="dn rv" data-for="queue"><b>The queue feeds itself.</b> Leads arrive as claim cards — bank category, masked number, attempt history. Retried leads show exactly what happened last time; after 3 failed attempts a lead leaves the floor entirely until an admin recirculates it. Due callbacks pin to the top at the right moment.</div>
-      <div class="dn rv" data-for="call"><b>One tap ends every call.</b> The outcome grid is mandatory — a caller physically cannot move on without logging a result, so your data has no holes. Callbacks get a date picker; XP lands instantly.</div>
-      <div class="dn rv" data-for="chat"><b>Floor talk, two channels.</b> Team chat for the room (with disappearing messages), and Direct — true end-to-end encrypted DMs sealed on the device. The server only ever relays ciphertext.</div>
-      <div class="dn rv" data-for="admin"><b>The admin sees everything.</b> Live dashboard, bulk lead actions, callback + stale-lead views, one-tap maintenance banner to every caller, Telegram broadcasts, and the AI script writer on higher tiers.</div>
+    </div>
+    <div class="rp-phone">
+      <div class="rp-phone-notch"></div>
+      <div class="rp-phone-screen">
+        <div class="topbar" style="padding:20px 16px 12px;">
+          <div class="brand"><div class="brand-mark"></div>ClearPanel</div>
+          <div class="topbar-actions">
+            <div class="icon-btn" style="width:32px;height:32px;"><svg class="ic" viewBox="0 0 24 24"><path d="M6 10a6 6 0 1112 0c0 5 2 6 2 6H4s2-1 2-6z"/><path d="M10 20a2 2 0 004 0"/></svg></div>
+            <button class="clock-toggle"><span class="clock-dot"></span>04:12:08</button>
+          </div>
+        </div>
+        <div class="staff-body" style="padding:14px 12px 90px;">
+          <div class="panel p" style="padding:13px;margin-bottom:10px;">
+            <span style="font-size:9px;font-weight:800;letter-spacing:.1em;color:var(--success);text-transform:uppercase;">New Lead</span>
+            <b style="font-size:14px;display:block;margin:4px 0 2px;">Margaret W.</b>
+            <span class="mono" style="font-size:11px;color:var(--text-faint);">+44 7911 ••• •38</span>
+            <div class="btn btn-gold btn-block" style="margin-top:10px;padding:10px;text-align:center;font-size:12.5px;">Claim &amp; Call</div>
+          </div>
+          <div class="panel p" style="padding:13px;">
+            <span style="font-size:9px;font-weight:800;letter-spacing:.1em;color:var(--gold-bright);text-transform:uppercase;">Called 1 time — no success yet</span>
+            <b style="font-size:14px;display:block;margin:4px 0 2px;">Derek H.</b>
+            <span class="mono" style="font-size:11px;color:var(--text-faint);">+44 7700 ••• •92</span>
+            <div style="margin-top:8px;"><span class="badge dim">Last: Voicemail</span></div>
+          </div>
+        </div>
+        <div class="bottom-nav" style="position:absolute;">
+          <button class="nav-btn active"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>Queue</button>
+          <button class="nav-btn"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.9v3a2 2 0 01-2.2 2 19.8 19.8 0 01-8.6-3 19.5 19.5 0 01-6-6 19.8 19.8 0 01-3-8.7A2 2 0 014.1 2h3a2 2 0 012 1.7c.1 1 .4 2 .7 2.8a2 2 0 01-.4 2.1L8.1 9.9a16 16 0 006 6l1.3-1.3a2 2 0 012.1-.4c.9.3 1.9.5 2.8.7a2 2 0 011.7 2z"/></svg>Call</button>
+          <button class="nav-btn"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16v11H8l-4 4V5z"/></svg>Chat</button>
+          <button class="nav-btn"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/></svg>Board</button>
+        </div>
+      </div>
     </div>
   </div>
+  <div class="rp-caption rv">Left: the admin dashboard, widescreen, exactly as it renders on a laptop. Right: the caller queue on a phone. Same CSS, same components — no separate design was made for this page.</div>
 </div></section>
 
 <section id="guide"><div class="wrap">
@@ -368,30 +487,59 @@ footer a:hover{color:var(--text);}
   <div class="plans plans-5">
     <div class="plan rv panel-card"><div class="dur">3 days</div><div class="price"><small>£</small>${P.d3}</div><div class="per">The trial run</div><ul>
       <li>${TICK}Smart lead queue + attempt caps</li>
-      <li>${TICK}One-tap outcomes &amp; callbacks</li>
+      <li>${TICK}One-tap mandatory outcomes &amp; callbacks</li>
       <li>${TICK}Team chat + E2E encrypted DMs</li>
       <li>${TICK}XP ranks &amp; leaderboard</li>
       <li>${TICK}Bulk import + bank categories</li>
       <li>${TICK}Telegram-verified staff &amp; clock-in</li>
+      <li>${TICK}Unlimited callers &amp; leads</li>
     </ul><a class="btn btn-ghost" href="${B.d3}" target="_blank" rel="noopener">Get 3 Days</a></div>
     <div class="plan rv panel-card"><div class="dur">7 days</div><div class="price"><small>£</small>${P.d7}</div><div class="per">A full working week</div><ul>
-      <li class="inherit">Everything in 3 Day</li>
-      <li>${TICK}Your own Telegram bot for your floor</li>
-      <li>${TICK}Better per-day rate</li>
+      <li>${TICK}Smart lead queue + attempt caps</li>
+      <li>${TICK}One-tap mandatory outcomes &amp; callbacks</li>
+      <li>${TICK}Team chat + E2E encrypted DMs</li>
+      <li>${TICK}XP ranks &amp; leaderboard</li>
+      <li>${TICK}Bulk import + bank categories</li>
+      <li>${TICK}Telegram-verified staff &amp; clock-in</li>
+      <li>${TICK}Unlimited callers &amp; leads</li>
+      <li>${TICK}Your own dedicated Telegram bot</li>
     </ul><a class="btn btn-ghost" href="${B.d7}" target="_blank" rel="noopener">Get 7 Days</a></div>
     <div class="plan hot rv panel-card"><span class="plan-tag">Most popular</span><div class="dur">14 days</div><div class="price"><small>£</small>${P.d14}</div><div class="per">Two weeks, AI included</div><ul>
-      <li class="inherit">Everything in 7 Day</li>
-      <li>${TICK}AI script writer — full scripts with objection handling in seconds</li>
+      <li>${TICK}Smart lead queue + attempt caps</li>
+      <li>${TICK}One-tap mandatory outcomes &amp; callbacks</li>
+      <li>${TICK}Team chat + E2E encrypted DMs</li>
+      <li>${TICK}XP ranks &amp; leaderboard</li>
+      <li>${TICK}Bulk import + bank categories</li>
+      <li>${TICK}Telegram-verified staff &amp; clock-in</li>
+      <li>${TICK}Unlimited callers &amp; leads</li>
+      <li>${TICK}Your own dedicated Telegram bot</li>
+      <li>${TICK}AI script writer with objection handling</li>
     </ul><a class="btn btn-grad" href="${B.d14}" target="_blank" rel="noopener">Get 14 Days</a></div>
     <div class="plan rv panel-card"><div class="dur">30 days</div><div class="price"><small>£</small>${P.d30}</div><div class="per">The serious floor</div><ul>
-      <li class="inherit">Everything in 14 Day</li>
-      <li>${TICK}Telephony &amp; IVR — inbound routing, Twilio / Telnyx</li>
-      <li>${TICK}Best per-day rate of the timed tiers</li>
+      <li>${TICK}Smart lead queue + attempt caps</li>
+      <li>${TICK}One-tap mandatory outcomes &amp; callbacks</li>
+      <li>${TICK}Team chat + E2E encrypted DMs</li>
+      <li>${TICK}XP ranks &amp; leaderboard</li>
+      <li>${TICK}Bulk import + bank categories</li>
+      <li>${TICK}Telegram-verified staff &amp; clock-in</li>
+      <li>${TICK}Unlimited callers &amp; leads</li>
+      <li>${TICK}Your own dedicated Telegram bot</li>
+      <li>${TICK}AI script writer with objection handling</li>
+      <li>${TICK}Telephony &amp; IVR — Twilio / Telnyx routing</li>
     </ul><a class="btn btn-ghost" href="${B.d30}" target="_blank" rel="noopener">Get 30 Days</a></div>
     <div class="plan life rv panel-card"><span class="plan-tag">Own it</span><div class="dur">Lifetime</div><div class="price"><small>£</small>${P.life}</div><div class="per">One key. Never expires.</div><ul>
-      <li class="inherit">Everything in 30 Day</li>
+      <li>${TICK}Smart lead queue + attempt caps</li>
+      <li>${TICK}One-tap mandatory outcomes &amp; callbacks</li>
+      <li>${TICK}Team chat + E2E encrypted DMs</li>
+      <li>${TICK}XP ranks &amp; leaderboard</li>
+      <li>${TICK}Bulk import + bank categories</li>
+      <li>${TICK}Telegram-verified staff &amp; clock-in</li>
+      <li>${TICK}Unlimited callers &amp; leads</li>
+      <li>${TICK}Your own dedicated Telegram bot</li>
+      <li>${TICK}AI script writer with objection handling</li>
+      <li>${TICK}Telephony &amp; IVR — Twilio / Telnyx routing</li>
       <li>${TICK}Panel never expires — no renewals, ever</li>
-      <li>${TICK}Every future feature included</li>
+      <li>${TICK}Every future feature, automatically included</li>
     </ul><a class="btn btn-grad" href="${B.life}" target="_blank" rel="noopener">Get Lifetime</a></div>
   </div>
 </div></section>

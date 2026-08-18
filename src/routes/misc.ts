@@ -487,6 +487,13 @@ misc.post('/api/admin/telephony-config/test-call', requireRole('admin'), async (
   }
 });
 
+misc.get('/api/admin/access-status', requireRole('admin'), async (c) => {
+  const user = c.get('user');
+  const [t] = await sql`SELECT slug, expires_at, is_self FROM tenants WHERE id = ${user.tenant_id}`;
+  if (!t || t.is_self) return c.json({ data: { renewable: false } });
+  return c.json({ data: { renewable: true, slug: t.slug, expires_at: t.expires_at } });
+});
+
 misc.get('/api/branding', async (c) => {
   // Resolve tenant from: 1) authenticated user, 2) slug query. Only fall back to
   // the global (self-tenant) name when NO specific tenant was resolved — otherwise

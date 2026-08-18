@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { sql } from '../db';
 import { requireMaster } from './telegram';
+import { dbRateLimit } from '../ratelimit';
 
 export const tenancy = new Hono();
 
@@ -152,6 +153,49 @@ tenancy.post('/api/redeem', async (c) => {
       referral_credited: referralCredited,
     },
   });
+});
+
+// Renew an EXISTING panel with a freshly-bought key, instead of spinning up a
+// new tenant. This is the recovery path when access has run out — same panel,
+// same leads, same callers, same URL, just more time. Identity is proved by
+// the tenant's own admin PIN (not a login session), because a session may
+// already be dead by the time someone's key has expired — this has to work
+// precisely when normal auth doesn't.
+tenancy.post('/api/tenant/renew', async (c) => {
+  const { slug, admin_pin, key } = await c.req.json().catch(() => ({} as any));
+  if (!slug || !admin_pin || !key) return c.json({ error: 'Panel, admin PIN, and key are all required' }, 400);
+
+  const ip = c.req.header('x-forwarded-for')?.split(',')[0]?.trim() || c.req.header('x-real-ip') || 'unknown';
+  const rl = await dbRateLimit(`renew:${ip}:${slug}`, { windowMs: 60_000, max: 8, blockMs: 300_000 });
+  if (rl.limited) return c.json({ error: `Too many attempts. Try again in ${rl.retryAfter}s.` }, 429);
+
+  const [tenant] = await sql`SELECT * FROM tenants WHERE slug = ${String(slug).toLowerCase().trim()}`;
+  if (!tenant) return c.json({ error: 'Panel not found' }, 404);
+  if (tenant.is_self) return c.json({ error: 'This panel cannot be renewed this way' }, 403);
+  if (tenant.status === 'terminated') return c.json({ error: tenant.termination_reason ? `This panel has been terminated: ${tenant.termination_reason}` : 'This panel has been terminated. Contact whoever set this up.' }, 403);
+
+  const [admin] = await sql`SELECT id, name FROM users WHERE tenant_id = ${tenant.id} AND role = 'admin' AND pin = ${String(admin_pin).trim()}`;
+  if (!admin) return c.json({ error: 'Incorrect admin PIN for this panel' }, 401);
+
+  const keyCode = String(key).toUpperCase().trim();
+  const [claimedKey] = await sql`UPDATE license_keys SET redeemed = true, redeemed_at = now() WHERE key_code = ${keyCode} AND redeemed = false RETURNING *`;
+  if (!claimedKey) return c.json({ error: 'Invalid or already-redeemed key' }, 400);
+
+  const isLifetime = claimedKey.days >= 3650;
+  // Extend from whichever is later: the current expiry (still-active top-up
+  // stacks on top of remaining time) or now (a lapsed panel starts counting
+  // fresh from the moment of renewal). A lifetime key wins outright.
+  const base = (!isLifetime && tenant.expires_at && new Date(tenant.expires_at) > new Date()) ? new Date(tenant.expires_at) : new Date();
+  const newExpiry = isLifetime ? null : new Date(base.getTime() + claimedKey.days * 24 * 60 * 60 * 1000);
+  // Tier-gated features (own bot, AI writer, telephony) are keyed off plan_days —
+  // a renewal should never take features away, only add. NULL stays NULL
+  // (unrestricted, e.g. a panel that started on an old ungated key).
+  const newPlanDays = tenant.plan_days == null ? null : Math.max(tenant.plan_days, claimedKey.days);
+
+  const [updated] = await sql`UPDATE tenants SET status = 'active', expires_at = ${newExpiry}, plan_days = ${newPlanDays}, terminated_at = NULL, termination_reason = NULL WHERE id = ${tenant.id} RETURNING *`;
+  await sql`UPDATE license_keys SET redeemed_by_tenant_id = ${tenant.id} WHERE id = ${claimedKey.id}`;
+
+  return c.json({ data: { slug: updated.slug, tenant_name: updated.name, expires_at: updated.expires_at, plan_label: claimedKey.plan } });
 });
 
 
