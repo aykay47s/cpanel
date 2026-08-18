@@ -228,6 +228,26 @@ tenancy.post('/api/master/tenants/:id/reactivate', requireMaster, async (c) => {
   return c.json({ ok: true });
 });
 
+// Operator "add days" — comp time onto a tenant directly, no key burned.
+// Stacks on top of the current expiry when still in the future, or starts
+// counting fresh from now when already lapsed (same math as renewal), and
+// revives an 'expired' panel in the process. Lifetime panels (expires_at
+// NULL) have nothing to extend.
+tenancy.post('/api/master/tenants/:id/extend', requireMaster, async (c) => {
+  const id = parseInt(c.req.param('id'), 10);
+  const { days } = await c.req.json().catch(() => ({}));
+  const d = parseInt(days, 10);
+  if (!d || d < 1 || d > 3650) return c.json({ error: 'Enter days between 1 and 3650' }, 400);
+  const [tenant] = await sql`SELECT * FROM tenants WHERE id = ${id}`;
+  if (!tenant) return c.json({ error: 'Tenant not found' }, 404);
+  if (tenant.status === 'terminated') return c.json({ error: 'Reactivate this panel first, then add days' }, 400);
+  if (!tenant.expires_at) return c.json({ error: 'This panel never expires — nothing to extend' }, 400);
+  const base = new Date(tenant.expires_at) > new Date() ? new Date(tenant.expires_at) : new Date();
+  const newExpiry = new Date(base.getTime() + d * 24 * 60 * 60 * 1000);
+  const [updated] = await sql`UPDATE tenants SET expires_at = ${newExpiry}, status = 'active' WHERE id = ${id} RETURNING expires_at`;
+  return c.json({ data: { expires_at: updated.expires_at } });
+});
+
 // ============================================================================
 // MASTER: Full platform stats
 // ============================================================================

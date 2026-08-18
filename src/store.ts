@@ -19,6 +19,13 @@ export function STORE_PAGE(cfg: StoreConfig | string, opts: { autoRedirect?: boo
   const P = config.prices;
   const B = config.buyUrls;
   const TICK = '<span class="plan-tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.2"><path d="M20 6L9 17l-5-5"/></svg></span>';
+  // Per-day framing, computed from whatever the operator actually set — shown
+  // only when the price parses as a number, silently omitted otherwise.
+  const perDay = (price: string, days: number): string => {
+    const n = parseFloat(String(price).replace(/[^0-9.]/g, ''));
+    if (!isFinite(n) || n <= 0) return '';
+    return '<span class="per-day">\u2248 \u00a3' + (n / days).toFixed(2) + ' / day</span>';
+  };
   // If a logged-in panel user lands on the store (their PWA start_url or an old
   // bookmark), bounce them straight to the panel — they came here to work.
   const redirectScript = opts.autoRedirect
@@ -261,6 +268,94 @@ footer .flinks{display:flex;gap:20px;}
 footer a:hover{color:var(--text);}
 
 /* ================================================================
+   PHENOMENAL WAVE — motion, interactivity, persuasion sections
+   ================================================================ */
+/* scroll progress bar */
+.scroll-progress{position:fixed;top:0;left:0;height:2px;background:var(--grad);z-index:100;width:0;box-shadow:0 0 12px rgba(124,92,255,.6);transition:width .1s linear;}
+
+/* staggered reveals */
+.rv{opacity:0;transform:translateY(28px);transition:opacity .8s var(--ease-smooth),transform .8s var(--ease-smooth);}
+.rv.in{opacity:1;transform:none;}
+.stagger > .rv:nth-child(2){transition-delay:.08s;}
+.stagger > .rv:nth-child(3){transition-delay:.16s;}
+.stagger > .rv:nth-child(4){transition-delay:.24s;}
+.stagger > .rv:nth-child(5){transition-delay:.32s;}
+
+/* animated gradient headline */
+.grad-text{background:linear-gradient(120deg,var(--violet-bright),var(--gold-bright),var(--violet-bright));background-size:220% 100%;-webkit-background-clip:text;background-clip:text;color:transparent;animation:gradSweep 5.5s ease-in-out infinite;}
+@keyframes gradSweep{0%,100%{background-position:0% 50%;}50%{background-position:100% 50%;}}
+
+/* hero live ticker (clearly a demo simulation) */
+.ticker-wrap{max-width:520px;margin:34px auto 0;border-radius:var(--r-full);background:rgba(255,255,255,.035);border:1px solid var(--border-2);padding:9px 18px;display:flex;align-items:center;gap:11px;overflow:hidden;box-shadow:inset 0 1px 0 rgba(255,255,255,.05);}
+.ticker-dot{width:7px;height:7px;border-radius:50%;background:var(--success);box-shadow:0 0 8px var(--success);animation:pulse 2s infinite;flex-shrink:0;}
+.ticker-label{font-size:9.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--text-faint);flex-shrink:0;}
+.ticker-msg{font-size:12.5px;color:var(--text-dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;opacity:1;transition:opacity .35s ease,transform .35s ease;}
+.ticker-msg.swap{opacity:0;transform:translateY(8px);}
+.ticker-msg b{color:var(--text);font-weight:600;}
+
+/* trust strip */
+.trust-strip{display:flex;justify-content:center;gap:34px;flex-wrap:wrap;padding:22px 0 0;}
+.trust-item{display:flex;align-items:center;gap:9px;font-size:12.5px;color:var(--text-dim);font-weight:500;}
+.trust-item svg{width:15px;height:15px;color:#5eeaa0;flex-shrink:0;}
+
+/* cursor spotlight on cards */
+.spot{position:relative;overflow:hidden;}
+.spot::after{content:'';position:absolute;inset:0;border-radius:inherit;opacity:0;transition:opacity .3s ease;background:radial-gradient(340px circle at var(--mx,50%) var(--my,50%),rgba(124,92,255,.12),transparent 65%);pointer-events:none;}
+.spot:hover::after{opacity:1;}
+
+/* device tilt */
+.tilt{transform-style:preserve-3d;will-change:transform;}
+
+/* comparison: old way vs clearpanel */
+.vs-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;max-width:840px;margin:0 auto;}
+@media(max-width:700px){.vs-grid{grid-template-columns:1fr;}}
+.vs-col{padding:28px 26px;}
+.vs-col.bad{border-color:rgba(239,68,68,.22);background:linear-gradient(155deg,rgba(45,25,28,.5),rgba(20,19,30,.9) 62%);}
+.vs-col.good{border-color:rgba(79,140,255,.4);}
+.vs-head{display:flex;align-items:center;gap:10px;font-family:'Bricolage Grotesque';font-size:16px;font-weight:700;margin-bottom:18px;}
+.vs-head .vsic{width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.vs-col.bad .vsic{background:rgba(239,68,68,.14);color:#ff8f8a;}
+.vs-col.good .vsic{background:rgba(79,140,255,.14);color:var(--gold-bright);}
+.vs-head .vsic svg{width:15px;height:15px;}
+.vs-row{display:flex;gap:10px;padding:9px 0;font-size:13px;color:var(--text-dim);line-height:1.5;border-bottom:1px solid var(--border);}
+.vs-row:last-child{border-bottom:none;}
+.vs-row svg{width:14px;height:14px;flex-shrink:0;margin-top:3px;}
+.vs-col.bad .vs-row svg{color:#ff8f8a;}
+.vs-col.good .vs-row svg{color:#5eeaa0;}
+.vs-col.good .vs-row{color:var(--text);}
+
+/* 60-second timeline */
+.tl{max-width:760px;margin:0 auto;position:relative;padding-left:34px;}
+.tl::before{content:'';position:absolute;left:11px;top:8px;bottom:8px;width:2px;background:linear-gradient(180deg,var(--violet-bright),var(--gold));border-radius:2px;opacity:.5;}
+.tl-item{position:relative;padding:0 0 26px;}
+.tl-item:last-child{padding-bottom:0;}
+.tl-item::before{content:'';position:absolute;left:-30px;top:4px;width:12px;height:12px;border-radius:50%;background:var(--grad);box-shadow:0 0 0 4px rgba(124,92,255,.15),0 0 12px rgba(124,92,255,.5);}
+.tl-time{font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--gold-bright);margin-bottom:4px;}
+.tl-item b{font-size:15px;display:block;margin-bottom:4px;}
+.tl-item p{font-size:13px;color:var(--text-dim);margin:0;max-width:520px;}
+
+/* per-day pricing hint */
+.per-day{display:inline-block;font-size:10px;font-weight:700;color:var(--gold-bright);background:rgba(79,140,255,.1);border:1px solid rgba(79,140,255,.25);padding:3px 9px;border-radius:var(--r-full);margin-top:6px;}
+
+/* count-up targets */
+.cnt{font-variant-numeric:tabular-nums;}
+
+/* sticky mini CTA after pricing scroll-past */
+.mini-cta{position:fixed;bottom:18px;left:50%;transform:translateX(-50%) translateY(90px);z-index:90;display:flex;align-items:center;gap:14px;padding:10px 12px 10px 20px;border-radius:var(--r-full);background:rgba(12,12,18,.88);backdrop-filter:blur(14px) saturate(1.4);-webkit-backdrop-filter:blur(14px) saturate(1.4);border:1px solid var(--border-2);box-shadow:0 16px 50px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.08);transition:transform .45s var(--ease-spring);white-space:nowrap;}
+.mini-cta.on{transform:translateX(-50%) translateY(0);}
+.mini-cta span{font-size:12.5px;color:var(--text-dim);font-weight:500;}
+.mini-cta span b{color:var(--text);}
+@media(max-width:520px){.mini-cta span{display:none;}.mini-cta{padding:8px;}}
+
+@media(prefers-reduced-motion:reduce){
+  .grad-text{animation:none;}
+  .rv{transition-duration:.01s;}
+  .ticker-msg{transition:none;}
+  .mini-cta{transition:none;}
+}
+
+
+/* ================================================================
    REAL PANEL CSS — copied verbatim from src/frontend.ts so the
    showcase below is not a recreation but the actual component code
    the live app ships. Class names are intentionally identical.
@@ -334,7 +429,7 @@ footer a:hover{color:var(--text);}
 <nav><div class="wrap nav-in">
   <a class="brand" href="/"><img src="/clearpanel-logo.png" alt=""><span class="wordmark">ClearPanel</span></a>
   <div class="nav-links">
-    <a href="#showcase">Showcase</a><a href="#guide">Guide</a><a href="#features">Features</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a>
+    <a href="#showcase">Showcase</a><a href="#guide">Guide</a><a href="#vs">Why Switch</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a>
   </div>
   <div class="nav-cta">
     <a class="btn btn-ghost" href="/login">Panel Login</a>
@@ -342,6 +437,7 @@ footer a:hover{color:var(--text);}
   </div>
 </div></nav>
 
+<div class="scroll-progress" id="scrollProgress"></div>
 <header class="hero wrap">
   <div class="pill"><span class="dot"></span>Panels activate instantly — no setup calls, no waiting</div>
   <h1>Run your call floor<br><span class="grad-text">like a machine.</span></h1>
@@ -350,10 +446,20 @@ footer a:hover{color:var(--text);}
     <a class="btn btn-grad btn-lg" href="#pricing">See Pricing</a>
     <a class="btn btn-ghost btn-lg" href="/redeem">I Have a Key</a>
   </div>
-  <div class="hero-stats">
-    <div class="hstat"><b>&lt; 60s</b><span>from key to live panel</span></div>
-    <div class="hstat"><b>1-tap</b><span>call outcomes &amp; callbacks</span></div>
-    <div class="hstat"><b>E2E</b><span>encrypted direct messages</span></div>
+  <div class="hero-stats stagger">
+    <div class="hstat rv"><b class="cnt" data-to="60" data-prefix="&lt; " data-suffix="s">&lt; 60s</b><span>from key to live panel</span></div>
+    <div class="hstat rv"><b>1-tap</b><span>call outcomes &amp; callbacks</span></div>
+    <div class="hstat rv"><b>E2E</b><span>encrypted direct messages</span></div>
+    <div class="hstat rv"><b class="cnt" data-to="11" data-suffix=" ranks">11 ranks</b><span>Seed to Legend, XP-driven</span></div>
+  </div>
+  <div class="ticker-wrap">
+    <span class="ticker-dot"></span><span class="ticker-label">Demo floor</span>
+    <span class="ticker-msg" id="tickerMsg"><b>Jamie</b> claimed a fresh lead from the queue</span>
+  </div>
+  <div class="trust-strip">
+    <div class="trust-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M13 2L4.5 13.5H11l-1 8.5L18.5 10H12l1-8z"/></svg>Keys delivered instantly at checkout</div>
+    <div class="trust-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M17 8h5M19.5 5.5v5"/></svg>Unlimited callers on every tier</div>
+    <div class="trust-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>Your data stays yours — renewals never reset anything</div>
   </div>
 </header>
 
@@ -362,14 +468,14 @@ footer a:hover{color:var(--text);}
   <h2 class="sec-title">Not a mockup. The real interface.</h2>
   <p class="sec-sub">Every class, colour and pixel below is lifted straight from the live app — the admin dashboard as it looks on a laptop, the caller queue as it looks on a phone.</p></div>
   <div class="rp-devices rv showcase-glow">
-    <div class="rp-mac">
+    <div class="rp-mac tilt">
       <div class="rp-mac-bar"><span class="rp-dot r"></span><span class="rp-dot y"></span><span class="rp-dot g"></span><span class="rp-mac-url">clearpanel.up.railway.app/app</span></div>
       <div class="rp-mac-screen">
         <div class="admin-shell">
           <div class="admin-sidebar">
-            <div class="side-link active"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg> Dashboard</div>
+            <div class="side-link active" data-rpm="dash" style="cursor:pointer;"><svg class="ic" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg> Dashboard</div>
             <div class="side-sec">Leads</div>
-            <div class="side-link"><svg class="ic" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r="1.2" fill="currentColor" stroke="none"/><circle cx="3.5" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="3.5" cy="18" r="1.2" fill="currentColor" stroke="none"/></svg> All Leads</div>
+            <div class="side-link" data-rpm="leads" style="cursor:pointer;"><svg class="ic" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13"/><circle cx="3.5" cy="6" r="1.2" fill="currentColor" stroke="none"/><circle cx="3.5" cy="12" r="1.2" fill="currentColor" stroke="none"/><circle cx="3.5" cy="18" r="1.2" fill="currentColor" stroke="none"/></svg> All Leads</div>
             <div class="side-link"><svg class="ic" viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M4 20h16"/></svg> Import</div>
             <div class="side-link"><svg class="ic" viewBox="0 0 24 24"><path d="M5 21V4M5 5h13l-3 4 3 4H5"/></svg> Lead Vault</div>
             <div class="side-sec">Team</div>
@@ -377,7 +483,7 @@ footer a:hover{color:var(--text);}
             <div class="side-link"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="5"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/></svg> Leaderboard</div>
             <div class="side-link"><svg class="ic" viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4V5z"/></svg> Team Chat</div>
             <div class="side-sec">Configuration</div>
-            <div class="side-link"><svg class="ic" viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7V3z"/><path d="M14 3v5h5M9 12h6M9 16h6"/></svg> Scripts</div>
+            <div class="side-link" data-rpm="scripts" style="cursor:pointer;"><svg class="ic" viewBox="0 0 24 24"><path d="M7 3h7l5 5v13H7V3z"/><path d="M14 3v5h5M9 12h6M9 16h6"/></svg> Scripts</div>
             <div class="side-link"><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2 12h3M19 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg> Branding</div>
           </div>
           <div class="admin-main">
@@ -385,7 +491,7 @@ footer a:hover{color:var(--text);}
               <div class="rp-brand"><div class="rp-brand-mark"><img src="/clearpanel-logo.png" alt="" /></div>ClearPanel <span class="mono" style="color:var(--text-faint);font-size:10px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;margin-left:6px;display:inline-flex;align-items:center;gap:5px;"><span style="width:5px;height:5px;border-radius:50%;background:var(--success);box-shadow:0 0 0 0 rgba(34,197,94,.55);animation:liveDotPulse 2.2s ease-out infinite;"></span>Control Room</span></div>
               <div class="topbar-actions"><div class="icon-btn"><svg class="ic" viewBox="0 0 24 24"><path d="M6 10a6 6 0 1112 0c0 5 2 6 2 6H4s2-1 2-6z"/><path d="M10 20a2 2 0 004 0"/></svg></div></div>
             </div>
-            <div class="admin-content">
+            <div class="admin-content" id="rpMacContent">
               <div class="stat-grid">
                 <div class="stat-box panel accent"><div class="num">1,842</div><div class="lbl">Total Leads</div></div>
                 <div class="stat-box panel"><div class="num">214</div><div class="lbl">Not Called</div></div>
@@ -405,7 +511,7 @@ footer a:hover{color:var(--text);}
         </div>
       </div>
     </div>
-    <div class="rp-phone">
+    <div class="rp-phone tilt">
       <div class="rp-phone-notch"></div>
       <div class="rp-phone-screen">
         <div class="topbar" style="padding:20px 16px 12px;">
@@ -462,8 +568,8 @@ footer a:hover{color:var(--text);}
   <div class="center rv"><div class="eyebrow">The full guide</div>
   <h2 class="sec-title">Exactly how your team runs on it</h2>
   <p class="sec-sub">From key to first dial, this is the complete workflow — the same steps your admin and callers follow in the real panel.</p></div>
-  <div class="guide-cols">
-    <div class="gcol rv">
+  <div class="guide-cols stagger">
+    <div class="gcol rv spot">
       <div class="gtag">Day zero — you</div>
       <div class="gstep"><i>1</i><div><b>Redeem your key</b><p>Enter it at the redeem page, name your call centre. Your panel spins up instantly at its own private URL with a fresh admin PIN — save both.</p></div></div>
       <div class="gstep"><i>2</i><div><b>Open your admin panel</b><p>Log in with the PIN. Brand it — your name and logo replace ours everywhere, including the app icon your callers install.</p></div></div>
@@ -471,7 +577,7 @@ footer a:hover{color:var(--text);}
       <div class="gstep"><i>4</i><div><b>Create your callers</b><p>Add each caller — every one gets their own PIN. Send them your panel link; they install it to their home screen like a native app.</p></div></div>
       <div class="gstep"><i>5</i><div><b>Drop in scripts</b><p>Write scripts per audience (opener / closer) — or on 14-day+ plans, describe the pitch and let the AI writer draft the full script with objection handling.</p></div></div>
     </div>
-    <div class="gcol rv">
+    <div class="gcol rv spot">
       <div class="gtag">Every day — your callers</div>
       <div class="gstep"><i>1</i><div><b>Log in &amp; verify</b><p>PIN in, Telegram-verified once via a 6-digit code — no anonymous accounts on your floor. Then clock in; the timer runs on screen.</p></div></div>
       <div class="gstep"><i>2</i><div><b>Claim from the queue</b><p>Due callbacks sit on top. Fresh leads first, retries labelled with their last outcome. One tap claims the lead and opens the call screen.</p></div></div>
@@ -479,7 +585,7 @@ footer a:hover{color:var(--text);}
       <div class="gstep"><i>4</i><div><b>Pass closes to a finisher</b><p>Successful calls flow to your finishing queue automatically, with every note attached — nothing lost in the handoff.</p></div></div>
       <div class="gstep"><i>5</i><div><b>Climb the ranks</b><p>Eleven tiers from Seed to Legend, a live leaderboard, celebration animations on closes. At day's end they clock out — and get reminded if they forget.</p></div></div>
     </div>
-    <div class="gcol rv">
+    <div class="gcol rv spot">
       <div class="gtag">All week — running the floor</div>
       <div class="gstep"><i>1</i><div><b>Watch it live</b><p>The dashboard counts everything in real time — uncalled, attempted, exhausted, successful, awaiting finishing — with call durations per lead.</p></div></div>
       <div class="gstep"><i>2</i><div><b>Work leads in bulk</b><p>Select any set of leads and assign, vault, reset or delete them together. The stale view surfaces anything untouched for N days.</p></div></div>
@@ -494,23 +600,59 @@ footer a:hover{color:var(--text);}
   <div class="center rv"><div class="eyebrow">Everything included</div>
   <h2 class="sec-title">Built for floors that actually dial</h2>
   <p class="sec-sub">Every panel ships with the full toolkit. No add-ons, no per-seat pricing, no feature gates.</p></div>
-  <div class="feat-grid">
-    <div class="feat rv panel-card"><div class="fic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div><h3>Smart lead queue</h3><p>Leads flow to callers automatically. Attempt caps stop dead numbers circulating, callbacks resurface at exactly the right time, and nothing gets called twice by accident.</p></div>
-    <div class="feat rv panel-card"><div class="fic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></div><h3>One-tap outcomes</h3><p>Successful, callback, voicemail, no answer — one tap logs it, awards XP and pulls the next lead. Outcomes are mandatory, so your data is never full of holes.</p></div>
-    <div class="feat rv panel-card"><div class="fic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.6 5.6 6 .7-4.5 4.1 1.2 5.9L12 15.4l-5.3 2.9 1.2-5.9L3.4 8.3l6-.7z"/></svg></div><h3>Ranks &amp; leaderboards</h3><p>Eleven rank tiers from Seed to Legend. XP for every logged call, live leaderboards, celebration animations on closes — your floor competes with itself.</p></div>
-    <div class="feat rv panel-card"><div class="fic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg></div><h3>Encrypted messaging</h3><p>Team chat with disappearing messages, plus true end-to-end encrypted DMs — sealed on the device, unreadable by the server. Your floor talk stays yours.</p></div>
-    <div class="feat rv panel-card"><div class="fic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2.5L2.8 9.7c-.9.35-.85 1.65.08 1.92l4.62 1.34 1.7 5.5c.27.87 1.4.98 1.85.18l2.3-4.1 4.9 3.6c.75.55 1.8.13 1.97-.78l3.1-13.3c.2-.9-.68-1.65-1.52-1.32z"/></svg></div><h3>Telegram-verified staff</h3><p>Every caller verifies through Telegram before they can dial. Clock-in tracking, clock-out reminders, and broadcast announcements straight to their phones.</p></div>
-    <div class="feat rv panel-card"><div class="fic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2M20 14h2M15 13v2M9 13v2"/></svg></div><h3>AI script writer</h3><p>Describe the pitch, pick the audience, get a full call script — opener, qualifying questions, objection handling and close — in seconds. Multi-provider failover keeps it up.</p></div>
+  <div class="feat-grid stagger">
+    <div class="feat rv panel-card spot"><div class="fic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div><h3>Smart lead queue</h3><p>Leads flow to callers automatically. Attempt caps stop dead numbers circulating, callbacks resurface at exactly the right time, and nothing gets called twice by accident.</p></div>
+    <div class="feat rv panel-card spot"><div class="fic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></div><h3>One-tap outcomes</h3><p>Successful, callback, voicemail, no answer — one tap logs it, awards XP and pulls the next lead. Outcomes are mandatory, so your data is never full of holes.</p></div>
+    <div class="feat rv panel-card spot"><div class="fic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.6 5.6 6 .7-4.5 4.1 1.2 5.9L12 15.4l-5.3 2.9 1.2-5.9L3.4 8.3l6-.7z"/></svg></div><h3>Ranks &amp; leaderboards</h3><p>Eleven rank tiers from Seed to Legend. XP for every logged call, live leaderboards, celebration animations on closes — your floor competes with itself.</p></div>
+    <div class="feat rv panel-card spot"><div class="fic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg></div><h3>Encrypted messaging</h3><p>Team chat with disappearing messages, plus true end-to-end encrypted DMs — sealed on the device, unreadable by the server. Your floor talk stays yours.</p></div>
+    <div class="feat rv panel-card spot"><div class="fic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2.5L2.8 9.7c-.9.35-.85 1.65.08 1.92l4.62 1.34 1.7 5.5c.27.87 1.4.98 1.85.18l2.3-4.1 4.9 3.6c.75.55 1.8.13 1.97-.78l3.1-13.3c.2-.9-.68-1.65-1.52-1.32z"/></svg></div><h3>Telegram-verified staff</h3><p>Every caller verifies through Telegram before they can dial. Clock-in tracking, clock-out reminders, and broadcast announcements straight to their phones.</p></div>
+    <div class="feat rv panel-card spot"><div class="fic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2M20 14h2M15 13v2M9 13v2"/></svg></div><h3>AI script writer</h3><p>Describe the pitch, pick the audience, get a full call script — opener, qualifying questions, objection handling and close — in seconds. Multi-provider failover keeps it up.</p></div>
   </div>
 </div></section>
 
 <section><div class="wrap">
   <div class="center rv"><div class="eyebrow">How it works</div>
   <h2 class="sec-title">Key to live panel in three steps</h2></div>
-  <div class="steps">
-    <div class="step rv panel-card"><h3>Buy an access key</h3><p>Pick a duration below. You get a one-time license key — yours to redeem whenever you're ready.</p></div>
-    <div class="step rv panel-card"><h3>Redeem it</h3><p>Enter the key, name your call centre, done. Your own panel spins up instantly with a fresh admin PIN.</p></div>
-    <div class="step rv panel-card"><h3>Add your floor</h3><p>Create callers, drop in leads, set your scripts. Your team logs in from any phone or laptop — nothing to install.</p></div>
+  <div class="steps stagger">
+    <div class="step rv panel-card spot"><h3>Buy an access key</h3><p>Pick a duration below. You get a one-time license key — yours to redeem whenever you're ready.</p></div>
+    <div class="step rv panel-card spot"><h3>Redeem it</h3><p>Enter the key, name your call centre, done. Your own panel spins up instantly with a fresh admin PIN.</p></div>
+    <div class="step rv panel-card spot"><h3>Add your floor</h3><p>Create callers, drop in leads, set your scripts. Your team logs in from any phone or laptop — nothing to install.</p></div>
+  </div>
+</div></section>
+
+<section id="vs"><div class="wrap">
+  <div class="center rv"><div class="eyebrow">Why floors switch</div>
+  <h2 class="sec-title">Spreadsheets were never built for this</h2>
+  <p class="sec-sub">Most floors run on a group chat, a shared sheet, and hope. Here is what that actually costs you.</p></div>
+  <div class="vs-grid stagger">
+    <div class="vs-col panel-card spot rv bad">
+      <div class="vs-head"><span class="vsic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M18 6L6 18M6 6l12 12"/></svg></span>The old way</div>
+      <div class="vs-row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M18 6L6 18M6 6l12 12"/></svg>Leads live in a sheet — two callers dial the same number, nobody notices</div>
+      <div class="vs-row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M18 6L6 18M6 6l12 12"/></svg>Outcomes logged "later" — which means never</div>
+      <div class="vs-row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M18 6L6 18M6 6l12 12"/></svg>Callbacks promised on calls, remembered by no one</div>
+      <div class="vs-row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M18 6L6 18M6 6l12 12"/></svg>You find out how the day went at the end of the day</div>
+      <div class="vs-row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M18 6L6 18M6 6l12 12"/></svg>New caller? An hour of walkthroughs and screenshots</div>
+    </div>
+    <div class="vs-col panel-card spot rv good">
+      <div class="vs-head"><span class="vsic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6L9 17l-5-5"/></svg></span>On ClearPanel</div>
+      <div class="vs-row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6L9 17l-5-5"/></svg>One queue, one claim — a lead can only ever be in one caller's hands</div>
+      <div class="vs-row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6L9 17l-5-5"/></svg>Outcomes are mandatory — the call literally cannot end without one</div>
+      <div class="vs-row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6L9 17l-5-5"/></svg>Callbacks resurface themselves at the right moment, pinned on top</div>
+      <div class="vs-row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6L9 17l-5-5"/></svg>Live dashboard — you watch the floor as it happens, not after</div>
+      <div class="vs-row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6L9 17l-5-5"/></svg>New caller gets a PIN and a link — dialing in two minutes</div>
+    </div>
+  </div>
+</div></section>
+
+<section id="sixty"><div class="wrap">
+  <div class="center rv"><div class="eyebrow">From checkout to first dial</div>
+  <h2 class="sec-title">Live in sixty seconds</h2>
+  <p class="sec-sub">No onboarding call. No sales demo. No waiting for access. The clock starts when you pay.</p></div>
+  <div class="tl">
+    <div class="tl-item rv"><div class="tl-time">0:00</div><b>Buy a key</b><p>Checkout takes card, PayPal or crypto. Your key is on screen the second payment clears — delivered automatically, no human in the loop.</p></div>
+    <div class="tl-item rv"><div class="tl-time">0:15</div><b>Redeem it</b><p>Paste the key, name your call centre. Your private panel spins up instantly at its own URL with a fresh admin PIN.</p></div>
+    <div class="tl-item rv"><div class="tl-time">0:35</div><b>Make it yours</b><p>Your name and logo replace ours everywhere — the login screen, the topbar, even the app icon your callers install.</p></div>
+    <div class="tl-item rv"><div class="tl-time">0:60</div><b>Load leads. Dial.</b><p>Paste your first batch, add a caller, send them the link. That's a working floor — inside a minute.</p></div>
   </div>
 </div></section>
 
@@ -518,8 +660,8 @@ footer a:hover{color:var(--text);}
   <div class="center rv"><div class="eyebrow">Pricing</div>
   <h2 class="sec-title">Pick your runway</h2>
   <p class="sec-sub">Unlimited callers and leads on every tier. Longer keys unlock more of the platform — and Lifetime unlocks all of it, forever.</p></div>
-  <div class="plans plans-5">
-    <div class="plan rv panel-card"><div class="plan-top"></div><div class="plan-in"><div class="dur">3 days</div><div class="price"><small>£</small>${P.d3}</div><div class="per">The trial run</div><ul>
+  <div class="plans plans-5 stagger">
+    <div class="plan rv panel-card spot"><div class="plan-top"></div><div class="plan-in"><div class="dur">3 days</div><div class="price"><small>£</small>${P.d3}</div><div class="per">The trial run</div>${perDay(P.d3, 3)}<ul>
       <li>${TICK}Smart lead queue + attempt caps</li>
       <li>${TICK}One-tap mandatory outcomes &amp; callbacks</li>
       <li>${TICK}Team chat + E2E encrypted DMs</li>
@@ -528,7 +670,7 @@ footer a:hover{color:var(--text);}
       <li>${TICK}Telegram-verified staff &amp; clock-in</li>
       <li>${TICK}Unlimited callers &amp; leads</li>
     </ul><a class="btn btn-ghost" href="${B.d3}" target="_blank" rel="noopener">Get 3 Days</a></div></div>
-    <div class="plan rv panel-card"><div class="plan-top"></div><div class="plan-in"><div class="dur">7 days</div><div class="price"><small>£</small>${P.d7}</div><div class="per">A full working week</div><ul>
+    <div class="plan rv panel-card spot"><div class="plan-top"></div><div class="plan-in"><div class="dur">7 days</div><div class="price"><small>£</small>${P.d7}</div><div class="per">A full working week</div>${perDay(P.d7, 7)}<ul>
       <li>${TICK}Smart lead queue + attempt caps</li>
       <li>${TICK}One-tap mandatory outcomes &amp; callbacks</li>
       <li>${TICK}Team chat + E2E encrypted DMs</li>
@@ -538,7 +680,7 @@ footer a:hover{color:var(--text);}
       <li>${TICK}Unlimited callers &amp; leads</li>
       <li>${TICK}Your own dedicated Telegram bot</li>
     </ul><a class="btn btn-ghost" href="${B.d7}" target="_blank" rel="noopener">Get 7 Days</a></div></div>
-    <div class="plan hot rv panel-card"><div class="plan-top"></div><span class="plan-tag">Most popular</span><div class="plan-in"><div class="dur">14 days</div><div class="price"><small>£</small>${P.d14}</div><div class="per">Two weeks, AI included</div><ul>
+    <div class="plan hot rv panel-card spot"><div class="plan-top"></div><span class="plan-tag">Most popular</span><div class="plan-in"><div class="dur">14 days</div><div class="price"><small>£</small>${P.d14}</div><div class="per">Two weeks, AI included</div>${perDay(P.d14, 14)}<ul>
       <li>${TICK}Smart lead queue + attempt caps</li>
       <li>${TICK}One-tap mandatory outcomes &amp; callbacks</li>
       <li>${TICK}Team chat + E2E encrypted DMs</li>
@@ -549,7 +691,7 @@ footer a:hover{color:var(--text);}
       <li>${TICK}Your own dedicated Telegram bot</li>
       <li>${TICK}AI script writer with objection handling</li>
     </ul><a class="btn btn-grad" href="${B.d14}" target="_blank" rel="noopener">Get 14 Days</a></div></div>
-    <div class="plan rv panel-card"><div class="plan-top"></div><div class="plan-in"><div class="dur">30 days</div><div class="price"><small>£</small>${P.d30}</div><div class="per">The serious floor</div><ul>
+    <div class="plan rv panel-card spot"><div class="plan-top"></div><div class="plan-in"><div class="dur">30 days</div><div class="price"><small>£</small>${P.d30}</div><div class="per">The serious floor</div>${perDay(P.d30, 30)}<ul>
       <li>${TICK}Smart lead queue + attempt caps</li>
       <li>${TICK}One-tap mandatory outcomes &amp; callbacks</li>
       <li>${TICK}Team chat + E2E encrypted DMs</li>
@@ -561,7 +703,7 @@ footer a:hover{color:var(--text);}
       <li>${TICK}AI script writer with objection handling</li>
       <li>${TICK}Telephony &amp; IVR — Twilio / Telnyx routing</li>
     </ul><a class="btn btn-ghost" href="${B.d30}" target="_blank" rel="noopener">Get 30 Days</a></div></div>
-    <div class="plan life rv panel-card"><div class="plan-top"></div><span class="plan-tag">Own it</span><div class="plan-in"><div class="dur">Lifetime</div><div class="price"><small>£</small>${P.life}</div><div class="per">One key. Never expires.</div><ul>
+    <div class="plan life rv panel-card spot"><div class="plan-top"></div><span class="plan-tag">Own it</span><div class="plan-in"><div class="dur">Lifetime</div><div class="price"><small>£</small>${P.life}</div><div class="per">One key. Never expires.</div><ul>
       <li>${TICK}Smart lead queue + attempt caps</li>
       <li>${TICK}One-tap mandatory outcomes &amp; callbacks</li>
       <li>${TICK}Team chat + E2E encrypted DMs</li>
@@ -601,6 +743,11 @@ footer a:hover{color:var(--text);}
   <span>ClearPanel</span>
   <div class="flinks"><a href="/login">Panel Login</a><a href="/redeem">Redeem</a><a href="/affiliate">Affiliates</a></div>
 </div></footer>
+
+<div class="mini-cta" id="miniCta">
+  <span>Your panel is <b>one key</b> away</span>
+  <a class="btn btn-grad" href="#pricing" style="padding:10px 20px;">Get Access</a>
+</div>
 
 <script>
 (function(){
@@ -643,8 +790,151 @@ footer a:hover{color:var(--text);}
     document.querySelectorAll('.rp-phone .nav-btn').forEach(function(b){ b.classList.toggle('active', b.getAttribute('data-rp') === key); });
   }
   document.querySelectorAll('.rp-phone .nav-btn').forEach(function(b){
-    b.addEventListener('click', function(){ showRpScreen(b.getAttribute('data-rp')); });
+    b.addEventListener('click', function(){ showRpScreen(b.getAttribute('data-rp')); _rpUserTouched = true; });
   });
+
+  // ---- mac window: sidebar tabs swap the admin content ----
+  var RPM_SCREENS = {
+    leads: '<div style="display:flex;gap:8px;margin-bottom:14px;align-items:center;">'
+      + '<span class="badge gold">4 selected</span>'
+      + '<span style="font-size:11px;color:var(--text-faint);font-weight:600;">Assign \u00b7 Vault \u00b7 Reset \u00b7 Delete</span></div>'
+      + '<div class="panel p" style="padding:0;overflow:hidden;">'
+      + '<table style="width:100%;border-collapse:collapse;font-size:12.5px;">'
+      + '<tr style="border-bottom:1px solid var(--border);"><td style="padding:11px 16px;">Margaret W.</td><td>Barclays</td><td style="padding:11px 0;"><span class="badge ok">Successful</span></td></tr>'
+      + '<tr style="border-bottom:1px solid var(--border);"><td style="padding:11px 16px;">Derek H.</td><td>HSBC</td><td style="padding:11px 0;"><span class="badge warn">Attempted \u00b7 2</span></td></tr>'
+      + '<tr style="border-bottom:1px solid var(--border);"><td style="padding:11px 16px;">Sandra P.</td><td>Lloyds</td><td style="padding:11px 0;"><span class="badge gold">Callback 2PM</span></td></tr>'
+      + '<tr style="border-bottom:1px solid var(--border);"><td style="padding:11px 16px;">Alan T.</td><td>Nationwide</td><td style="padding:11px 0;"><span class="badge dim">Not Called</span></td></tr>'
+      + '<tr><td style="padding:11px 16px;">Grace M.</td><td>Santander</td><td style="padding:11px 0;"><span class="badge dim">Max Attempts</span></td></tr>'
+      + '</table></div>',
+    scripts: '<div class="section-title" style="margin-top:0;">Script Library</div>'
+      + '<div class="panel p" style="padding:16px;margin-bottom:10px;">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><b style="font-size:13.5px;">Barclays Opener v3</b><span class="badge ok" style="font-size:9px;">Active</span></div>'
+      + '<p style="font-size:12px;color:var(--text-dim);margin:0;">Good afternoon, am I speaking with [name]? This is [caller] calling about your recent...</p></div>'
+      + '<div class="panel p" style="padding:16px;margin-bottom:10px;">'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><b style="font-size:13.5px;">HSBC Closer</b><span class="badge dim" style="font-size:9px;">Draft</span></div>'
+      + '<p style="font-size:12px;color:var(--text-dim);margin:0;">Perfect \u2014 so just to confirm what we have covered today...</p></div>'
+      + '<div style="display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--gold-bright);font-weight:600;padding:4px 2px;">'
+      + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M12 3l1.9 4.6L18.5 9l-4.6 1.9L12 15.5l-1.9-4.6L5.5 9l4.6-1.4z"/><path d="M18 14l.9 2.1L21 17l-2.1.9L18 20l-.9-2.1L15 17l2.1-.9z"/></svg>'
+      + 'AI writer drafts full scripts with objection handling \u2014 14-day plans and up</div>'
+  };
+  var _rpmDashHtml = null;
+  function showRpmScreen(key){
+    var body = document.getElementById('rpMacContent');
+    if (!body) return;
+    if (_rpmDashHtml === null) _rpmDashHtml = body.innerHTML;
+    body.innerHTML = key === 'dash' ? _rpmDashHtml : (RPM_SCREENS[key] || _rpmDashHtml);
+    document.querySelectorAll('.rp-mac .side-link[data-rpm]').forEach(function(l){ l.classList.toggle('active', l.getAttribute('data-rpm') === key); });
+  }
+  document.querySelectorAll('.rp-mac .side-link[data-rpm]').forEach(function(l){
+    l.addEventListener('click', function(){ showRpmScreen(l.getAttribute('data-rpm')); });
+  });
+
+  // ---- auto-cycle the phone demo until the visitor interacts ----
+  var _rpUserTouched = false;
+  var _rpCycle = ['queue','call','chat','board'];
+  var _rpIdx = 0;
+  var _rpTimer = setInterval(function(){
+    if (_rpUserTouched) { clearInterval(_rpTimer); return; }
+    if (!document.getElementById('rpPhoneBody')) return;
+    _rpIdx = (_rpIdx + 1) % _rpCycle.length;
+    showRpScreen(_rpCycle[_rpIdx]);
+  }, 4200);
+
+  // ---- scroll progress bar ----
+  var prog = document.getElementById('scrollProgress');
+  if (prog) {
+    var onScroll = function(){
+      var h = document.documentElement;
+      var max = h.scrollHeight - h.clientHeight;
+      prog.style.width = (max > 0 ? (h.scrollTop / max) * 100 : 0) + '%';
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+  }
+
+  // ---- count-up numbers when they enter the viewport ----
+  var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var cntIo = new IntersectionObserver(function(es){
+    es.forEach(function(e){
+      if (!e.isIntersecting) return;
+      cntIo.unobserve(e.target);
+      var el = e.target;
+      var to = parseInt(el.getAttribute('data-to'), 10);
+      if (!to || reduced) return;
+      var prefix = el.getAttribute('data-prefix') || '';
+      var suffix = el.getAttribute('data-suffix') || '';
+      var start = null;
+      function step(ts){
+        if (start === null) start = ts;
+        var t = Math.min((ts - start) / 1100, 1);
+        var eased = 1 - Math.pow(1 - t, 3);
+        el.innerHTML = prefix + Math.round(to * eased) + suffix;
+        if (t < 1) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    });
+  }, { threshold: 0.6 });
+  document.querySelectorAll('.cnt[data-to]').forEach(function(el){ cntIo.observe(el); });
+
+  // ---- demo-floor ticker rotation ----
+  var tickerMsgs = [
+    '<b>Jamie</b> claimed a fresh lead from the queue',
+    '<b>Priya</b> logged an outcome \u2014 Successful',
+    'Callback with <b>Sandra P.</b> due in 15 minutes',
+    '<b>Marcus</b> clocked in \u2014 6 callers on the floor',
+    '<b>Jamie</b> booked a callback for tomorrow 2 PM',
+    'A lead hit its attempt cap \u2014 parked for admin review',
+    '<b>Priya</b> ranked up to Closer I'
+  ];
+  var tickerEl = document.getElementById('tickerMsg');
+  var tIdx = 0;
+  if (tickerEl && !reduced) {
+    setInterval(function(){
+      tickerEl.classList.add('swap');
+      setTimeout(function(){
+        tIdx = (tIdx + 1) % tickerMsgs.length;
+        tickerEl.innerHTML = tickerMsgs[tIdx];
+        tickerEl.classList.remove('swap');
+      }, 350);
+    }, 3400);
+  }
+
+  // ---- cursor spotlight tracking on cards ----
+  document.querySelectorAll('.spot').forEach(function(card){
+    card.addEventListener('pointermove', function(ev){
+      var r = card.getBoundingClientRect();
+      card.style.setProperty('--mx', (ev.clientX - r.left) + 'px');
+      card.style.setProperty('--my', (ev.clientY - r.top) + 'px');
+    });
+  });
+
+  // ---- gentle 3D tilt on the device frames (desktop pointers only) ----
+  if (window.matchMedia && window.matchMedia('(hover:hover) and (pointer:fine)').matches && !reduced) {
+    document.querySelectorAll('.tilt').forEach(function(el){
+      el.addEventListener('pointermove', function(ev){
+        var r = el.getBoundingClientRect();
+        var rx = ((ev.clientY - r.top) / r.height - 0.5) * -5;
+        var ry = ((ev.clientX - r.left) / r.width - 0.5) * 7;
+        el.style.transform = 'perspective(900px) rotateX(' + rx.toFixed(2) + 'deg) rotateY(' + ry.toFixed(2) + 'deg)';
+      });
+      el.addEventListener('pointerleave', function(){ el.style.transform = ''; });
+    });
+  }
+
+  // ---- sticky mini CTA appears after scrolling past the showcase ----
+  var miniCta = document.getElementById('miniCta');
+  var pricingSec = document.getElementById('pricing');
+  var showcaseSec = document.getElementById('showcase');
+  if (miniCta && pricingSec && showcaseSec) {
+    var updateMini = function(){
+      var past = window.scrollY > (showcaseSec.offsetTop + showcaseSec.offsetHeight - 200);
+      var pr = pricingSec.getBoundingClientRect();
+      var pricingVisible = pr.top < window.innerHeight && pr.bottom > 0;
+      miniCta.classList.toggle('on', past && !pricingVisible);
+    };
+    window.addEventListener('scroll', updateMini, { passive: true });
+    updateMini();
+  }
 })();
 </script>
 </body>

@@ -264,7 +264,8 @@ async function renderPanels() {
             \${r.termination_reason ? '<div style="font-size:12px;color:#ff8f8a;margin-top:6px;">Reason: ' + esc(r.termination_reason) + '</div>' : ''}
             <div style="font-size:11.5px;color:var(--text-dim);margin-top:4px;">\${r.plan?esc(r.plan)+' · ':''}\${r.price_paid?money(r.price_paid)+' · ':''}\${r.expires_at?'expires '+new Date(r.expires_at).toLocaleDateString():'no expiry'}</div>
           </div>
-          <div style="display:flex;gap:8px;flex-shrink:0;">
+          <div style="display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap;">
+            \${r.status !== 'terminated' && r.expires_at ? '<button class="btn btn-ghost btn-sm" onclick="extendPanel(' + r.id + ')">+ Days</button>' : ''}
             \${r.status === 'active'
               ? '<button class="btn btn-danger btn-sm" onclick="terminatePanel(' + r.id + ', \\'' + esc(r.panel_name||r.name).replace(/'/g,"") + '\\')">Terminate</button>'
               : '<button class="btn btn-ok btn-sm" onclick="reactivatePanel(' + r.id + ')">Reactivate</button>'}
@@ -277,6 +278,16 @@ async function terminatePanel(id, name) {
   const reason = prompt('Terminate "' + name + '"? Callers will be blocked and shown this reason:', '');
   if (reason === null) return;
   await api('/api/master/tenants/' + id + '/terminate', { method: 'POST', body: JSON.stringify({ reason }) });
+  renderPanels();
+}
+async function extendPanel(id) {
+  const v = prompt('Add how many days to this panel? Stacks on top of remaining time (or from now if lapsed).', '7');
+  if (v === null) return;
+  const days = parseInt(v, 10);
+  if (!days || days < 1) return;
+  const res = await api('/api/master/tenants/' + id + '/extend', { method: 'POST', body: JSON.stringify({ days }) });
+  const d = await res.json().catch(() => ({}));
+  if (!res.ok) { alert(d.error || 'Could not extend.'); return; }
   renderPanels();
 }
 async function reactivatePanel(id) {
