@@ -127,6 +127,9 @@ async function attemptLogin() {
   me = data.data;
   localStorage.setItem('dispatch_me', JSON.stringify(me));
   localStorage.setItem('dispatch_session_ts', String(Date.now()));
+  // Remember this device's panel path — the store at / uses it to send returning
+  // users to THEIR panel (a tenant slug page or /app), never someone else's.
+  try { localStorage.setItem('dispatch_home', location.pathname === '/' ? '/app' : location.pathname); } catch {}
   
   // If onboarding is required, show onboarding form instead of entering app
   if (data.onboarding_required) {

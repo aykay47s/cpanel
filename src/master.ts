@@ -332,7 +332,7 @@ async function renderStore() {
   const res = await api('/api/master/store-config');
   if (res.status === 401) { renderGate('Session expired'); return; }
   const cfg = (await res.json()).data || {};
-  const tiers = [['3day','3 days'],['7day','7 days'],['14day','14 days'],['30day','30 days']];
+  const tiers = [['3day','3 days'],['7day','7 days'],['14day','14 days'],['30day','30 days'],['life','Lifetime']];
   $('#body').innerHTML = \`
     <div class="panel">
       <h3 style="margin-bottom:6px;">Store & Pricing</h3>
@@ -379,6 +379,7 @@ async function saveStore() {
     price_14day: $('#st_price_14day').value.trim(), price_30day: $('#st_price_30day').value.trim(),
     buy_url_3day: $('#st_buy_3day').value.trim(), buy_url_7day: $('#st_buy_7day').value.trim(),
     buy_url_14day: $('#st_buy_14day').value.trim(), buy_url_30day: $('#st_buy_30day').value.trim(),
+    price_life: $('#st_price_life').value.trim(), buy_url_life: $('#st_buy_life').value.trim(),
   };
   const s = $('#stStatus');
   s.textContent = 'Saving…'; s.style.color = 'var(--text-dim)';

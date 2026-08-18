@@ -7,21 +7,22 @@
 
 export interface StoreConfig {
   checkoutUrl: string;
-  prices: { d3: string; d7: string; d14: string; d30: string };
-  buyUrls: { d3: string; d7: string; d14: string; d30: string };
+  prices: { d3: string; d7: string; d14: string; d30: string; life: string };
+  buyUrls: { d3: string; d7: string; d14: string; d30: string; life: string };
 }
 
 export function STORE_PAGE(cfg: StoreConfig | string, opts: { autoRedirect?: boolean } = {}): string {
   const config: StoreConfig = typeof cfg === 'string'
-    ? { checkoutUrl: cfg, prices: { d3: '130', d7: '300', d14: '600', d30: '1250' }, buyUrls: { d3: cfg, d7: cfg, d14: cfg, d30: cfg } }
+    ? { checkoutUrl: cfg, prices: { d3: '130', d7: '300', d14: '600', d30: '1250', life: '5000' }, buyUrls: { d3: cfg, d7: cfg, d14: cfg, d30: cfg, life: cfg } }
     : cfg;
   const cta = config.checkoutUrl || 'https://t.me/clearpanelotpbot';
   const P = config.prices;
   const B = config.buyUrls;
+  const TICK = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>';
   // If a logged-in panel user lands on the store (their PWA start_url or an old
   // bookmark), bounce them straight to the panel — they came here to work.
   const redirectScript = opts.autoRedirect
-    ? `<script>try{if(localStorage.getItem('dispatch_me')){location.replace('/app');}}catch(e){}</script>`
+    ? `<script>try{if(localStorage.getItem('dispatch_me')){location.replace(localStorage.getItem('dispatch_home')||'/app');}}catch(e){}</script>`
     : '';
   return `<!DOCTYPE html>
 <html lang="en">
@@ -188,6 +189,56 @@ section{padding:76px 0;}
 footer{border-top:1px solid var(--border);padding:34px 0;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;font-size:12.5px;color:var(--faint);}
 footer .flinks{display:flex;gap:20px;}
 footer a:hover{color:var(--text);}
+/* ---------- interactive demo ---------- */
+.demo-wrap{display:flex;gap:36px;align-items:flex-start;justify-content:center;flex-wrap:wrap;}
+.phone.demo{transform:none;animation:none;width:320px;flex-shrink:0;}
+.phone.demo .screen{display:flex;flex-direction:column;min-height:520px;}
+.phone.demo .mock-body{flex:1;overflow:hidden;}
+.mock-nav{display:flex;border-top:1px solid var(--border);background:rgba(255,255,255,.02);}
+.mnav{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 4px;background:transparent;border:none;color:var(--faint);font-size:9.5px;font-weight:700;font-family:inherit;cursor:pointer;transition:color .15s;}
+.mnav svg{width:18px;height:18px;}
+.mnav.on{color:var(--violet-soft);}
+.demo-notes{max-width:380px;display:flex;flex-direction:column;gap:12px;}
+.dn{padding:18px 20px;border-radius:var(--r);background:var(--panel);border:1px solid var(--border);font-size:13.5px;color:var(--dim);transition:border-color .25s,background .25s;}
+.dn b{color:var(--text);display:block;margin-bottom:4px;font-size:14px;}
+.dn.on{border-color:rgba(124,92,255,.5);background:var(--panel-2);}
+.mrow{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:8px 2px;font-size:12px;color:var(--dim);border-bottom:1px solid var(--border);}
+.mrow:last-child{border-bottom:none;}
+.mbadge{font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;padding:3px 8px;border-radius:100px;}
+.mbadge.ok{background:rgba(52,211,153,.13);color:var(--success);}
+.mbadge.warn{background:rgba(245,185,66,.12);color:var(--gold);}
+.mbadge.dim{background:rgba(255,255,255,.06);color:var(--dim);}
+.mcb{padding:10px 12px;border-radius:13px;background:rgba(245,185,66,.07);border:1px solid rgba(245,185,66,.25);font-size:11px;}
+.mcb b{color:var(--gold-soft);font-size:10px;letter-spacing:.08em;text-transform:uppercase;display:block;margin-bottom:5px;}
+.mchat-toggle{display:flex;gap:4px;padding:4px;border-radius:100px;background:rgba(255,255,255,.05);border:1px solid var(--border);margin-bottom:4px;}
+.mchat-toggle span{flex:1;text-align:center;padding:7px;border-radius:100px;font-size:11px;font-weight:700;color:var(--dim);}
+.mchat-toggle span.on{background:var(--grad);color:#fff;}
+.mbub{max-width:82%;padding:9px 12px;border-radius:15px;background:rgba(255,255,255,.06);border:1px solid var(--border);font-size:11.5px;}
+.mbub.own{margin-left:auto;background:linear-gradient(135deg,rgba(124,92,255,.3),rgba(124,92,255,.16));border-color:rgba(124,92,255,.35);}
+.mbub small{display:block;font-size:9px;color:var(--faint);margin-top:3px;}
+.mlock{display:flex;align-items:center;gap:6px;font-size:9.5px;color:var(--success);font-weight:700;justify-content:center;padding:4px 0;}
+.mlock svg{width:11px;height:11px;}
+.mstat2{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.mstat2 .ms{padding:11px;border-radius:13px;background:var(--panel-2);border:1px solid var(--border);}
+.mstat2 .ms b{font-family:'Bricolage Grotesque';font-size:18px;display:block;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;}
+.mstat2 .ms span{font-size:9.5px;color:var(--faint);font-weight:700;letter-spacing:.04em;text-transform:uppercase;}
+.mbulk{display:flex;gap:6px;align-items:center;padding:9px 11px;border-radius:12px;background:rgba(124,92,255,.1);border:1px solid rgba(124,92,255,.3);font-size:10px;font-weight:700;}
+.mbulk i{font-style:normal;color:var(--violet-soft);}
+/* ---------- guide ---------- */
+.guide-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(290px,1fr));gap:18px;}
+.gcol{padding:26px 24px;border-radius:var(--r-lg);background:var(--panel);border:1px solid var(--border);}
+.gtag{font-size:11px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;margin-bottom:18px;}
+.gstep{display:flex;gap:14px;padding:12px 0;border-bottom:1px solid var(--border);}
+.gstep:last-child{border-bottom:none;}
+.gstep i{font-style:normal;width:26px;height:26px;border-radius:9px;background:linear-gradient(135deg,rgba(124,92,255,.2),rgba(245,185,66,.12));border:1px solid rgba(124,92,255,.35);color:var(--violet-soft);font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.gstep b{font-size:13.5px;display:block;margin-bottom:3px;}
+.gstep p{font-size:12.5px;color:var(--dim);margin:0;}
+/* ---------- 5-tier pricing ---------- */
+.plans-5{grid-template-columns:repeat(auto-fit,minmax(210px,1fr));}
+.plan li.inherit{color:var(--violet-soft);font-weight:700;padding-left:0;}
+.plan.life{background:linear-gradient(180deg,rgba(245,185,66,.13),var(--panel));border-color:rgba(245,185,66,.5);}
+.gold-tag{background:linear-gradient(135deg,var(--gold),#ff9d42);}
+
 </style>
 </head>
 <body>
@@ -197,10 +248,10 @@ footer a:hover{color:var(--text);}
 <nav><div class="wrap nav-in">
   <a class="brand" href="/"><img src="/clearpanel-logo.png" alt=""><span class="wordmark">ClearPanel</span></a>
   <div class="nav-links">
-    <a href="#showcase">Showcase</a><a href="#features">Features</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a>
+    <a href="#showcase">Showcase</a><a href="#guide">Guide</a><a href="#features">Features</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a>
   </div>
   <div class="nav-cta">
-    <a class="btn btn-ghost" href="/app">Panel Login</a>
+    <a class="btn btn-ghost" href="/login">Panel Login</a>
     <a class="btn btn-grad" href="/redeem">Redeem Key</a>
   </div>
 </div></nav>
@@ -221,35 +272,58 @@ footer a:hover{color:var(--text);}
 </header>
 
 <section id="showcase"><div class="wrap">
-  <div class="center rv"><div class="eyebrow">Showcase</div>
-  <h2 class="sec-title">This is what your callers open every morning</h2>
-  <p class="sec-sub">A live queue that feeds them leads, a call screen that logs everything in one tap, and ranks that keep them competing.</p></div>
-  <div class="showcase rv">
-    <div class="phone"><div class="screen">
-      <div class="mock-top"><span class="mock-brand">Your Panel</span><span class="mock-clock">CLOCKED IN 03:41:22</span></div>
-      <div class="mock-body">
-        <div class="mxp"><div class="medal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2l2.6 5.6 6 .7-4.5 4.1 1.2 5.9L12 15.4l-5.3 2.9 1.2-5.9L3.4 8.3l6-.7z"/></svg></div><div style="flex:1;"><div style="font-size:11px;font-weight:700;margin-bottom:4px;">Closer II</div><div class="bar"><i></i></div></div><small>2,140 XP</small></div>
-        <div class="mlead"><span class="tag">New Lead</span><b>Margaret W.</b><span>+44 7911 ••• •38</span><div class="mbtn">Claim &amp; Call</div></div>
-        <div class="mlead"><span class="tag retry">Called 1 time</span><b>Derek H.</b><span>+44 7700 ••• •92</span><div class="mbtn dark">Voicemail last time</div></div>
+  <div class="center rv"><div class="eyebrow">Live showcase</div>
+  <h2 class="sec-title">Tap through the actual panel</h2>
+  <p class="sec-sub">This is a working replica of the caller app — same screens, same buttons, same flow your team gets. Use the bottom navigation to move around.</p></div>
+  <div class="demo-wrap rv">
+    <div class="phone demo"><div class="screen">
+      <div class="mock-top"><span class="mock-brand" id="dTitle">Your Panel</span><span class="mock-clock" id="dChip">CLOCKED IN 03:41:22</span></div>
+      <div class="mock-body" id="dBody"></div>
+      <div class="mock-nav">
+        <button class="mnav on" data-s="queue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg><span>Queue</span></button>
+        <button class="mnav" data-s="call"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.9v3a2 2 0 01-2.2 2 19.8 19.8 0 01-8.6-3 19.5 19.5 0 01-6-6 19.8 19.8 0 01-3-8.7A2 2 0 014.1 2h3a2 2 0 012 1.7c.1 1 .4 2 .7 2.8a2 2 0 01-.4 2.1L8.1 9.9a16 16 0 006 6l1.3-1.3a2 2 0 012.1-.4c.9.3 1.9.5 2.8.7a2 2 0 011.7 2z"/></svg><span>On Call</span></button>
+        <button class="mnav" data-s="chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg><span>Chat</span></button>
+        <button class="mnav" data-s="admin"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg><span>Admin</span></button>
       </div>
     </div></div>
-    <div class="phone p2"><div class="screen">
-      <div class="mock-top"><span class="mock-brand">On Call</span><span class="mock-clock" style="background:rgba(245,185,66,.12);color:var(--gold);border-color:rgba(245,185,66,.3);">LIVE</span></div>
-      <div class="mock-body">
-        <div class="mcall">
-          <div class="avatar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div>
-          <b>Margaret W.</b>
-          <div class="timer">04:52</div>
-          <div class="mgrid">
-            <div class="mout good">Successful</div>
-            <div class="mout mid">Callback</div>
-            <div class="mout dim2">No Answer</div>
-            <div class="mout dim2">Voicemail</div>
-          </div>
-        </div>
-        <div class="mxp" style="border-color:rgba(52,211,153,.3);background:rgba(52,211,153,.06);"><div class="medal" style="background:var(--success);"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg></div><div style="flex:1;font-size:11.5px;font-weight:700;">+100 XP — outcome logged</div></div>
-      </div>
-    </div></div>
+    <div class="demo-notes">
+      <div class="dn rv" data-for="queue"><b>The queue feeds itself.</b> Leads arrive as claim cards — bank category, masked number, attempt history. Retried leads show exactly what happened last time; after 3 failed attempts a lead leaves the floor entirely until an admin recirculates it. Due callbacks pin to the top at the right moment.</div>
+      <div class="dn rv" data-for="call"><b>One tap ends every call.</b> The outcome grid is mandatory — a caller physically cannot move on without logging a result, so your data has no holes. Callbacks get a date picker; XP lands instantly.</div>
+      <div class="dn rv" data-for="chat"><b>Floor talk, two channels.</b> Team chat for the room (with disappearing messages), and Direct — true end-to-end encrypted DMs sealed on the device. The server only ever relays ciphertext.</div>
+      <div class="dn rv" data-for="admin"><b>The admin sees everything.</b> Live dashboard, bulk lead actions, callback + stale-lead views, one-tap maintenance banner to every caller, Telegram broadcasts, and the AI script writer on higher tiers.</div>
+    </div>
+  </div>
+</div></section>
+
+<section id="guide"><div class="wrap">
+  <div class="center rv"><div class="eyebrow">The full guide</div>
+  <h2 class="sec-title">Exactly how your team runs on it</h2>
+  <p class="sec-sub">From key to first dial, this is the complete workflow — the same steps your admin and callers follow in the real panel.</p></div>
+  <div class="guide-cols">
+    <div class="gcol rv">
+      <div class="gtag">Day zero — you</div>
+      <div class="gstep"><i>1</i><div><b>Redeem your key</b><p>Enter it at the redeem page, name your call centre. Your panel spins up instantly at its own private URL with a fresh admin PIN — save both.</p></div></div>
+      <div class="gstep"><i>2</i><div><b>Open your admin panel</b><p>Log in with the PIN. Brand it — your name and logo replace ours everywhere, including the app icon your callers install.</p></div></div>
+      <div class="gstep"><i>3</i><div><b>Load your leads</b><p>Paste or import leads in bulk. The importer parses names and numbers, flags possible duplicates, and files everything under bank categories you pick.</p></div></div>
+      <div class="gstep"><i>4</i><div><b>Create your callers</b><p>Add each caller — every one gets their own PIN. Send them your panel link; they install it to their home screen like a native app.</p></div></div>
+      <div class="gstep"><i>5</i><div><b>Drop in scripts</b><p>Write scripts per audience (opener / closer) — or on 14-day+ plans, describe the pitch and let the AI writer draft the full script with objection handling.</p></div></div>
+    </div>
+    <div class="gcol rv">
+      <div class="gtag">Every day — your callers</div>
+      <div class="gstep"><i>1</i><div><b>Log in &amp; verify</b><p>PIN in, Telegram-verified once via a 6-digit code — no anonymous accounts on your floor. Then clock in; the timer runs on screen.</p></div></div>
+      <div class="gstep"><i>2</i><div><b>Claim from the queue</b><p>Due callbacks sit on top. Fresh leads first, retries labelled with their last outcome. One tap claims the lead and opens the call screen.</p></div></div>
+      <div class="gstep"><i>3</i><div><b>Call and log — no skipping</b><p>Script on screen, timer running. When the call ends they must pick an outcome — successful, callback (with a date), voicemail, no answer, busy, wrong number. XP lands on the spot.</p></div></div>
+      <div class="gstep"><i>4</i><div><b>Pass closes to a finisher</b><p>Successful calls flow to your finishing queue automatically, with every note attached — nothing lost in the handoff.</p></div></div>
+      <div class="gstep"><i>5</i><div><b>Climb the ranks</b><p>Eleven tiers from Seed to Legend, a live leaderboard, celebration animations on closes. At day's end they clock out — and get reminded if they forget.</p></div></div>
+    </div>
+    <div class="gcol rv">
+      <div class="gtag">All week — running the floor</div>
+      <div class="gstep"><i>1</i><div><b>Watch it live</b><p>The dashboard counts everything in real time — uncalled, attempted, exhausted, successful, awaiting finishing — with call durations per lead.</p></div></div>
+      <div class="gstep"><i>2</i><div><b>Work leads in bulk</b><p>Select any set of leads and assign, vault, reset or delete them together. The stale view surfaces anything untouched for N days.</p></div></div>
+      <div class="gstep"><i>3</i><div><b>Recirculate on your terms</b><p>Leads that hit the 3-attempt cap collect under a Max Attempts tile — one tap shows them, and only you decide if they go back out.</p></div></div>
+      <div class="gstep"><i>4</i><div><b>Broadcast &amp; maintain</b><p>Push a pulsing update banner to every caller instantly when you're changing things, and message the whole floor over Telegram.</p></div></div>
+      <div class="gstep"><i>5</i><div><b>Renew without drama</b><p>When your period ends the panel pauses with data intact — redeem the next key and everything resumes exactly where it stopped.</p></div></div>
+    </div>
   </div>
 </div></section>
 
@@ -279,13 +353,36 @@ footer a:hover{color:var(--text);}
 
 <section id="pricing"><div class="wrap">
   <div class="center rv"><div class="eyebrow">Pricing</div>
-  <h2 class="sec-title">Pay for the days, own everything in them</h2>
-  <p class="sec-sub">Every tier is the full product — every feature, unlimited callers and leads. The only difference is how long the panel stays live.</p></div>
-  <div class="plans">
-    <div class="plan rv"><div class="dur">3 days</div><div class="price"><small>£</small>${P.d3}</div><div class="per">Perfect for a trial run</div><ul><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>Full feature set</li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>Unlimited callers</li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>Instant activation</li></ul><a class="btn btn-ghost" href="${B.d3}" target="_blank" rel="noopener">Get 3 Days</a></div>
-    <div class="plan rv"><div class="dur">7 days</div><div class="price"><small>£</small>${P.d7}</div><div class="per">A full working week</div><ul><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>Full feature set</li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>Unlimited callers</li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>Instant activation</li></ul><a class="btn btn-ghost" href="${B.d7}" target="_blank" rel="noopener">Get 7 Days</a></div>
-    <div class="plan hot rv"><span class="hot-tag">Most popular</span><div class="dur">14 days</div><div class="price"><small>£</small>${P.d14}</div><div class="per">Two weeks of full throughput</div><ul><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>Full feature set</li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>Unlimited callers</li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>Instant activation</li></ul><a class="btn btn-grad" href="${B.d14}" target="_blank" rel="noopener">Get 14 Days</a></div>
-    <div class="plan rv"><div class="dur">30 days</div><div class="price"><small>£</small>${P.d30}</div><div class="per">Best value per day</div><ul><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>Full feature set</li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>Unlimited callers</li><li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6L9 17l-5-5"/></svg>Instant activation</li></ul><a class="btn btn-ghost" href="${B.d30}" target="_blank" rel="noopener">Get 30 Days</a></div>
+  <h2 class="sec-title">Pick your runway</h2>
+  <p class="sec-sub">Unlimited callers and leads on every tier. Longer keys unlock more of the platform — and Lifetime unlocks all of it, forever.</p></div>
+  <div class="plans plans-5">
+    <div class="plan rv"><div class="dur">3 days</div><div class="price"><small>£</small>${P.d3}</div><div class="per">The trial run</div><ul>
+      <li>${TICK}Smart lead queue + attempt caps</li>
+      <li>${TICK}One-tap outcomes &amp; callbacks</li>
+      <li>${TICK}Team chat + E2E encrypted DMs</li>
+      <li>${TICK}XP ranks &amp; leaderboard</li>
+      <li>${TICK}Bulk import + bank categories</li>
+      <li>${TICK}Telegram-verified staff &amp; clock-in</li>
+    </ul><a class="btn btn-ghost" href="${B.d3}" target="_blank" rel="noopener">Get 3 Days</a></div>
+    <div class="plan rv"><div class="dur">7 days</div><div class="price"><small>£</small>${P.d7}</div><div class="per">A full working week</div><ul>
+      <li class="inherit">Everything in 3 Day</li>
+      <li>${TICK}Your own Telegram bot for your floor</li>
+      <li>${TICK}Better per-day rate</li>
+    </ul><a class="btn btn-ghost" href="${B.d7}" target="_blank" rel="noopener">Get 7 Days</a></div>
+    <div class="plan hot rv"><span class="hot-tag">Most popular</span><div class="dur">14 days</div><div class="price"><small>£</small>${P.d14}</div><div class="per">Two weeks, AI included</div><ul>
+      <li class="inherit">Everything in 7 Day</li>
+      <li>${TICK}AI script writer — full scripts with objection handling in seconds</li>
+    </ul><a class="btn btn-grad" href="${B.d14}" target="_blank" rel="noopener">Get 14 Days</a></div>
+    <div class="plan rv"><div class="dur">30 days</div><div class="price"><small>£</small>${P.d30}</div><div class="per">The serious floor</div><ul>
+      <li class="inherit">Everything in 14 Day</li>
+      <li>${TICK}Telephony &amp; IVR — inbound routing, Twilio / Telnyx</li>
+      <li>${TICK}Best per-day rate of the timed tiers</li>
+    </ul><a class="btn btn-ghost" href="${B.d30}" target="_blank" rel="noopener">Get 30 Days</a></div>
+    <div class="plan life rv"><span class="hot-tag gold-tag">Own it</span><div class="dur">Lifetime</div><div class="price"><small>£</small>${P.life}</div><div class="per">One key. Never expires.</div><ul>
+      <li class="inherit">Everything in 30 Day</li>
+      <li>${TICK}Panel never expires — no renewals, ever</li>
+      <li>${TICK}Every future feature included</li>
+    </ul><a class="btn btn-grad" href="${B.life}" target="_blank" rel="noopener">Get Lifetime</a></div>
   </div>
 </div></section>
 
@@ -310,13 +407,175 @@ footer a:hover{color:var(--text);}
 
 <footer><div class="wrap" style="display:contents;">
   <span>ClearPanel</span>
-  <div class="flinks"><a href="/app">Panel Login</a><a href="/redeem">Redeem</a><a href="/affiliate">Affiliates</a></div>
+  <div class="flinks"><a href="/login">Panel Login</a><a href="/redeem">Redeem</a><a href="/affiliate">Affiliates</a></div>
 </div></footer>
 
 <script>
 (function(){
   var io = new IntersectionObserver(function(es){ es.forEach(function(e){ if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }); }, { threshold: 0.12 });
   document.querySelectorAll('.rv').forEach(function(el){ io.observe(el); });
+
+  // ---- interactive panel demo ----
+  var SCREENS = {
+    queue: { title: 'Your Panel', chip: 'CLOCKED IN 03:41:22', chipStyle: '', html: ''
+      + '<div class="mxp"><div class="medal"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 2l2.6 5.6 6 .7-4.5 4.1 1.2 5.9L12 15.4l-5.3 2.9 1.2-5.9L3.4 8.3l6-.7z"/></svg></div><div style="flex:1;"><div style="font-size:11px;font-weight:700;margin-bottom:4px;">Closer II</div><div class="bar"><i></i></div></div><small>2,140 XP</small></div>'
+      + '<div class="mcb"><b>Due Callbacks (1)</b><div style="display:flex;justify-content:space-between;align-items:center;"><span>Sandra P. — 2:00 PM today</span><span class="mbadge warn">CALL NOW</span></div></div>'
+      + '<div class="mlead"><span class="tag">New Lead</span><b>Margaret W.</b><span>+44 7911 ... .38 &middot; Barclays</span><div class="mbtn">Claim &amp; Call</div></div>'
+      + '<div class="mlead"><span class="tag retry">Called 1 time &mdash; no success yet</span><b>Derek H.</b><span>+44 7700 ... .92 &middot; HSBC</span><div style="display:flex;gap:6px;align-items:center;margin-top:6px;"><span class="mbadge dim">Last: Voicemail</span></div><div class="mbtn dark">Claim &amp; Retry</div></div>' },
+    call: { title: 'On Call', chip: 'LIVE 04:52', chipStyle: 'background:rgba(245,185,66,.12);color:#f5b942;border-color:rgba(245,185,66,.3);', html: ''
+      + '<div class="mcall"><div class="avatar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div><b>Margaret W.</b><div class="timer">04:52</div>'
+      + '<div class="mgrid"><div class="mout good">Successful</div><div class="mout mid">Callback</div><div class="mout dim2">No Answer</div><div class="mout dim2">Voicemail</div><div class="mout dim2">Busy</div><div class="mout dim2">Hung Up</div></div>'
+      + '<div class="mout mid" style="margin-top:8px;">Number Not Recognised</div></div>'
+      + '<div class="mcb"><b>Schedule Callback</b><div style="display:flex;justify-content:space-between;align-items:center;"><span>Tomorrow 2:00 PM</span><span class="mbadge warn">BOOK IT</span></div></div>'
+      + '<div style="font-size:10px;color:var(--faint);text-align:center;">An outcome is required before moving on &mdash; no skipped logs.</div>' },
+    chat: { title: 'Messages', chip: '4 ONLINE', chipStyle: '', html: ''
+      + '<div class="mchat-toggle"><span class="on">Team</span><span>Direct</span></div>'
+      + '<div class="mbub">Anyone got the closer script for the HSBC batch?<small>Jamie &middot; 2:14 PM</small></div>'
+      + '<div class="mbub own">Scripts tab, second one down. Updated today.<small>You &middot; 2:15 PM</small></div>'
+      + '<div class="mbub">Margaret W. closed. 4th today.<small>Jamie &middot; 2:31 PM</small></div>'
+      + '<div class="mlock"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>Direct messages are end-to-end encrypted</div>' },
+    admin: { title: 'Admin', chip: 'FLOOR OPEN', chipStyle: 'background:rgba(52,211,153,.14);color:#34d399;border-color:rgba(52,211,153,.3);', html: ''
+      + '<div class="mstat2"><div class="ms"><b>214</b><span>Uncalled</span></div><div class="ms"><b>38</b><span>Attempted</span></div><div class="ms"><b>12</b><span>Successful</span></div><div class="ms"><b>3</b><span>Max Attempts</span></div></div>'
+      + '<div class="mbulk"><i>4 leads selected</i><span style="margin-left:auto;">Assign</span><span>Vault</span><span>Reset</span></div>'
+      + '<div class="mrow"><span>Margaret W.</span><span class="mbadge ok">Successful</span></div>'
+      + '<div class="mrow"><span>Derek H.</span><span class="mbadge warn">Attempted &middot; 2</span></div>'
+      + '<div class="mrow"><span>Sandra P.</span><span class="mbadge warn">Callback 2PM</span></div>'
+      + '<div class="mrow"><span>Alan T.</span><span class="mbadge dim">Not Called</span></div>' }
+  };
+  var body = document.getElementById('dBody'), title = document.getElementById('dTitle'), chip = document.getElementById('dChip');
+  function show(k){
+    var sc = SCREENS[k]; if (!sc || !body) return;
+    body.innerHTML = sc.html; title.textContent = sc.title;
+    chip.textContent = sc.chip; chip.setAttribute('style', sc.chipStyle);
+    document.querySelectorAll('.mnav').forEach(function(b){ b.classList.toggle('on', b.getAttribute('data-s') === k); });
+    document.querySelectorAll('.dn').forEach(function(n){ n.classList.toggle('on', n.getAttribute('data-for') === k); });
+  }
+  document.querySelectorAll('.mnav').forEach(function(b){ b.addEventListener('click', function(){ show(b.getAttribute('data-s')); }); });
+  show('queue');
+})();
+</script>
+</body>
+</html>`;
+}
+
+// The /login access hub — the answer to "I bought a panel, where do I log in?".
+// Three ways in: panel code (slug), username, or the license key itself (which
+// doubles as a receipt — redeemed keys route to their panel, fresh ones to /redeem).
+export function ACCESS_PAGE(): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ClearPanel — Find Your Panel</title>
+<link rel="icon" href="/clearpanel-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#07070a;--panel:rgba(255,255,255,.035);--border:rgba(255,255,255,.09);--border-2:rgba(255,255,255,.15);--text:#f2f1f7;--dim:#9b99a8;--faint:#67656f;--violet:#7c5cff;--violet-soft:#a18aff;--gold:#f5b942;--success:#34d399;--danger:#f87171;--grad:linear-gradient(135deg,var(--violet),var(--gold));}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:'Inter',-apple-system,sans-serif;background:radial-gradient(ellipse 70% 45% at 20% -5%,rgba(124,92,255,.16),transparent 60%),radial-gradient(ellipse 60% 45% at 100% 10%,rgba(245,185,66,.08),transparent 60%),var(--bg);color:var(--text);min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:26px 18px;-webkit-font-smoothing:antialiased;}
+h1,.brand{font-family:'Bricolage Grotesque',sans-serif;letter-spacing:-.02em;}
+a{color:inherit;text-decoration:none;}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:16px;margin-bottom:40px;}
+.brand img{width:28px;height:28px;border-radius:8px;}
+.card{width:100%;max-width:420px;background:var(--panel);border:1px solid var(--border-2);border-radius:26px;padding:34px 28px;backdrop-filter:blur(12px);box-shadow:0 24px 70px rgba(0,0,0,.5);}
+h1{font-size:22px;font-weight:800;margin-bottom:6px;}
+.sub{font-size:13px;color:var(--dim);margin-bottom:26px;}
+.seg{display:flex;gap:4px;padding:4px;border-radius:100px;background:rgba(255,255,255,.045);border:1px solid var(--border);margin-bottom:22px;}
+.seg button{flex:1;padding:9px 6px;border-radius:100px;border:none;background:transparent;color:var(--dim);font-size:12px;font-weight:700;font-family:inherit;cursor:pointer;transition:color .15s;}
+.seg button.on{background:var(--grad);color:#fff;}
+label{display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);margin-bottom:7px;}
+input{width:100%;padding:14px 16px;border-radius:14px;border:1px solid var(--border-2);background:rgba(255,255,255,.05);color:var(--text);font-size:14.5px;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s;}
+input:focus{border-color:var(--violet);box-shadow:0 0 0 3px rgba(124,92,255,.18);}
+input::placeholder{color:var(--faint);}
+.go{width:100%;margin-top:16px;padding:14px;border-radius:100px;border:none;background:var(--grad);color:#fff;font-size:14.5px;font-weight:700;font-family:inherit;cursor:pointer;box-shadow:0 4px 18px rgba(124,92,255,.35);transition:transform .15s,box-shadow .15s;}
+.go:active{transform:scale(.97);}
+.status{min-height:20px;margin-top:14px;font-size:12.5px;text-align:center;}
+.status.err{color:var(--danger);}
+.status.ok{color:var(--success);}
+.hint{font-size:11.5px;color:var(--faint);margin-top:8px;line-height:1.5;}
+.links{margin-top:26px;display:flex;gap:18px;font-size:12.5px;color:var(--faint);justify-content:center;}
+.links a:hover{color:var(--text);}
+.pane{display:none;}
+.pane.on{display:block;}
+</style>
+</head>
+<body>
+<a class="brand" href="/"><img src="/clearpanel-logo.png" alt=""><span>ClearPanel</span></a>
+<div class="card">
+  <h1>Find your panel</h1>
+  <div class="sub">Every call centre has its own private panel. Tell us which one is yours.</div>
+  <div class="seg">
+    <button class="on" data-p="code">Panel code</button>
+    <button data-p="user">Username</button>
+    <button data-p="key">License key</button>
+  </div>
+  <div class="pane on" data-pane="code">
+    <label>Your panel code</label>
+    <input id="inCode" placeholder="e.g. northline-calls" autocapitalize="none" autocomplete="off" />
+    <div class="hint">It is the last part of your panel link — yourpanel.com/<b>this-part</b>. Your admin has it.</div>
+  </div>
+  <div class="pane" data-pane="user">
+    <label>Your username</label>
+    <input id="inUser" placeholder="e.g. jamie_w" autocapitalize="none" autocomplete="off" />
+    <div class="hint">The username on your caller account. We will route you to the right panel.</div>
+  </div>
+  <div class="pane" data-pane="key">
+    <label>Your license key</label>
+    <input id="inKey" placeholder="XXXX-XXXX-XXXX-XXXX" autocapitalize="characters" autocomplete="off" />
+    <div class="hint">The key you bought. Unredeemed keys go to setup; redeemed keys go straight to their panel.</div>
+  </div>
+  <button class="go" id="goBtn">Continue</button>
+  <div class="status" id="status"></div>
+</div>
+<div class="links"><a href="/">Store</a><a href="/redeem">Redeem a key</a><a href="/app">Frap Ties staff</a></div>
+<script>
+(function(){
+  var mode = 'code';
+  var st = document.getElementById('status');
+  document.querySelectorAll('.seg button').forEach(function(b){
+    b.addEventListener('click', function(){
+      mode = b.getAttribute('data-p');
+      document.querySelectorAll('.seg button').forEach(function(x){ x.classList.toggle('on', x === b); });
+      document.querySelectorAll('.pane').forEach(function(pn){ pn.classList.toggle('on', pn.getAttribute('data-pane') === mode); });
+      st.textContent = ''; st.className = 'status';
+    });
+  });
+  function say(msg, cls){ st.textContent = msg; st.className = 'status ' + (cls || ''); }
+  async function go(){
+    say('Looking...', '');
+    try {
+      if (mode === 'code') {
+        var code = document.getElementById('inCode').value.trim().toLowerCase();
+        if (!code) return say('Enter your panel code.', 'err');
+        var r = await fetch('/api/panel-by-code/' + encodeURIComponent(code));
+        var d = await r.json();
+        if (!r.ok) return say(d.error || 'No panel found with that code.', 'err');
+        say('Found ' + d.data.panel_name + ' — taking you there', 'ok');
+        location.href = d.data.url;
+      } else if (mode === 'user') {
+        var u = document.getElementById('inUser').value.trim();
+        if (!u) return say('Enter your username.', 'err');
+        var r2 = await fetch('/api/panel-by-username/' + encodeURIComponent(u));
+        var d2 = await r2.json();
+        if (!r2.ok) return say(d2.error || 'No panel found for that username.', 'err');
+        say('Found ' + d2.data.panel_name + ' — taking you there', 'ok');
+        location.href = d2.data.url;
+      } else {
+        var k = document.getElementById('inKey').value.trim().toUpperCase();
+        if (!k) return say('Enter your license key.', 'err');
+        var r3 = await fetch('/api/access/key/' + encodeURIComponent(k));
+        var d3 = await r3.json();
+        if (!r3.ok) return say(d3.error || 'Key not found.', 'err');
+        if (d3.data.redeemed) { say('Found ' + d3.data.panel_name + ' — taking you there', 'ok'); location.href = d3.data.url; }
+        else { say('Fresh key — taking you to setup', 'ok'); location.href = '/redeem?key=' + encodeURIComponent(k); }
+      }
+    } catch (e) { say('Something went wrong — try again.', 'err'); }
+  }
+  document.getElementById('goBtn').addEventListener('click', go);
+  document.querySelectorAll('input').forEach(function(i){ i.addEventListener('keydown', function(e){ if (e.key === 'Enter') go(); }); });
 })();
 </script>
 </body>

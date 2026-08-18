@@ -149,7 +149,7 @@ users.get('/api/find-panel/:username', async (c) => {
     FROM users JOIN tenants ON tenants.id = users.tenant_id
     WHERE lower(users.username) = ${clean} LIMIT 1`;
   if (!row || row.status !== 'active') return bad(c, 'No panel found for that username', 404);
-  return c.json({ data: { panel_name: row.name, url: row.is_self ? '/' : `/${row.slug}` } });
+  return c.json({ data: { panel_name: row.name, url: row.is_self ? '/app' : `/${row.slug}` } });
 });
 
 // Look up a panel by its code (the tenant slug) so a caller can jump to another
@@ -159,7 +159,7 @@ users.get('/api/panel-by-code/:code', async (c) => {
   if (!code) return bad(c, 'Enter a panel code');
   const [row] = await sql`SELECT slug, name, is_self, status FROM tenants WHERE lower(slug) = ${code} LIMIT 1`;
   if (!row || row.status !== 'active') return bad(c, 'No active panel found with that code', 404);
-  return c.json({ data: { panel_name: row.name, url: row.is_self ? '/' : `/${row.slug}` } });
+  return c.json({ data: { panel_name: row.name, url: row.is_self ? '/app' : `/${row.slug}` } });
 });
 
 users.patch('/api/me/profile', async (c) => {

@@ -315,6 +315,11 @@ telegram.get('/api/admin/telegram-bot', requireAdmin, async (c) => {
 });
 
 telegram.post('/api/admin/telegram-bot', requireAdmin, async (c) => {
+  { // Tier gate: a tenant's own Telegram bot is a 7-day+ plan feature.
+    const u = c.get('user');
+    const [t] = await sql`SELECT plan_days FROM tenants WHERE id = ${u.tenant_id}`;
+    if (t && t.plan_days != null && t.plan_days < 7) return c.json({ error: 'Your own Telegram bot is included on 7-day plans and up. Upgrade your access key to unlock it.' }, 403);
+  }
   const user = c.get('user');
   const { bot_token, bot_username, require_verification } = await c.req.json().catch(() => ({}));
   if (bot_token !== undefined) {

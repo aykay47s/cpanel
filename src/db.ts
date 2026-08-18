@@ -437,6 +437,7 @@ export async function ensureDb() {
     `ALTER TABLE lead_categories ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id)`,
     `ALTER TABLE clock_sessions ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id)`,
     `ALTER TABLE clock_sessions ADD COLUMN IF NOT EXISTS reminder_sent_at TIMESTAMPTZ`,
+    `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS plan_days INTEGER`,
     // --- 3CX Call Control API ---
     // Where 3CX should actually ring this person. Preferred over call_phone for
     // 3CX routing: routing to an internal extension stays on the PBX, while an

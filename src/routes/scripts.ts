@@ -79,6 +79,15 @@ async function callLlmWithFailover(sys: string, prompt: string): Promise<{ text:
 
 scripts.post('/api/admin/scripts/generate', requireRole('admin'), async (c) => {
   if (!llmProviders().length) return c.json({ error: 'AI script writer is not configured. Set LLM_API_KEY (and optionally LLM_API_BASE / LLM_MODEL) in the environment.' }, 503);
+  // Tier gate: the AI writer is a 14-day+ plan feature. Legacy tenants and the
+  // self tenant have plan_days NULL, which counts as unrestricted.
+  {
+    const u = c.get('user');
+    const [t] = await sql`SELECT plan_days FROM tenants WHERE id = ${u.tenant_id}`;
+    if (t && t.plan_days != null && t.plan_days < 14) {
+      return c.json({ error: 'The AI script writer is included on 14-day plans and up. Upgrade your access key to unlock it.' }, 403);
+    }
+  }
 
   const body = await c.req.json().catch(() => ({} as any));
   const brief: string = (body.brief || '').toString().slice(0, 4000);

@@ -12,7 +12,7 @@ import { CONTROL_PAGE } from './src/control';
 import { telephony } from './src/routes/telephony';
 import { tenancy } from './src/routes/tenancy';
 import { telegram } from './src/routes/telegram';
-import { STORE_PAGE } from './src/store';
+import { STORE_PAGE, ACCESS_PAGE } from './src/store';
 import { REDEEM_PAGE } from './src/redeem';
 import { MASTER_PAGE } from './src/master';
 import { AFFILIATE_PAGE } from './src/affiliate';
@@ -102,12 +102,19 @@ app.get('/control', (c) => {
 
 app.get('/store', (c) => c.redirect('/', 301));
 
+// Access hub — "I bought a panel, where do I log in?". Panel code, username,
+// or license key all route to the right place.
+app.get('/login', (c) => {
+  c.header('Cache-Control', 'no-store, no-cache, must-revalidate');
+  return c.html(ACCESS_PAGE());
+});
+
 app.get('/', async (c) => {
   c.header('Cache-Control', 'no-store, no-cache, must-revalidate');
   const settingRows = await sql`SELECT key, value FROM settings WHERE key IN (
     'store_checkout_url',
-    'price_3day', 'price_7day', 'price_14day', 'price_30day',
-    'buy_url_3day', 'buy_url_7day', 'buy_url_14day', 'buy_url_30day'
+    'price_3day', 'price_7day', 'price_14day', 'price_30day', 'price_life',
+    'buy_url_3day', 'buy_url_7day', 'buy_url_14day', 'buy_url_30day', 'buy_url_life'
   )`;
   const s: Record<string, string> = {};
   for (const r of settingRows) s[r.key] = r.value;
@@ -119,12 +126,14 @@ app.get('/', async (c) => {
       d7: s['price_7day'] || '300',
       d14: s['price_14day'] || '600',
       d30: s['price_30day'] || '1250',
+      life: s['price_life'] || '5000',
     },
     buyUrls: {
       d3: s['buy_url_3day'] || checkoutUrl,
       d7: s['buy_url_7day'] || checkoutUrl,
       d14: s['buy_url_14day'] || checkoutUrl,
       d30: s['buy_url_30day'] || checkoutUrl,
+      life: s['buy_url_life'] || checkoutUrl,
     },
   };
   return c.html(STORE_PAGE(cfg, { autoRedirect: true }));

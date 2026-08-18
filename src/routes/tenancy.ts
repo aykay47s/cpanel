@@ -18,7 +18,7 @@ function generateKeyCode(): string {
 // Slugs that are real routes on this server — a tenant slug matching one of
 // these would be shadowed by the route (or worse, shadow it), so redemption
 // must never produce them.
-const RESERVED_SLUGS = new Set(['app', 'store', 'master', 'control', 'redeem', 'affiliate', 'api', 'js', 'icons', 'manifest', 'sw', 'admin']);
+const RESERVED_SLUGS = new Set(['app', 'store', 'login', 'master', 'control', 'redeem', 'affiliate', 'api', 'js', 'icons', 'manifest', 'sw', 'admin']);
 function slugify(name: string): string {
   const s = name.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 40) || 'tenant';
   return RESERVED_SLUGS.has(s) ? s + '-panel' : s;
@@ -61,6 +61,19 @@ tenancy.delete('/api/master/license-keys/:id', requireMaster, async (c) => {
   return c.json({ ok: true });
 });
 
+// A buyer who only has their key (lost the panel URL) can find their panel with
+// it. The key is a secret only the buyer holds, so returning the slug is safe —
+// it's their own purchase receipt.
+tenancy.get('/api/access/key/:key', async (c) => {
+  const [row] = await sql`SELECT lk.redeemed, t.slug, t.name, t.status FROM license_keys lk
+    LEFT JOIN tenants t ON t.id = lk.redeemed_by_tenant_id
+    WHERE lk.key_code = ${String(c.req.param('key')).toUpperCase().trim()}`;
+  if (!row) return c.json({ error: 'Key not found' }, 404);
+  if (!row.redeemed) return c.json({ data: { redeemed: false } });
+  if (!row.slug || row.status !== 'active') return c.json({ error: 'This key was redeemed but its panel is no longer active' }, 410);
+  return c.json({ data: { redeemed: true, panel_name: row.name, url: '/' + row.slug } });
+});
+
 // Public - anyone with a valid, unredeemed key can look up what it's for before
 // committing to a call center name (doesn't reveal anything sensitive, just plan info).
 tenancy.get('/api/redeem/:key', async (c) => {
@@ -93,10 +106,12 @@ tenancy.post('/api/redeem', async (c) => {
     slug = `${baseSlug}-${i}`;
   }
 
-  const expiresAt = new Date(Date.now() + claimedKey.days * 24 * 60 * 60 * 1000);
+  // Lifetime keys (>= 3650 days) never expire; everything else gets a hard end date.
+  const isLifetime = claimedKey.days >= 3650;
+  const expiresAt = isLifetime ? null : new Date(Date.now() + claimedKey.days * 24 * 60 * 60 * 1000);
   const [tenant] = await sql`
-    INSERT INTO tenants (name, slug, url, plan, price_paid, status, expires_at)
-    VALUES (${call_center_name}, ${slug}, '', ${claimedKey.plan}, ${claimedKey.price_paid}, 'active', ${expiresAt})
+    INSERT INTO tenants (name, slug, url, plan, price_paid, status, expires_at, plan_days)
+    VALUES (${call_center_name}, ${slug}, '', ${claimedKey.plan}, ${claimedKey.price_paid}, 'active', ${expiresAt}, ${claimedKey.days})
     RETURNING *`;
   await sql`UPDATE license_keys SET redeemed_by_tenant_id = ${tenant.id} WHERE id = ${claimedKey.id}`;
 
@@ -316,8 +331,8 @@ tenancy.post('/api/affiliate/wallet', async (c) => {
 // ============================================================================
 const STORE_SETTING_KEYS = [
   'store_checkout_url',
-  'price_3day', 'price_7day', 'price_14day', 'price_30day',
-  'buy_url_3day', 'buy_url_7day', 'buy_url_14day', 'buy_url_30day',
+  'price_3day', 'price_7day', 'price_14day', 'price_30day', 'price_life',
+  'buy_url_3day', 'buy_url_7day', 'buy_url_14day', 'buy_url_30day', 'buy_url_life',
 ];
 
 tenancy.get('/api/master/store-config', requireMaster, async (c) => {

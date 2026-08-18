@@ -106,7 +106,14 @@ misc.get('/api/admin/telephony-config', requireRole('admin'), async (c) => {
   const [row] = await sql`SELECT value FROM settings WHERE key = ${'telephony_config:' + user.tenant_id}`;
   return c.json({ data: row ? JSON.parse(row.value) : null });
 });
+async function telephonyTierAllowed(tenantId: number): Promise<boolean> {
+  // Telephony / IVR is a 30-day+ plan feature. NULL plan_days (self tenant and
+  // legacy tenants) is unrestricted.
+  const [t] = await sql`SELECT plan_days FROM tenants WHERE id = ${tenantId}`;
+  return !t || t.plan_days == null || t.plan_days >= 30;
+}
 misc.post('/api/admin/telephony-config', requireRole('admin'), async (c) => {
+  if (!(await telephonyTierAllowed(c.get('user').tenant_id))) return c.json({ error: 'Telephony & IVR are included on 30-day plans and up. Upgrade your access key to unlock them.' }, 403);
   const user = c.get('user');
   const body = await c.req.json().catch(() => null);
   if (!body) return c.json({ error: 'Invalid config' }, 400);
@@ -125,6 +132,7 @@ misc.post('/api/admin/telephony-config', requireRole('admin'), async (c) => {
 // only what's needed to keep working — the auth token lives in its own settings
 // row and is never included in any GET response.
 misc.post('/api/admin/telephony-config/connect-twilio', requireRole('admin'), async (c) => {
+  if (!(await telephonyTierAllowed(c.get('user').tenant_id))) return c.json({ error: 'Telephony & IVR are included on 30-day plans and up. Upgrade your access key to unlock them.' }, 403);
   const { account_sid, auth_token, phone_number } = await c.req.json().catch(() => ({}));
   if (!account_sid || !auth_token || !phone_number) {
     return c.json({ error: 'Account SID, Auth Token, and phone number are all required' }, 400);
