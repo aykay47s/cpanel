@@ -621,6 +621,29 @@ export async function ensureDb() {
   // boot with 'column "username" does not exist'.
   await sql.unsafe(`DO $$ BEGIN ALTER TABLE users ADD CONSTRAINT users_tenant_username_unique UNIQUE (tenant_id, username); EXCEPTION WHEN OTHERS THEN NULL; END $$;`);
   await sql`CREATE INDEX IF NOT EXISTS users_username_lookup ON users (lower(username)) WHERE username IS NOT NULL`;
+
+  // Public profile: a globally-unique @handle (claimed once across the whole
+  // platform, not per-tenant like `username`), plus bio and light cosmetics.
+  // `username` stays as the per-tenant login/display name and Telegram linkage;
+  // `handle` is the OGU-style public identity people claim and show off. The two
+  // are intentionally separate — renaming your tenant display name must never
+  // silently release or reassign a claimed global handle.
+  const profileAlters = [
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS handle TEXT',
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS handle_claimed_at TIMESTAMPTZ',
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT',
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS banner_color TEXT',
+    'ALTER TABLE users ADD COLUMN IF NOT EXISTS accent_color TEXT',
+  ];
+  for (const stmt of profileAlters) {
+    await sql.unsafe(`DO $$ BEGIN ${stmt}; EXCEPTION WHEN OTHERS THEN NULL; END $$;`);
+  }
+  // Handles are unique across the ENTIRE platform, case-insensitively. A partial
+  // unique index on lower(handle) enforces "claimed once, ever" at the DB level,
+  // so two racing claims can't both win — the second hits a unique violation and
+  // is rejected by the route. NULL handles are excluded, so unclaimed users don't
+  // collide with each other.
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS users_handle_global_unique ON users (lower(handle)) WHERE handle IS NOT NULL`;
   // CRITICAL FIX: telephony_config, twilio_auth_token, threecx_client_secret,
   // vonage_api_secret, vonage_private_key, and call_template were all stored as
   // single GLOBAL settings rows shared by every tenant on the platform — any
