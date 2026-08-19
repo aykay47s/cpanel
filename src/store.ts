@@ -36,7 +36,7 @@ export function STORE_PAGE(cfg: StoreConfig | string, opts: { autoRedirect?: boo
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ClearPanel — Run Your Call Floor Like a Machine</title>
+<title>ClearPanel — Get Your Own Call Center</title>
 <meta name="description" content="ClearPanel is a complete call-centre operations panel: smart lead queues, one-tap outcomes, scheduled callbacks, XP ranks, encrypted team messaging and AI script writing. Redeem a key, get your own panel in under a minute.">
 <link rel="icon" href="/clearpanel-icon.png">
 ${redirectScript}
@@ -77,11 +77,13 @@ a{color:inherit;text-decoration:none;}
 .grain{position:fixed;inset:0;z-index:-1;opacity:.5;background-image:radial-gradient(rgba(255,255,255,.014) 1px,transparent 1px);background-size:3px 3px;pointer-events:none;}
 
 /* ---------- nav ---------- */
-nav{position:sticky;top:0;z-index:50;backdrop-filter:blur(14px) saturate(1.4);-webkit-backdrop-filter:blur(14px) saturate(1.4);background:rgba(5,5,7,.72);border-bottom:1px solid var(--border);}
+nav{position:fixed;top:0;left:0;right:0;z-index:50;transition:background .3s,border-color .3s,backdrop-filter .3s;background:transparent;border-bottom:1px solid transparent;}
+nav.scrolled{backdrop-filter:blur(14px) saturate(1.4);-webkit-backdrop-filter:blur(14px) saturate(1.4);background:rgba(5,5,7,.82);border-bottom-color:var(--border);}
 .nav-in{display:flex;align-items:center;justify-content:space-between;height:64px;}
 .brand{display:flex;align-items:center;gap:9px;font-weight:700;font-size:17px;}
 .brand img{height:26px;width:auto;object-fit:contain;display:block;}
-.nav-links{display:flex;gap:26px;font-size:13.5px;font-weight:500;color:var(--text-dim);}
+.nav-links{display:flex;gap:26px;font-size:13.5px;font-weight:500;color:var(--text-dim);margin:0 auto 0 40px;}
+.nav-cta{display:flex;gap:10px;align-items:center;}
 .nav-links a{transition:color .15s;}
 .nav-links a:hover{color:var(--text);}
 .nav-cta{display:flex;gap:10px;align-items:center;}
@@ -388,7 +390,67 @@ footer a:hover{color:var(--text);}
 .hero{position:relative;}
 #heroParticles{position:absolute;inset:0;z-index:-1;pointer-events:none;}
 
-/* hero headline word cascade */
+
+/* ============================================================
+   Wave 4 — cinematic hero
+   ============================================================ */
+.hero{position:relative;min-height:100vh;min-height:100svh;display:flex;flex-direction:column;overflow:hidden;isolation:isolate;}
+.hero-deep{position:absolute;inset:0;z-index:-4;pointer-events:none;
+  background:
+    radial-gradient(120% 80% at 50% -10%, rgba(122,171,255,.16), transparent 55%),
+    radial-gradient(90% 60% at 85% 18%, rgba(167,139,250,.14), transparent 50%),
+    radial-gradient(70% 60% at 8% 82%, rgba(79,140,255,.10), transparent 55%);}
+#dispatchGrid{position:absolute;inset:0;z-index:-3;pointer-events:none;}
+.hero-spot{position:absolute;inset:0;z-index:-2;pointer-events:none;
+  background:radial-gradient(340px circle at var(--mx,50%) var(--my,35%), rgba(122,171,255,.10), transparent 70%);}
+.hero-veil{position:absolute;inset:0;z-index:6;pointer-events:none;mix-blend-mode:multiply;opacity:.5;
+  background:linear-gradient(180deg, rgba(5,5,7,.45) 0%, transparent 16%, transparent 80%, rgba(5,5,7,.85) 100%),
+  repeating-linear-gradient(0deg, transparent 0 2px, rgba(0,0,0,.13) 2px 3px);}
+
+.hero-stage{position:relative;z-index:8;flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px 32px 46px;max-width:1000px;margin:0 auto;width:100%;}
+.hero .badge-live{display:inline-flex;align-items:center;gap:9px;padding:8px 18px;border-radius:var(--r-full);background:rgba(122,171,255,.08);border:1px solid rgba(122,171,255,.25);font-size:13px;font-weight:600;color:var(--gold-bright);margin-bottom:28px;backdrop-filter:blur(8px);transform:translateY(12px);animation:hRise .7s var(--ease-out) .1s forwards;}
+.hero .badge-live .rec{width:7px;height:7px;border-radius:50%;background:var(--success);box-shadow:0 0 10px var(--success);animation:hBeat 1.6s infinite;}
+@keyframes hBeat{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.7)}}
+
+.hero h1{font-size:clamp(46px,8.2vw,108px);line-height:.96;letter-spacing:-.045em;margin:0 0 24px;}
+.hero h1 .line{display:block;overflow:hidden;padding-bottom:.04em;}
+.hero h1 .line > span{display:inline-block;animation:hSlide .95s var(--ease-out) both;}
+.hero h1 .line:nth-child(1) > span{animation-delay:.18s;}
+.hero h1 .line:nth-child(2) > span{animation-delay:.32s;}
+@keyframes hSlide{from{transform:translateY(110%);}to{transform:translateY(0);}}
+.hero h1 .gt{background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;position:relative;}
+.hero h1 .gt::after{content:'';position:absolute;left:0;right:0;bottom:-.02em;height:3px;border-radius:3px;background:var(--grad);transform:scaleX(0);transform-origin:left;animation:hUL 1s var(--ease-out) 1.05s forwards;box-shadow:0 0 18px rgba(122,171,255,.7);}
+@keyframes hUL{to{transform:scaleX(1);}}
+
+.hero .hero-sub{font-size:clamp(16px,2vw,21px);color:var(--text-dim);max-width:640px;line-height:1.55;margin:0 0 36px;animation:hRise .8s var(--ease-out) .7s forwards;}
+.hero .hero-sub b{color:var(--text);font-weight:600;}
+.hero .hero-ctas{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;margin-bottom:42px;animation:hRise .8s var(--ease-out) .85s forwards;}
+.hero .btn-xl{padding:18px 38px;font-size:17px;}
+
+.hero-counters{display:flex;border:1px solid var(--border);border-radius:16px;overflow:hidden;background:rgba(12,12,18,.5);backdrop-filter:blur(12px);animation:hRise .8s var(--ease-out) 1s forwards;}
+.hero-counters .c{padding:15px 28px;border-right:1px solid var(--border);text-align:center;}
+.hero-counters .c:last-child{border-right:none;}
+.hero-counters .c b{display:block;font-family:'Bricolage Grotesque';font-size:25px;font-weight:800;font-variant-numeric:tabular-nums;background:var(--grad);-webkit-background-clip:text;background-clip:text;color:transparent;line-height:1;}
+.hero-counters .c span{font-size:10.5px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.08em;margin-top:6px;display:block;}
+@keyframes hRise{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:none;}}
+
+.hero-cue{position:absolute;bottom:22px;left:50%;transform:translateX(-50%);z-index:8;display:flex;flex-direction:column;align-items:center;gap:7px;animation:hRise 1s ease 1.7s forwards;}
+.hero-cue span{font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--text-faint);}
+.hero-cue .m{width:23px;height:36px;border:2px solid var(--border-2);border-radius:13px;display:flex;justify-content:center;padding-top:6px;}
+.hero-cue .m i{width:3px;height:7px;border-radius:2px;background:var(--gold-bright);animation:hDrop 1.6s infinite;}
+@keyframes hDrop{0%{transform:translateY(0);opacity:1}70%{transform:translateY(11px);opacity:0}100%{opacity:0}}
+
+@media(max-width:820px){
+  .hero-counters{flex-wrap:wrap;}
+  .hero-counters .c{flex:1 1 42%;border-bottom:1px solid var(--border);}
+}
+@media(prefers-reduced-motion:reduce){
+  #dispatchGrid{display:none;}
+  .hero h1 .line > span{transform:none;animation:none;}
+  .hero .badge-live,.hero .hero-sub,.hero .hero-ctas,.hero-counters,.hero-cue{opacity:1;transform:none;animation:none;}
+}
+
+/* hero headline word cascade (legacy — kept for any other .hw users) */
 .hw{display:inline-block;opacity:0;transform:translateY(26px) rotate(2deg);animation:hwIn .8s var(--ease-spring) forwards;}
 @keyframes hwIn{to{opacity:1;transform:none;}}
 
@@ -612,65 +674,46 @@ footer a:hover{color:var(--text);}
 <div class="orbs"><div class="orb a"></div><div class="orb b"></div><div class="orb c"></div></div>
 <div class="grain"></div>
 
-<nav><div class="wrap nav-in">
-  <a class="brand" href="/"><img src="/clearpanel-logo.png" alt=""><span class="wordmark">ClearPanel</span></a>
-  <div class="nav-links">
-    <a href="#showcase">Showcase</a><a href="#guide">Guide</a><a href="#vs">Why Switch</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a>
-  </div>
-  <div class="nav-cta">
-    <a class="btn btn-ghost" href="/login">Panel Login</a>
-    <a class="btn btn-grad" href="/redeem">Redeem Key</a>
-  </div>
-</div></nav>
+
 
 <div class="scroll-progress" id="scrollProgress"></div>
 <header class="hero">
-  <div class="aurora"><i></i><i></i><i></i></div>
-  <canvas id="heroParticles"></canvas>
-  <div class="wrap hero-grid">
+  <div class="hero-deep"></div>
+  <canvas id="dispatchGrid"></canvas>
+  <div class="hero-spot" id="heroSpot"></div>
+  <div class="hero-veil"></div>
 
-    <div class="hero-copy">
-      <div class="pill"><span class="dot"></span>Panels activate instantly &mdash; no setup calls, no waiting</div>
-      <h1><span class="hw" style="animation-delay:.05s;">Run</span> <span class="hw" style="animation-delay:.13s;">your</span> <span class="hw" style="animation-delay:.21s;">call</span> <span class="hw" style="animation-delay:.29s;">floor</span><br><span class="grad-text hw" style="animation-delay:.42s;">like a machine.</span></h1>
-      <p>ClearPanel hands your callers a queue, a script and a one-tap outcome flow &mdash; and hands you the numbers. Your own private panel, live in under a minute.</p>
-      <div class="hero-ctas">
-        <a class="btn btn-grad btn-lg" href="#pricing">See Pricing</a>
-        <a class="btn btn-ghost btn-lg" href="/redeem">I Have a Key</a>
-      </div>
-      <div class="trust-strip">
-        <div class="trust-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M13 2L4.5 13.5H11l-1 8.5L18.5 10H12l1-8z"/></svg>Keys delivered instantly at checkout</div>
-        <div class="trust-item"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><circle cx="9" cy="8" r="3.2"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M17 8h5M19.5 5.5v5"/></svg>Unlimited callers on every tier</div>
-      </div>
+  <nav><div class="wrap nav-in">
+    <a class="brand" href="/"><img src="/clearpanel-logo.png" alt=""><span class="wordmark">ClearPanel</span></a>
+    <div class="nav-links">
+      <a href="#showcase">Showcase</a><a href="#guide">Guide</a><a href="#vs">Why Switch</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a>
     </div>
-
-    <div class="hd">
-      <div class="hd-frame">
-        <div class="hd-bar">
-          <span class="rp-dot r"></span><span class="rp-dot y"></span><span class="rp-dot g"></span>
-          <span class="hd-url">clearpanel.app/your-floor</span>
-        </div>
-        <div class="hd-screen">
-          <div class="hd-head">
-            <span class="hd-live"></span>
-            <span class="hd-label">Caller queue &mdash; live</span>
-            <span class="hd-clock" id="hdClock">00:00</span>
-          </div>
-          <div id="hdCard"></div>
-          <div class="hd-note">An outcome is required before the next lead &mdash; no skipped logs, ever.</div>
-        </div>
-      </div>
-      <div class="hero-stats stagger">
-        <div class="hstat rv"><b class="cnt" data-to="60" data-prefix="&lt; " data-suffix="s">&lt; 60s</b><span>from key to live panel</span></div>
-        <div class="hstat rv"><b>1-tap</b><span>outcomes &amp; callbacks</span></div>
-        <div class="hstat rv"><b class="cnt" data-to="11" data-suffix=" ranks">11 ranks</b><span>Seed to Legend</span></div>
-      </div>
-      <div class="ticker-wrap">
-        <span class="ticker-dot"></span><span class="ticker-label">Demo floor</span>
-        <span class="ticker-msg" id="tickerMsg"><b>Jamie</b> claimed a fresh lead from the queue</span>
-      </div>
+    <div class="nav-cta">
+      <a class="btn btn-ghost" href="/login">Panel Login</a>
+      <a class="btn btn-grad" href="/redeem">Redeem Key</a>
     </div>
+  </div></nav>
 
+  <div class="hero-stage">
+    <div class="badge-live"><span class="rec"></span>A live call center is running below &mdash; watch it dispatch</div>
+    <h1>
+      <span class="line"><span>Get your own</span></span>
+      <span class="line"><span class="gt">call center.</span></span>
+    </h1>
+    <p class="hero-sub">Redeem a key and a complete call center spins up under your name in under a minute &mdash; <b>lead dispatch, one-tap outcomes, ranks, encrypted chat</b>, the works. No setup call. No demo. Just a key.</p>
+    <div class="hero-ctas">
+      <a class="btn btn-grad btn-xl" href="#pricing">Spin up my call center</a>
+      <a class="btn btn-ghost btn-lg" href="#showcase">Watch it work</a>
+    </div>
+    <div class="hero-counters">
+      <div class="c"><b class="cu" data-to="1842">0</b><span>leads dispatched today</span></div>
+      <div class="c"><b class="cu" data-to="214">0</b><span>callers on the clock</span></div>
+      <div class="c"><b>&lt; 60s</b><span>key to live panel</span></div>
+      <div class="c"><b class="cu" data-to="11">0</b><span>ranks to climb</span></div>
+    </div>
   </div>
+
+  <div class="hero-cue"><span>Scroll</span><div class="m"><i></i></div></div>
 </header>
 
 <div class="marquee"><div class="marquee-track" id="marqueeTrack">
@@ -738,7 +781,7 @@ footer a:hover{color:var(--text);}
           <div class="panel p" style="padding:12px 13px;margin-bottom:10px;display:flex;align-items:center;gap:10px;">
             <div style="width:32px;height:32px;border-radius:50%;background:var(--grad);display:flex;align-items:center;justify-content:center;flex-shrink:0;"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" style="width:15px;height:15px;"><path d="M12 2l2.6 5.6 6 .7-4.5 4.1 1.2 5.9L12 15.4l-5.3 2.9 1.2-5.9L3.4 8.3l6-.7z"/></svg></div>
             <div style="flex:1;min-width:0;">
-              <div style="font-size:11px;font-weight:700;margin-bottom:4px;">Closer II</div>
+              <div style="font-size:11px;font-weight:700;margin-bottom:4px;">Finisher II</div>
               <div style="height:6px;border-radius:100px;background:rgba(255,255,255,.08);overflow:hidden;"><div style="height:100%;width:68%;border-radius:100px;background:var(--grad);"></div></div>
             </div>
             <span style="font-size:9.5px;color:var(--text-faint);font-weight:700;white-space:nowrap;">2,140 XP</span>
@@ -787,18 +830,18 @@ footer a:hover{color:var(--text);}
       <div class="gstep"><i>2</i><div><b>Open your admin panel</b><p>Log in with the PIN. Brand it — your name and logo replace ours everywhere, including the app icon your callers install.</p></div></div>
       <div class="gstep"><i>3</i><div><b>Load your leads</b><p>Paste or import leads in bulk. The importer parses names and numbers, flags possible duplicates, and files everything under bank categories you pick.</p></div></div>
       <div class="gstep"><i>4</i><div><b>Create your callers</b><p>Add each caller — every one gets their own PIN. Send them your panel link; they install it to their home screen like a native app.</p></div></div>
-      <div class="gstep"><i>5</i><div><b>Drop in scripts</b><p>Write scripts per audience (opener / closer) — or on 14-day+ plans, describe the pitch and let the AI writer draft the full script with objection handling.</p></div></div>
+      <div class="gstep"><i>5</i><div><b>Drop in scripts</b><p>Write scripts per audience (opener / finisher) — or on 14-day+ plans, describe the pitch and let the AI writer draft the full script with objection handling.</p></div></div>
     </div>
     <div class="gcol rv spot">
       <div class="gtag">Every day — your callers</div>
-      <div class="gstep"><i>1</i><div><b>Log in &amp; verify</b><p>PIN in, Telegram-verified once via a 6-digit code — no anonymous accounts on your floor. Then clock in; the timer runs on screen.</p></div></div>
+      <div class="gstep"><i>1</i><div><b>Log in &amp; verify</b><p>PIN in, Telegram-verified once via a 6-digit code — no anonymous accounts on your call center. Then clock in; the timer runs on screen.</p></div></div>
       <div class="gstep"><i>2</i><div><b>Claim from the queue</b><p>Due callbacks sit on top. Fresh leads first, retries labelled with their last outcome. One tap claims the lead and opens the call screen.</p></div></div>
       <div class="gstep"><i>3</i><div><b>Call and log — no skipping</b><p>Script on screen, timer running. When the call ends they must pick an outcome — successful, callback (with a date), voicemail, no answer, busy, wrong number. XP lands on the spot.</p></div></div>
       <div class="gstep"><i>4</i><div><b>Pass closes to a finisher</b><p>Successful calls flow to your finishing queue automatically, with every note attached — nothing lost in the handoff.</p></div></div>
       <div class="gstep"><i>5</i><div><b>Climb the ranks</b><p>Eleven tiers from Seed to Legend, a live leaderboard, celebration animations on closes. At day's end they clock out — and get reminded if they forget.</p></div></div>
     </div>
     <div class="gcol rv spot">
-      <div class="gtag">All week — running the floor</div>
+      <div class="gtag">All week — running the call center</div>
       <div class="gstep"><i>1</i><div><b>Watch it live</b><p>The dashboard counts everything in real time — uncalled, attempted, exhausted, successful, awaiting finishing — with call durations per lead.</p></div></div>
       <div class="gstep"><i>2</i><div><b>Work leads in bulk</b><p>Select any set of leads and assign, vault, reset or delete them together. The stale view surfaces anything untouched for N days.</p></div></div>
       <div class="gstep"><i>3</i><div><b>Recirculate on your terms</b><p>Leads that hit the 3-attempt cap collect under a Max Attempts tile — one tap shows them, and only you decide if they go back out.</p></div></div>
@@ -809,11 +852,11 @@ footer a:hover{color:var(--text);}
 </div></section>
 
 <section id="features"><div class="wrap">
-  <div class="sec-head rv"><div><div class="eyebrow">Everything included</div><h2 class="sec-title">Built for floors that actually dial</h2></div><p class="sec-sub">Every panel ships with the full toolkit. No add-ons, no per-seat pricing, no feature gates.</p></div>
+  <div class="sec-head rv"><div><div class="eyebrow">Everything included</div><h2 class="sec-title">Built for call centers that actually dial</h2></div><p class="sec-sub">Every panel ships with the full toolkit. No add-ons, no per-seat pricing, no feature gates.</p></div>
   <div class="feat-grid stagger">
     <div class="feat rv panel-card spot"><div class="fic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div><h3>Smart lead queue</h3><p>Leads flow to callers automatically. Attempt caps stop dead numbers circulating, callbacks resurface at exactly the right time, and nothing gets called twice by accident.</p></div>
     <div class="feat rv panel-card spot"><div class="fic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></div><h3>One-tap outcomes</h3><p>Successful, callback, voicemail, no answer — one tap logs it, awards XP and pulls the next lead. Outcomes are mandatory, so your data is never full of holes.</p></div>
-    <div class="feat rv panel-card spot"><div class="fic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.6 5.6 6 .7-4.5 4.1 1.2 5.9L12 15.4l-5.3 2.9 1.2-5.9L3.4 8.3l6-.7z"/></svg></div><h3>Ranks &amp; leaderboards</h3><p>Eleven rank tiers from Seed to Legend. XP for every logged call, live leaderboards, celebration animations on closes — your floor competes with itself.</p></div>
+    <div class="feat rv panel-card spot"><div class="fic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l2.6 5.6 6 .7-4.5 4.1 1.2 5.9L12 15.4l-5.3 2.9 1.2-5.9L3.4 8.3l6-.7z"/></svg></div><h3>Ranks &amp; leaderboards</h3><p>Eleven rank tiers from Seed to Legend. XP for every logged call, live leaderboards, celebration animations on closes — your call center competes with itself.</p></div>
     <div class="feat rv panel-card spot"><div class="fic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg></div><h3>Encrypted messaging</h3><p>Team chat with disappearing messages, plus true end-to-end encrypted DMs — sealed on the device, unreadable by the server. Your floor talk stays yours.</p></div>
     <div class="feat rv panel-card spot"><div class="fic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2.5L2.8 9.7c-.9.35-.85 1.65.08 1.92l4.62 1.34 1.7 5.5c.27.87 1.4.98 1.85.18l2.3-4.1 4.9 3.6c.75.55 1.8.13 1.97-.78l3.1-13.3c.2-.9-.68-1.65-1.52-1.32z"/></svg></div><h3>Telegram-verified staff</h3><p>Every caller verifies through Telegram before they can dial. Clock-in tracking, clock-out reminders, and broadcast announcements straight to their phones.</p></div>
     <div class="feat rv panel-card spot"><div class="fic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 8V4H8"/><rect x="4" y="8" width="16" height="12" rx="2"/><path d="M2 14h2M20 14h2M15 13v2M9 13v2"/></svg></div><h3>AI script writer</h3><p>Describe the pitch, pick the audience, get a full call script — opener, qualifying questions, objection handling and close — in seconds. Multi-provider failover keeps it up.</p></div>
@@ -825,12 +868,12 @@ footer a:hover{color:var(--text);}
   <div class="steps stagger">
     <div class="step rv panel-card spot"><h3>Buy an access key</h3><p>Pick a duration below. You get a one-time license key — yours to redeem whenever you're ready.</p></div>
     <div class="step rv panel-card spot"><h3>Redeem it</h3><p>Enter the key, name your call centre, done. Your own panel spins up instantly with a fresh admin PIN.</p></div>
-    <div class="step rv panel-card spot"><h3>Add your floor</h3><p>Create callers, drop in leads, set your scripts. Your team logs in from any phone or laptop — nothing to install.</p></div>
+    <div class="step rv panel-card spot"><h3>Add your call center</h3><p>Create callers, drop in leads, set your scripts. Your team logs in from any phone or laptop — nothing to install.</p></div>
   </div>
 </div></section>
 
 <section id="vs"><div class="wrap">
-  <div class="sec-head rv"><div><div class="eyebrow">Why floors switch</div><h2 class="sec-title">Spreadsheets were never built for this</h2></div><p class="sec-sub">Most floors run on a group chat, a shared sheet, and hope. Here is what that actually costs you.</p></div>
+  <div class="sec-head rv"><div><div class="eyebrow">Why call centers switch</div><h2 class="sec-title">Spreadsheets were never built for this</h2></div><p class="sec-sub">Most floors run on a group chat, a shared sheet, and hope. Here is what that actually costs you.</p></div>
   <div class="vs-grid stagger">
     <div class="vs-col panel-card spot rv bad">
       <div class="vs-head"><span class="vsic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M18 6L6 18M6 6l12 12"/></svg></span>The old way</div>
@@ -845,7 +888,7 @@ footer a:hover{color:var(--text);}
       <div class="vs-row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6L9 17l-5-5"/></svg>One queue, one claim — a lead can only ever be in one caller's hands</div>
       <div class="vs-row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6L9 17l-5-5"/></svg>Outcomes are mandatory — the call literally cannot end without one</div>
       <div class="vs-row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6L9 17l-5-5"/></svg>Callbacks resurface themselves at the right moment, pinned on top</div>
-      <div class="vs-row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6L9 17l-5-5"/></svg>Live dashboard — you watch the floor as it happens, not after</div>
+      <div class="vs-row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6L9 17l-5-5"/></svg>Live dashboard — you watch the call center as it happens, not after</div>
       <div class="vs-row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6"><path d="M20 6L9 17l-5-5"/></svg>New caller gets a PIN and a link — dialing in two minutes</div>
     </div>
   </div>
@@ -868,7 +911,7 @@ footer a:hover{color:var(--text);}
     <div class="pk-main plan hot rv panel-card spot"><div class="plan-top"></div><span class="plan-tag">Most popular</span><div class="plan-in">
       <div class="dur">14 days</div>
       <div class="price"><small>&pound;</small>${P.d14}</div>
-      <div class="per">Two weeks &mdash; long enough to train the floor on it</div>${perDay(P.d14, 14)}
+      <div class="per">Two weeks &mdash; long enough to train the call center on it</div>${perDay(P.d14, 14)}
       <ul>
         <li>${TICK}Everything in the 7-day key</li>
         <li>${TICK}<span><b>AI script writer</b> &mdash; openers, qualifying questions and objection handling, drafted from your pitch</span></li>
@@ -929,7 +972,7 @@ footer a:hover{color:var(--text);}
 
 <section><div class="wrap"><div class="final rv">
   <h2 class="sec-title">Ready when you are</h2>
-  <p class="sec-sub" style="margin:0 auto 28px;">Grab a key, redeem it, and your floor is dialing today.</p>
+  <p class="sec-sub" style="margin:0 auto 28px;">Grab a key, redeem it, and your call center is dialing today.</p>
   <div class="hero-ctas" style="margin:0;">
     <a class="btn btn-grad btn-lg" href="${cta}" target="_blank" rel="noopener">Get a Key</a>
     <a class="btn btn-ghost btn-lg" href="/redeem">Redeem a Key</a>
@@ -947,6 +990,90 @@ footer a:hover{color:var(--text);}
 </div>
 
 <script>
+
+  // ===== Wave 4: cinematic hero =====
+  (function(){
+    var RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var hero = document.querySelector('.hero');
+
+    // count-up
+    document.querySelectorAll('.hero-counters .cu').forEach(function(el){
+      var to=+el.dataset.to, t0=null, dur=1600;
+      function f(t){ if(!t0)t0=t; var p=Math.min(1,(t-t0)/dur); var e=1-Math.pow(1-p,3);
+        el.textContent=Math.round(to*e).toLocaleString(); if(p<1)requestAnimationFrame(f); }
+      setTimeout(function(){ requestAnimationFrame(f); }, 1100);
+    });
+
+    // sticky nav solidify
+    var nav=document.querySelector('nav');
+    if(nav){ var onScroll=function(){ nav.classList.toggle('scrolled', scrollY>40); }; addEventListener('scroll',onScroll,{passive:true}); onScroll(); }
+
+    // spotlight
+    var spot=document.getElementById('heroSpot');
+    if(spot && !RM && matchMedia('(hover:hover)').matches){
+      hero.addEventListener('pointermove',function(e){
+        var r=hero.getBoundingClientRect();
+        spot.style.setProperty('--mx',((e.clientX-r.left)/r.width*100)+'%');
+        spot.style.setProperty('--my',((e.clientY-r.top)/r.height*100)+'%');
+      });
+    }
+
+    // dispatch grid
+    var cv=document.getElementById('dispatchGrid');
+    if(cv && !RM){
+      var ctx=cv.getContext('2d'), W,H,DPR=Math.min(devicePixelRatio||1,2), nodes=[], beams=[], t=0, GAP=64, mx=-999,my=-999;
+      function build(){
+        var r=hero.getBoundingClientRect(); W=r.width; H=r.height;
+        cv.width=W*DPR; cv.height=H*DPR; cv.style.width=W+'px'; cv.style.height=H+'px';
+        ctx.setTransform(DPR,0,0,DPR,0,0); nodes=[];
+        var COLS=Math.ceil(W/GAP)+1, ROWS=Math.ceil(H/GAP)+1;
+        for(var y=0;y<ROWS;y++)for(var x=0;x<COLS;x++)
+          nodes.push({bx:x*GAP,by:y*GAP,x:x*GAP,y:y*GAP,hot:Math.random()<0.08,ph:Math.random()*6.28,pulse:0});
+      }
+      build();
+      var rt; addEventListener('resize',function(){clearTimeout(rt);rt=setTimeout(build,200);});
+      hero.addEventListener('pointermove',function(e){var r=hero.getBoundingClientRect();mx=e.clientX-r.left;my=e.clientY-r.top;});
+      hero.addEventListener('pointerleave',function(){mx=-999;my=-999;});
+      function fire(){
+        var hots=nodes.filter(function(n){return n.hot;}); if(!hots.length)return;
+        var a=hots[(Math.random()*hots.length)|0], b=nodes[(Math.random()*nodes.length)|0];
+        var d=Math.hypot(a.x-b.x,a.y-b.y); if(d<40||d>320)return;
+        beams.push({a:a,b:b,p:0}); a.pulse=1;
+      }
+      var last=0, running=true;
+      function frame(ts){
+        if(!running)return;
+        if(ts-last<28){requestAnimationFrame(frame);return;} last=ts; t+=0.016;
+        ctx.clearRect(0,0,W,H);
+        for(var i=0;i<nodes.length;i++){
+          var n=nodes[i], drift=Math.sin(t*0.6+n.ph)*2; n.x=n.bx; n.y=n.by+drift;
+          var dx=n.x-mx,dy=n.y-my,dd=Math.hypot(dx,dy);
+          if(dd<120){var f=(120-dd)/120*14;n.x+=dx/dd*f;n.y+=dy/dd*f;}
+          if(n.pulse>0)n.pulse-=0.02;
+          var base=n.hot?2.2:1.1, glow=n.hot?(0.65+Math.sin(t*2+n.ph)*0.35):0.22;
+          if(n.pulse>0){base+=n.pulse*3;glow+=n.pulse*0.6;}
+          ctx.beginPath(); ctx.arc(n.x,n.y,base,0,6.28);
+          if(n.hot){ctx.fillStyle='rgba(122,171,255,'+glow+')';ctx.shadowColor='rgba(122,171,255,.8)';ctx.shadowBlur=n.pulse>0?18:8;}
+          else{ctx.fillStyle='rgba(180,190,220,'+glow+')';ctx.shadowBlur=0;}
+          ctx.fill(); ctx.shadowBlur=0;
+        }
+        for(var j=beams.length-1;j>=0;j--){
+          var bm=beams[j]; bm.p+=0.022;
+          if(bm.p>=1){bm.b.pulse=1;beams.splice(j,1);continue;}
+          var cx=bm.a.x+(bm.b.x-bm.a.x)*bm.p, cy=bm.a.y+(bm.b.y-bm.a.y)*bm.p;
+          var g=ctx.createLinearGradient(bm.a.x,bm.a.y,cx,cy);
+          g.addColorStop(0,'rgba(122,171,255,0)'); g.addColorStop(1,'rgba(122,171,255,.55)');
+          ctx.strokeStyle=g; ctx.lineWidth=1.5; ctx.beginPath(); ctx.moveTo(bm.a.x,bm.a.y); ctx.lineTo(cx,cy); ctx.stroke();
+          ctx.beginPath(); ctx.arc(cx,cy,2.4,0,6.28); ctx.fillStyle='rgba(196,176,255,.95)';
+          ctx.shadowColor='rgba(122,171,255,1)'; ctx.shadowBlur=14; ctx.fill(); ctx.shadowBlur=0;
+        }
+        if(Math.random()<0.3) fire();
+        requestAnimationFrame(frame);
+      }
+      requestAnimationFrame(frame);
+      document.addEventListener('visibilitychange',function(){ running=!document.hidden; if(running){last=0;requestAnimationFrame(frame);} });
+    }
+  })();
 (function(){
   var io = new IntersectionObserver(function(es){ es.forEach(function(e){ if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }); }, { threshold: 0.12 });
   document.querySelectorAll('.rv').forEach(function(el){ io.observe(el); });
@@ -969,15 +1096,15 @@ footer a:hover{color:var(--text);}
     chat: '<div style="display:flex;gap:4px;padding:4px;border-radius:100px;background:rgba(255,255,255,.05);border:1px solid var(--border);margin-bottom:12px;">'
       + '<span style="flex:1;text-align:center;padding:7px;border-radius:100px;font-size:11px;font-weight:700;background:var(--grad);color:#fff;">Team</span>'
       + '<span style="flex:1;text-align:center;padding:7px;border-radius:100px;font-size:11px;font-weight:700;color:var(--text-dim);">Direct</span></div>'
-      + '<div class="panel p" style="padding:9px 12px;margin-bottom:8px;max-width:82%;font-size:11.5px;">Anyone got the closer script for the HSBC batch?<small style="display:block;font-size:9px;color:var(--text-faint);margin-top:3px;">Jamie &middot; 2:14 PM</small></div>'
+      + '<div class="panel p" style="padding:9px 12px;margin-bottom:8px;max-width:82%;font-size:11.5px;">Anyone got the finisher script for the HSBC batch?<small style="display:block;font-size:9px;color:var(--text-faint);margin-top:3px;">Jamie &middot; 2:14 PM</small></div>'
       + '<div class="panel p" style="padding:9px 12px;margin-bottom:8px;max-width:82%;margin-left:auto;font-size:11.5px;background:rgba(79,140,255,.1);border-color:rgba(79,140,255,.28);">Scripts tab, second one down.<small style="display:block;font-size:9px;color:var(--text-faint);margin-top:3px;">You &middot; 2:15 PM</small></div>'
       + '<div style="display:flex;align-items:center;gap:6px;font-size:9.5px;color:var(--success);font-weight:700;justify-content:center;padding:10px 0;"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" style="width:11px;height:11px;"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>Direct messages are end-to-end encrypted</div>',
     board: '<div class="panel p" style="padding:14px;margin-bottom:8px;display:flex;align-items:center;gap:12px;">'
       + '<b style="font-size:15px;color:var(--gold-bright);width:16px;">1</b><div style="width:30px;height:30px;border-radius:50%;background:var(--grad);"></div><div style="flex:1;"><b style="font-size:12.5px;display:block;">Jamie R.</b><span style="font-size:10px;color:var(--text-faint);">Grandmaster</span></div><span class="mono" style="font-size:12px;font-weight:700;">4,820</span></div>'
       + '<div class="panel p" style="padding:14px;margin-bottom:8px;display:flex;align-items:center;gap:12px;background:rgba(79,140,255,.06);border-color:rgba(79,140,255,.25);">'
-      + '<b style="font-size:15px;color:var(--text-dim);width:16px;">2</b><div style="width:30px;height:30px;border-radius:50%;background:var(--grad);"></div><div style="flex:1;"><b style="font-size:12.5px;display:block;">You</b><span style="font-size:10px;color:var(--text-faint);">Closer II</span></div><span class="mono" style="font-size:12px;font-weight:700;">2,140</span></div>'
+      + '<b style="font-size:15px;color:var(--text-dim);width:16px;">2</b><div style="width:30px;height:30px;border-radius:50%;background:var(--grad);"></div><div style="flex:1;"><b style="font-size:12.5px;display:block;">You</b><span style="font-size:10px;color:var(--text-faint);">Finisher II</span></div><span class="mono" style="font-size:12px;font-weight:700;">2,140</span></div>'
       + '<div class="panel p" style="padding:14px;display:flex;align-items:center;gap:12px;">'
-      + '<b style="font-size:15px;color:var(--text-dim);width:16px;">3</b><div style="width:30px;height:30px;border-radius:50%;background:var(--grad);"></div><div style="flex:1;"><b style="font-size:12.5px;display:block;">Priya S.</b><span style="font-size:10px;color:var(--text-faint);">Closer I</span></div><span class="mono" style="font-size:12px;font-weight:700;">1,905</span></div>'
+      + '<b style="font-size:15px;color:var(--text-dim);width:16px;">3</b><div style="width:30px;height:30px;border-radius:50%;background:var(--grad);"></div><div style="flex:1;"><b style="font-size:12.5px;display:block;">Priya S.</b><span style="font-size:10px;color:var(--text-faint);">Finisher I</span></div><span class="mono" style="font-size:12px;font-weight:700;">1,905</span></div>'
   };
   var _rpQueueHtml = null;
   function showRpScreen(key){
@@ -1012,7 +1139,7 @@ footer a:hover{color:var(--text);}
       + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><b style="font-size:13.5px;">Barclays Opener v3</b><span class="badge ok" style="font-size:9px;">Active</span></div>'
       + '<p style="font-size:12px;color:var(--text-dim);margin:0;">Good afternoon, am I speaking with [name]? This is [caller] calling about your recent...</p></div>'
       + '<div class="panel p" style="padding:16px;margin-bottom:10px;">'
-      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><b style="font-size:13.5px;">HSBC Closer</b><span class="badge dim" style="font-size:9px;">Draft</span></div>'
+      + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;"><b style="font-size:13.5px;">HSBC Finisher</b><span class="badge dim" style="font-size:9px;">Draft</span></div>'
       + '<p style="font-size:12px;color:var(--text-dim);margin:0;">Perfect \u2014 so just to confirm what we have covered today...</p></div>'
       + '<div style="display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--gold-bright);font-weight:600;padding:4px 2px;">'
       + '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px;"><path d="M12 3l1.9 4.6L18.5 9l-4.6 1.9L12 15.5l-1.9-4.6L5.5 9l4.6-1.4z"/><path d="M18 14l.9 2.1L21 17l-2.1.9L18 20l-.9-2.1L15 17l2.1-.9z"/></svg>'
@@ -1082,10 +1209,10 @@ footer a:hover{color:var(--text);}
     '<b>Jamie</b> claimed a fresh lead from the queue',
     '<b>Priya</b> logged an outcome \u2014 Successful',
     'Callback with <b>Sandra P.</b> due in 15 minutes',
-    '<b>Marcus</b> clocked in \u2014 6 callers on the floor',
+    '<b>Marcus</b> clocked in \u2014 6 callers in the call center',
     '<b>Jamie</b> booked a callback for tomorrow 2 PM',
     'A lead hit its attempt cap \u2014 parked for admin review',
-    '<b>Priya</b> ranked up to Closer I'
+    '<b>Priya</b> ranked up to Finisher I'
   ];
   var tickerEl = document.getElementById('tickerMsg');
   var tIdx = 0;
