@@ -41,7 +41,11 @@ function startQueuePolling() {
   // Never refresh while actively on a call - this exact bug used to tear down and
   // rebuild the whole active-call screen every 4 seconds, wiping typed notes and
   // losing focus. The poll is only for the "browsing available leads" view.
-  queuePollInterval = setInterval(() => { if (staffTab === 'queue' && !onActiveCallScreen) smoothRerender(renderStaffQueue); }, 4000);
+  // SSE (new_lead / lead_claimed) is the real-time path for the queue; this
+  // interval is only a safety net for when the stream is briefly down. It used
+  // to fire every 4s, re-fetching and rebuilding the whole queue on top of the
+  // live events — pure redundant work. 15s keeps the fallback without the churn.
+  queuePollInterval = setInterval(() => { if (staffTab === 'queue' && !onActiveCallScreen) smoothRerender(renderStaffQueue); }, 15000);
 }
 function stopQueuePolling() {
   if (queuePollInterval) { clearInterval(queuePollInterval); queuePollInterval = null; }
@@ -183,7 +187,7 @@ async function renderStaffScripts() {
       <div style="display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap;" id="staffScriptFilters">
         <button class="chip-filter active" data-aud="all" onclick="filterStaffScripts('all', this)">All</button>
         <button class="chip-filter" data-aud="opener" onclick="filterStaffScripts('opener', this)">Openers</button>
-        <button class="chip-filter" data-aud="closer" onclick="filterStaffScripts('closer', this)">Closers</button>
+        <button class="chip-filter" data-aud="closer" onclick="filterStaffScripts('closer', this)">Finishers</button>
       </div>
       <input id="scriptSearchInput" placeholder="Search scripts…" oninput="filterScriptManager()" style="margin-bottom:12px;" />
       <div id="scriptManagerList"></div>
@@ -592,6 +596,7 @@ async function renderStaffBoard() {
       <div class="seg-tabs">
         <button class="seg-tab \${lbMode==='week'?'on':''}" onclick="lbMode='week';renderStaffBoard()">This Week</button>
         <button class="seg-tab \${lbMode==='all'?'on':''}" onclick="lbMode='all';renderStaffBoard()">All Time</button>
+        <button class="seg-tab \${lbMode==='calls'?'on':''}" onclick="lbMode='calls';renderStaffBoard()">Top Finishers</button>
       </div>
     </div>
     \${lbBoardHtml(rows, lbMode)}
@@ -606,9 +611,37 @@ async function renderStaffProfile() {
   const fresh = (await meRes.json()).data;
   me = { ...me, ...fresh }; localStorage.setItem('dispatch_me', JSON.stringify(me));
   body.innerHTML = \`
+    \${profileCardHtml(me, { self: true })}
+    <div class="panel p fade-up">
+      <div class="section-title" style="margin-top:0;">Your @handle</div>
+      <p style="font-size:11.5px;color:var(--text-dim);margin-bottom:10px;line-height:1.5;">Your public identity across ClearPanel — claimed once, yours everywhere. 3–20 characters: letters, numbers, underscore. \${me.handle ? 'Claimed handles are permanent.' : 'Pick a good one.'}</p>
+      \${me.handle
+        ? '<div style="display:flex;align-items:center;gap:8px;font-family:\\'Geist Mono\\',monospace;font-size:15px;font-weight:600;color:var(--gold-bright);"><span>@' + esc(me.handle) + '</span><span class="mono" style="font-size:10px;color:var(--success);border:1px solid var(--success);border-radius:20px;padding:2px 8px;">CLAIMED</span></div>'
+        : '<div style="display:flex;gap:8px;align-items:center;"><span style="color:var(--text-faint);font-size:15px;">@</span><input id="pfHandle" placeholder="yourhandle" maxlength="20" oninput="checkHandleLive()" style="flex:1;" /><button class="btn btn-gold" style="flex-shrink:0;" id="claimHandleBtn" onclick="claimHandle()">Claim</button></div>'}
+      <div id="handleStatus" style="font-size:12px;margin-top:8px;min-height:16px;"></div>
+    </div>
+    <div class="panel p fade-up">
+      <div class="section-title" style="margin-top:0;">Bio</div>
+      <p style="font-size:11.5px;color:var(--text-dim);margin-bottom:10px;line-height:1.5;">A line or two about you — shows on your profile and when teammates tap your name.</p>
+      <textarea id="pfBio" maxlength="280" rows="3" placeholder="e.g. Finisher by day. Ask me about the HSBC script." oninput="document.getElementById('bioCount').textContent = (280 - this.value.length) + ' left';" style="width:100%;resize:vertical;font-family:inherit;font-size:13px;padding:10px 12px;background:rgba(255,255,255,.03);border:1px solid var(--border-2);border-radius:10px;color:var(--text);line-height:1.5;">\${esc(me.bio || '')}</textarea>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px;">
+        <span id="bioCount" style="font-size:11px;color:var(--text-faint);">\${280 - (me.bio || '').length} left</span>
+        <button class="btn btn-ghost btn-sm" onclick="saveBio()">Save Bio</button>
+      </div>
+      <div id="bioStatus" style="font-size:12px;margin-top:6px;"></div>
+    </div>
+    <div class="panel p fade-up">
+      <div class="section-title" style="margin-top:0;">Profile Colors</div>
+      <p style="font-size:11.5px;color:var(--text-dim);margin-bottom:12px;line-height:1.5;">Personalize your card. Leave unset to use your rank colour.</p>
+      <div style="display:flex;gap:20px;align-items:center;">
+        <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text);text-transform:none;letter-spacing:0;font-weight:500;">Banner<input type="color" id="pfBanner" value="\${/^#[0-9a-fA-F]{6}$/.test(me.banner_color||'')?me.banner_color:'#7aabff'}" style="width:34px;height:28px;border:none;background:none;cursor:pointer;" /></label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text);text-transform:none;letter-spacing:0;font-weight:500;">Accent<input type="color" id="pfAccent" value="\${/^#[0-9a-fA-F]{6}$/.test(me.accent_color||'')?me.accent_color:'#c4b0ff'}" style="width:34px;height:28px;border:none;background:none;cursor:pointer;" /></label>
+        <button class="btn btn-ghost btn-sm" style="margin-left:auto;" onclick="saveColors()">Apply</button>
+      </div>
+    </div>
     <div class="panel p fade-up">
       <div class="section-title" style="margin-top:0;">Profile Picture</div>
-      <div style="display:flex;align-items:center;gap:16px;margin-bottom:14px;">
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:4px;">
         <div id="pfpPreview">\${avatarHtml(me, 64)}</div>
         <div style="display:flex;flex-direction:column;gap:8px;">
           <label class="btn btn-ghost btn-sm" style="text-align:center;cursor:pointer;">Upload Photo<input type="file" accept="image/*" id="pfpFile" style="display:none;" onchange="handlePfpUpload(event)" /></label>
@@ -618,17 +651,15 @@ async function renderStaffProfile() {
       <div class="section-title">Your Call-From Number</div>
       <p style="font-size:11.5px;color:var(--text-dim);margin-bottom:8px;">The number you're actually dialing from. Only admins can see this, and it's blurred by default.</p>
       <div class="field"><input id="pfPhone" value="\${esc(me.call_phone || '')}" placeholder="e.g. +44 7911 123456" /></div>
-      <button class="btn btn-gold btn-block" onclick="saveProfile()">Save Changes</button>
-      <div id="profileStatus" style="font-size:12px;margin-top:10px;"></div>
-    </div>
-    <div class="panel p fade-up">
-      <div class="section-title" style="margin-top:0;">Username</div>
-      <p style="font-size:11.5px;color:var(--text-dim);margin-bottom:10px;line-height:1.5;">This is how you're known across the panel and how you find your way back if you lose the link. \${me.username ? '' : 'Pick one to claim it.'}</p>
+      <div class="section-title">Panel Login Name</div>
+      <p style="font-size:11.5px;color:var(--text-dim);margin-bottom:8px;line-height:1.5;">How you're listed on <b style="color:var(--text);">this</b> panel, and how you find your way back if you lose the link. \${me.username ? '' : 'Pick one to claim it.'}</p>
       <div style="display:flex;gap:8px;">
         <input id="pfUsername" value="\${esc(me.username || '')}" placeholder="e.g. sarah_m" maxlength="20" />
         <button class="btn btn-ghost" style="flex-shrink:0;" onclick="saveUsername()">\${me.username ? 'Update' : 'Claim'}</button>
       </div>
-      <div id="usernameStatus" style="font-size:12px;margin-top:8px;"></div>
+      <div id="usernameStatus" style="font-size:12px;margin:8px 0 12px;"></div>
+      <button class="btn btn-gold btn-block" onclick="saveProfile()">Save Changes</button>
+      <div id="profileStatus" style="font-size:12px;margin-top:10px;"></div>
     </div>
     <div class="panel p fade-up">
       <div class="section-title" style="margin-top:0;">Change Your PIN</div>
@@ -722,6 +753,55 @@ async function saveUsername() {
   me.username = data.data.username; localStorage.setItem('dispatch_me', JSON.stringify(me));
   statusEl.textContent = 'Username set ✓'; statusEl.style.color = 'var(--success)';
   renderStaffProfile();
+}
+let _handleCheckTimer = null;
+function checkHandleLive() {
+  const input = document.getElementById('pfHandle');
+  const statusEl = document.getElementById('handleStatus');
+  const btn = document.getElementById('claimHandleBtn');
+  if (!input || !statusEl) return;
+  const val = input.value.trim().replace(/^@+/, '');
+  if (_handleCheckTimer) clearTimeout(_handleCheckTimer);
+  if (val.length < 3) { statusEl.textContent = ''; if (btn) btn.disabled = true; return; }
+  statusEl.textContent = 'Checking…'; statusEl.style.color = 'var(--text-dim)';
+  // Debounce so we're not hitting the endpoint on every keystroke.
+  _handleCheckTimer = setTimeout(async () => {
+    const res = await api('/api/handle/check?handle=' + encodeURIComponent(val));
+    const d = (await res.json()).data || {};
+    if (d.available) { statusEl.textContent = '@' + (d.handle || val) + ' is available ✓'; statusEl.style.color = 'var(--success)'; if (btn) btn.disabled = false; }
+    else { statusEl.textContent = d.reason || 'Not available'; statusEl.style.color = 'var(--danger)'; if (btn) btn.disabled = true; }
+  }, 350);
+}
+async function claimHandle() {
+  const input = document.getElementById('pfHandle');
+  const statusEl = document.getElementById('handleStatus');
+  if (!input) return;
+  const val = input.value.trim().replace(/^@+/, '');
+  if (val.length < 3) { statusEl.textContent = 'Enter a handle first.'; statusEl.style.color = 'var(--danger)'; return; }
+  statusEl.textContent = 'Claiming…'; statusEl.style.color = 'var(--text-dim)';
+  const res = await api('/api/me/claim-handle', { method: 'POST', body: JSON.stringify({ handle: val }) });
+  const data = await res.json();
+  if (!res.ok) { statusEl.textContent = data.error || 'Could not claim that handle.'; statusEl.style.color = 'var(--danger)'; return; }
+  me.handle = data.data.handle; localStorage.setItem('dispatch_me', JSON.stringify(me));
+  renderStaffProfile();
+}
+async function saveBio() {
+  const bio = document.getElementById('pfBio').value;
+  const statusEl = document.getElementById('bioStatus');
+  statusEl.textContent = 'Saving…'; statusEl.style.color = 'var(--text-dim)';
+  const res = await api('/api/me/profile', { method: 'PATCH', body: JSON.stringify({ bio }) });
+  const data = await res.json();
+  if (!res.ok || !data.data) { statusEl.textContent = data.error || 'Could not save.'; statusEl.style.color = 'var(--danger)'; return; }
+  me = { ...me, ...data.data }; localStorage.setItem('dispatch_me', JSON.stringify(me));
+  statusEl.textContent = 'Saved ✓'; statusEl.style.color = 'var(--success)';
+  renderStaffProfile();
+}
+async function saveColors() {
+  const banner_color = document.getElementById('pfBanner').value;
+  const accent_color = document.getElementById('pfAccent').value;
+  const res = await api('/api/me/profile', { method: 'PATCH', body: JSON.stringify({ banner_color, accent_color }) });
+  const data = await res.json();
+  if (res.ok && data.data) { me = { ...me, ...data.data }; localStorage.setItem('dispatch_me', JSON.stringify(me)); renderStaffProfile(); }
 }
 async function saveNotifPrefs() {
   await api('/api/me/notif-prefs', { method: 'PATCH', body: JSON.stringify({ lead_assigned: document.getElementById('prefLead').checked, chat: document.getElementById('prefChat').checked, announcements: document.getElementById('prefAnn').checked }) });
