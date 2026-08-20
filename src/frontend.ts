@@ -50,6 +50,8 @@ async function applyBranding() {
 applyBranding();
 let pinBuffer = '';
 let es = null;
+let _esReconnectTimer = null;
+let _esBackoff = 3000;
 let recentlyClaimedIds = new Set();
 let callTimerInterval = null, callStart = null;
 let staffTab = 'home';
@@ -531,8 +533,17 @@ function renderStaffNav() {
 
 // ---------- Realtime ----------
 function connectEvents() {
+  // Guard against stacking streams: connectEvents is called from several places
+  // (initial load, resume, and previously from onerror). If a stream is already
+  // OPEN or still CONNECTING, opening another one here means two EventSources
+  // delivering the same events — the root cause of duplicated chat messages and
+  // the "chat randomly doubles / lags" behaviour. Only (re)open when there's no
+  // live stream.
+  if (es && es.readyState !== 2 /* CLOSED */) return;
   if (es) es.close();
+  if (_esReconnectTimer) { clearTimeout(_esReconnectTimer); _esReconnectTimer = null; }
   es = new EventSource('/api/events?uid=' + me.id + '&pin=' + me.pin);
+  es.addEventListener('open', () => { _esBackoff = 3000; });
   es.addEventListener('new_lead', () => { if (me.role !== 'admin') playPing('lead'); if (staffTab === 'queue' && !onActiveCallScreen) smoothRerender(renderStaffQueue); pingNav('queue'); if (me.role==='admin') maybeRefreshAdmin('leads'); });
   es.addEventListener('center_closed', (e) => {
     if (me.role === 'admin') return; // admins are exempt from the gate, nothing changes for them
@@ -573,7 +584,7 @@ function connectEvents() {
     setTimeout(() => recentlyClaimedIds.delete(d.id), 15000);
   });
   es.addEventListener('lead_updated', () => { if (me.role === 'admin') maybeRefreshAdmin(['dashboard','leads','finishing']); });
-  es.addEventListener('announcement', () => { if (staffTab === 'home') renderStaffHome(); if (me.role==='admin') maybeRefreshAdmin('announcements'); });
+  es.addEventListener('announcement', () => { if (staffTab === 'home') scheduleStaffHomeRefresh(); if (me.role==='admin') maybeRefreshAdmin('announcements'); });
   es.addEventListener('chat_message', (e) => { const d = JSON.parse(e.data); if (staffTab === 'chat' || (me.role==='admin' && currentAdminTab==='chat')) appendChatMessage(d); else pingNav('chat'); });
   es.addEventListener('panel_update', (e) => {
     const d = JSON.parse(e.data);
@@ -601,7 +612,19 @@ function connectEvents() {
     if (me.role !== 'admin' && me.role !== 'manager') return;
     showNoteToast(d);
   });
-  es.onerror = () => setTimeout(() => { if (me) connectEvents(); }, 3000);
+  // EventSource reconnects itself while a stream is merely CONNECTING (readyState 1);
+  // we must NOT open a parallel one in that window. Only when the browser gives up
+  // (readyState CLOSED) do we schedule a single backed-off reconnect, and the guard
+  // at the top of connectEvents() ensures we never double up.
+  es.onerror = () => {
+    if (!es || es.readyState !== 2 /* CLOSED */) return; // still retrying on its own
+    if (_esReconnectTimer) return; // one pending reconnect is enough
+    _esReconnectTimer = setTimeout(() => {
+      _esReconnectTimer = null;
+      _esBackoff = Math.min(_esBackoff * 1.7, 30000); // ease off a persistently-down server
+      if (me) connectEvents();
+    }, _esBackoff);
+  };
 }
 function pingNav(tab) {
   const btn = document.querySelector('.nav-btn[data-tab="' + tab + '"]');
@@ -637,7 +660,35 @@ function playPing(kind) {
 }
 function clearNavBadge(tab) { const btn = document.querySelector('.nav-btn[data-tab="' + tab + '"]'); const b = btn && btn.querySelector('.nav-badge'); if (b) b.remove(); }
 let currentAdminTab = 'dashboard';
-function maybeRefreshAdmin(tabs) { const arr = Array.isArray(tabs) ? tabs : [tabs]; if (arr.includes(currentAdminTab)) smoothRerender(() => renderAdminTab(currentAdminTab)); }
+// Coalesce re-render requests. On a busy call center, lead_updated (and friends)
+// can fire many times a second; without this, each event forced a full refetch +
+// a 120ms opacity dip, so the dashboard sat in a permanent flash-and-reload loop.
+// We batch a burst of triggers into a single refresh on the trailing edge.
+let _adminRefreshTimer = null;
+let _adminRefreshWanted = false;
+function maybeRefreshAdmin(tabs) {
+  const arr = Array.isArray(tabs) ? tabs : [tabs];
+  if (!arr.includes(currentAdminTab)) return;
+  _adminRefreshWanted = true;
+  if (_adminRefreshTimer) return; // a refresh is already scheduled; this event folds into it
+  _adminRefreshTimer = setTimeout(() => {
+    _adminRefreshTimer = null;
+    if (!_adminRefreshWanted) return;
+    _adminRefreshWanted = false;
+    smoothRerender(() => renderAdminTab(currentAdminTab));
+  }, 500);
+}
+// Same coalescing idea for the staff Home tab, which refetches 6 endpoints on a
+// full render — an announcement burst shouldn't trigger six network round-trips
+// per message.
+let _staffHomeTimer = null;
+function scheduleStaffHomeRefresh() {
+  if (_staffHomeTimer) return;
+  _staffHomeTimer = setTimeout(() => {
+    _staffHomeTimer = null;
+    if (typeof staffTab !== 'undefined' && staffTab === 'home' && typeof renderStaffHome === 'function') renderStaffHome();
+  }, 500);
+}
 // Background updates (triggered by other people's actions via SSE) shouldn't look
 // like the page reloading. Briefly dims the content, swaps it while invisible, then
 // fades back in — same content update, no jarring flash or re-triggered pop-in
@@ -789,7 +840,7 @@ function animateCountUps(container) {
 const RANK_TIERS = [
   ['Rookie',        '#94a3b8', '#64748b',  1,  'r_seed'],
   ['Dialer',        '#60a5fa', '#2563eb',  4,  'r_phone'],
-  ['Closer',        '#34d399', '#059669',  8,  'r_bolt'],
+  ['Finisher',      '#34d399', '#059669',  8,  'r_bolt'],
   ['Sharpshooter',  '#22d3ee', '#0891b2',  13, 'r_target'],
   ['Rainmaker',     '#fbbf24', '#d97706',  19, 'r_flame'],
   ['Heavy Hitter',  '#f97316', '#c2410c',  26, 'r_star'],
@@ -827,6 +878,45 @@ function rankEmblemHtml(rk, size) {
 function rankChipHtml(rk) {
   return '<span class="rank-chip" style="color:' + rk.c1 + ';border-color:' + rk.c1 + '55;">' + rankEmblemHtml(rk, 16) + rk.label + '</span>';
 }
+// ---- Public profile card: the "who is this" hero, used on the Profile tab and
+// when tapping a teammate. Banner uses the person's accent colour (falling back
+// to the rank colour), then avatar + @handle + bio + rank + stat pills. Pure
+// presentation — every value is escaped; colours are validated server-side.
+function profileCardHtml(p, opts) {
+  opts = opts || {};
+  const rk = rankInfo(p.xp || 0);
+  const accent = /^#[0-9a-fA-F]{6}$/.test(p.accent_color || '') ? p.accent_color : rk.c1;
+  const banner = /^#[0-9a-fA-F]{6}$/.test(p.banner_color || '') ? p.banner_color : rk.c1;
+  const handle = p.handle ? '@' + esc(p.handle) : '';
+  const joined = p.created_at ? new Date(p.created_at).toLocaleDateString(undefined, { month: 'short', year: 'numeric' }) : '';
+  const calls = p.successful_calls != null ? Number(p.successful_calls) : null;
+  const li = levelInfo(p.xp || 0);
+  return '<div class="profile-card panel fade-up" style="--accent:' + accent + ';overflow:hidden;padding:0;">'
+    + '<div class="profile-banner" style="height:74px;background:linear-gradient(120deg,' + banner + '33,' + accent + '22 60%,transparent);border-bottom:1px solid var(--border);"></div>'
+    + '<div style="padding:0 18px 18px;margin-top:-34px;">'
+    + '<div style="display:flex;align-items:flex-end;gap:14px;">'
+    + '<div style="position:relative;">' + avatarHtml(p, 72) + '<div style="position:absolute;bottom:-4px;right:-4px;">' + rankEmblemHtml(rk, 30) + '</div></div>'
+    + '<div style="flex:1;min-width:0;padding-bottom:4px;">'
+    + '<div style="font-size:17px;font-weight:700;letter-spacing:-.01em;">' + esc(p.name || 'Unknown') + '</div>'
+    + (handle ? '<div class="mono" style="font-size:12.5px;color:var(--accent);font-weight:600;">' + handle + '</div>' : '<div style="font-size:11.5px;color:var(--text-faint);">no handle yet</div>')
+    + '</div>'
+    + '</div>'
+    + (p.bio ? '<div style="font-size:13px;color:var(--text-dim);line-height:1.5;margin-top:12px;white-space:pre-wrap;word-break:break-word;">' + esc(p.bio) + '</div>' : '')
+    + '<div style="display:flex;gap:8px;margin-top:14px;flex-wrap:wrap;">'
+    + profileStat('Rank', rk.label)
+    + profileStat('Level', 'Lv ' + li.level)
+    + profileStat('XP', String(p.xp || 0))
+    + (calls != null ? profileStat('Closes', String(calls)) : '')
+    + (joined ? profileStat('Joined', joined) : '')
+    + '</div>'
+    + '</div></div>';
+}
+function profileStat(label, value) {
+  return '<div style="flex:1;min-width:64px;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:10px;padding:9px 10px;text-align:center;">'
+    + '<div style="font-family:\\'Bricolage Grotesque\\',sans-serif;font-weight:800;font-size:16px;line-height:1;">' + esc(value) + '</div>'
+    + '<div style="font-size:9.5px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.08em;margin-top:5px;">' + esc(label) + '</div>'
+    + '</div>';
+}
 function showRankUp(rk) {
   const el = document.createElement('div');
   el.className = 'rankup-overlay';
@@ -848,7 +938,7 @@ function bankLogoUrl(domain) { return 'https://www.google.com/s2/favicons?domain
 function levelInfo(xp) {
   let lvl = 1, rem = Math.max(0, xp || 0), cost = 100;
   while (rem >= cost) { rem -= cost; lvl++; cost = 100 + (lvl - 1) * 60; }
-  const bands = [[60,'Mythic'],[56,'Legend'],[50,'Grandmaster'],[43,'Master'],[34,'Ace'],[26,'Heavy Hitter'],[19,'Rainmaker'],[13,'Sharpshooter'],[8,'Closer'],[4,'Dialer'],[1,'Rookie']];
+  const bands = [[60,'Mythic'],[56,'Legend'],[50,'Grandmaster'],[43,'Master'],[34,'Ace'],[26,'Heavy Hitter'],[19,'Rainmaker'],[13,'Sharpshooter'],[8,'Finisher'],[4,'Dialer'],[1,'Rookie']];
   const title = bands.find(b => lvl >= b[0])[1];
   return { level: lvl, into: rem, need: cost, pct: Math.min(100, Math.round(rem / cost * 100)), title };
 }
@@ -897,42 +987,66 @@ function showNoteToast(d) {
 }
 // ---- Leaderboard builders (shared by staff board and admin board) ----
 function lbSortKey(mode) { return mode === 'week' ? 'weekly_xp' : 'xp'; }
+// Metric shown per board mode: weekly XP, all-time XP, or successful calls.
+function lbMetric(r, mode) {
+  if (mode === 'week') return r.weekly_xp || 0;
+  if (mode === 'calls') return r.successful_calls || 0;
+  return r.xp || 0;
+}
+function lbMetricLabel(mode) { return mode === 'calls' ? 'closes' : 'xp'; }
 function lbPodiumSlot(r, place, height, mode) {
   if (!r) return '<div style="flex:1;"></div>';
-  const xpVal = mode === 'week' ? (r.weekly_xp || 0) : r.xp;
+  const val = lbMetric(r, mode);
   const li = levelInfo(r.xp);
   const barColor = place === 1 ? 'linear-gradient(180deg,#fbbf24,#b8860b)' : place === 2 ? 'linear-gradient(180deg,#d1d5db,#9ca3af)' : 'linear-gradient(180deg,#d97706,#92400e)';
+  const handle = r.handle ? '@' + esc(r.handle) : '';
   return '<div class="podium-slot">'
     + (place === 1 ? '<div class="podium-crown">👑</div>' : '<div style="height:16px;"></div>')
     + '<div class="podium-av' + (place === 1 ? ' first' : '') + '">' + avatarHtml(r, place === 1 ? 54 : 44) + '</div>'
     + '<div style="font-size:11.5px;font-weight:700;text-align:center;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc(r.name) + (typeof me !== 'undefined' && me && r.id === me.id ? ' <span style="color:var(--gold-bright);">(you)</span>' : '') + '</div>'
+    + (handle ? '<div class="mono" style="font-size:9.5px;color:var(--text-faint);max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + handle + '</div>' : '')
     + '<span class="lvl-chip">Lv ' + li.level + ' · ' + li.title + '</span>'
-    + '<div class="mono" style="font-size:11px;color:var(--violet-bright);font-weight:700;" data-count="' + xpVal + '">0</div>'
+    + '<div class="mono" style="font-size:11px;color:var(--violet-bright);font-weight:700;" data-count="' + val + '">0</div>'
     + '<div class="podium-bar" style="height:' + height + 'px;background:' + barColor + ';">#' + place + '</div>'
     + '</div>';
 }
 function lbRowHtml(r, rank, mode, delay) {
-  const xpVal = mode === 'week' ? (r.weekly_xp || 0) : r.xp;
+  const val = lbMetric(r, mode);
   const li = levelInfo(r.xp);
   const isMe = typeof me !== 'undefined' && me && r.id === me.id;
+  const handle = r.handle ? ' <span class="mono" style="font-size:10px;color:var(--text-faint);">@' + esc(r.handle) + '</span>' : '';
+  const primary = mode === 'calls'
+    ? '<span style="color:var(--success);"><b class="mono" data-count="' + val + '">0</b> closes</span><span><b>' + (r.xp || 0) + '</b> xp</span>'
+    : '<span><b>' + (r.successful_calls || 0) + '</b> closes</span><span style="color:var(--violet-bright);"><b class="mono" data-count="' + val + '">0</b> xp</span>';
   return '<div class="lb-row' + (isMe ? ' me' : '') + '" style="animation-delay:' + (delay * 45) + 'ms;padding:11px 12px;">'
     + '<div class="rank r' + rank + '">' + rank + '</div>' + avatarHtml(r, 32)
     + '<div style="flex:1;min-width:0;margin-left:8px;">'
-    +   '<div class="lb-name">' + esc(r.name) + (isMe ? ' <span style="color:var(--gold-bright);">(you)</span>' : '') + ' <span class="lvl-chip" style="padding:2px 8px;font-size:9px;">Lv ' + li.level + '</span></div>'
+    +   '<div class="lb-name">' + esc(r.name) + (isMe ? ' <span style="color:var(--gold-bright);">(you)</span>' : '') + handle + ' <span class="lvl-chip" style="padding:2px 8px;font-size:9px;">Lv ' + li.level + '</span></div>'
     +   '<div class="xp-bar" style="margin-top:6px;max-width:190px;"><i style="width:' + li.pct + '%;"></i></div>'
     + '</div>'
-    + '<div class="lb-stats"><span><b>' + (r.successful_calls || 0) + '</b> wins</span><span style="color:var(--violet-bright);"><b class="mono" data-count="' + xpVal + '">0</b> xp</span></div>'
+    + '<div class="lb-stats">' + primary + '</div>'
     + '</div>';
 }
 function lbBoardHtml(rows, mode) {
-  const sorted = [...rows].sort((a, b) => (mode === 'week' ? (b.weekly_xp||0) - (a.weekly_xp||0) : b.xp - a.xp));
+  const sorted = [...rows].sort((a, b) => lbMetric(b, mode) - lbMetric(a, mode));
   const [first, second, third] = sorted;
   const rest = sorted.slice(3);
+  // If the current user isn't on the podium or in the visible rest, pin their
+  // own rank at the bottom so they always see where they stand.
+  let selfPin = '';
+  if (typeof me !== 'undefined' && me) {
+    const myIdx = sorted.findIndex(r => r.id === me.id);
+    if (myIdx >= 3) selfPin = '<div class="panel p fade-up" style="margin-top:2px;"><div style="font-size:10px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px;">Your position</div>' + lbRowHtml(sorted[myIdx], myIdx + 1, mode, 0) + '</div>';
+  }
+  const emptyMsg = mode === 'calls'
+    ? 'No closes on the board yet — successful calls show up here.'
+    : 'No one on the board yet — XP starts counting from the first claimed lead.';
   return (sorted.length ? '<div class="panel p fade-up" style="padding:24px 16px 0;">'
       + '<div style="display:flex;align-items:flex-end;justify-content:center;gap:12px;max-width:420px;margin:0 auto;">'
       + lbPodiumSlot(second, 2, 74, mode) + lbPodiumSlot(first, 1, 96, mode) + lbPodiumSlot(third, 3, 60, mode)
-      + '</div></div>' : '<div class="panel p" style="color:var(--text-dim);">No one on the board yet — XP starts counting from the first claimed lead.</div>')
-    + (rest.length ? '<div class="panel p fade-up">' + rest.map((r, i) => lbRowHtml(r, i + 4, mode, i)).join('') + '</div>' : '');
+      + '</div></div>' : '<div class="panel p" style="color:var(--text-dim);">' + emptyMsg + '</div>')
+    + (rest.length ? '<div class="panel p fade-up">' + rest.map((r, i) => lbRowHtml(r, i + 4, mode, i)).join('') + '</div>' : '')
+    + selfPin;
 }
 // How the whole economy works, in the app itself — no tribal knowledge needed.
 function xpGuideHtml() {
@@ -1118,6 +1232,11 @@ function chatMsgHtml(m) {
 function appendChatMessage(m) {
   const box = document.getElementById('chatMessages');
   if (!box) return;
+  // Never render the same message twice. A message can arrive more than once —
+  // an SSE reconnect can replay recent events, or (historically) a duplicate
+  // stream delivered every event twice. Keying on the server id makes append
+  // idempotent so the transcript can't double up.
+  if (m && m.id != null && box.querySelector('[data-msg-id="' + m.id + '"]')) return;
   const nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 120;
   box.insertAdjacentHTML('beforeend', chatMsgHtml(m));
   if (nearBottom || m.sender_id === me.id) scrollChatToBottom();
