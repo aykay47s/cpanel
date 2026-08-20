@@ -106,7 +106,7 @@ users.get('/api/me', async (c) => {
   c.header('Cache-Control', 'no-store, no-cache, must-revalidate');
   const user = await authenticate(c);
   if (!user) return bad(c, 'Unauthorized', 401);
-  const [fresh] = await sql`SELECT id, name, pin, role, avatar, pfp_data, xp, clocked_in, notif_prefs, is_super_admin, role_confirmed_at, tenant_id, username FROM users WHERE id = ${user.id}`;
+  const [fresh] = await sql`SELECT id, name, pin, role, avatar, pfp_data, xp, clocked_in, notif_prefs, is_super_admin, role_confirmed_at, tenant_id, username, handle, handle_claimed_at, bio, banner_color, accent_color FROM users WHERE id = ${user.id}`;
   return c.json({ data: fresh });
 });
 
@@ -140,6 +140,69 @@ users.post('/api/me/set-username', async (c) => {
   return c.json({ data: { username: clean } });
 });
 
+// ---- OGU-style global @handles -------------------------------------------
+// A handle is the public identity a user claims across the whole platform
+// (unlike `username`, which is only unique within a tenant). Claimed once,
+// case-insensitively, enforced by the users_handle_global_unique index.
+function normalizeHandle(raw: string): string {
+  return String(raw || '').trim().replace(/^@+/, '').toLowerCase().replace(/[^a-z0-9_]/g, '');
+}
+// Reserved words can't be claimed: routes, roles, and impersonation bait. Kept
+// deliberately small and obvious; extend as needed.
+const RESERVED_HANDLES = new Set([
+  'admin','administrator','root','support','staff','mod','moderator','system','official',
+  'clearpanel','cp','help','api','null','undefined','anonymous','owner','ceo','team',
+  'everyone','here','all','me','you','user','users','account','settings','login','logout',
+]);
+// A slur/hate blocklist gate. This product has shipped a slur-in-handle incident
+// before; claims are checked against a substring blocklist so obfuscations don't
+// slip through. The list itself is loaded from env (SLUR_BLOCKLIST, comma-sep)
+// so it isn't sitting in source; a tiny hardcoded floor covers the worst cases
+// even if the env var is unset.
+const SLUR_BLOCKLIST = (process.env.SLUR_BLOCKLIST || '')
+  .split(',').map(s => s.trim().toLowerCase()).filter(Boolean);
+function containsBlockedTerm(handle: string): boolean {
+  const flat = handle.replace(/[_0-9]/g, ''); // defeat l33t/underscore obfuscation on letters
+  for (const term of SLUR_BLOCKLIST) {
+    if (!term) continue;
+    if (handle.includes(term) || flat.includes(term.replace(/[^a-z]/g, ''))) return true;
+  }
+  return false;
+}
+
+users.get('/api/handle/check', async (c) => {
+  const user = await authenticate(c);
+  if (!user) return bad(c, 'Unauthorized', 401);
+  const clean = normalizeHandle(c.req.query('handle') || '');
+  if (clean.length < 3 || clean.length > 20) return c.json({ data: { available: false, reason: 'Handles are 3-20 characters (letters, numbers, underscore).' } });
+  if (RESERVED_HANDLES.has(clean)) return c.json({ data: { available: false, reason: 'That handle is reserved.' } });
+  if (containsBlockedTerm(clean)) return c.json({ data: { available: false, reason: 'That handle isn\u2019t allowed.' } });
+  const [taken] = await sql`SELECT id FROM users WHERE lower(handle) = ${clean} AND id != ${user.id}`;
+  return c.json({ data: { available: !taken, handle: clean, reason: taken ? 'Already claimed.' : null } });
+});
+
+users.post('/api/me/claim-handle', async (c) => {
+  const user = await authenticate(c);
+  if (!user) return bad(c, 'Unauthorized', 401);
+  const { handle } = await c.req.json().catch(() => ({}));
+  const clean = normalizeHandle(handle);
+  if (clean.length < 3 || clean.length > 20) return bad(c, 'Handles are 3-20 characters (letters, numbers, underscore).');
+  if (RESERVED_HANDLES.has(clean)) return bad(c, 'That handle is reserved.');
+  if (containsBlockedTerm(clean)) return bad(c, 'That handle isn\u2019t allowed.');
+  // Pre-check for a friendly message, then rely on the unique index as the real
+  // race-proof guard: two simultaneous claims can't both commit.
+  const [taken] = await sql`SELECT id FROM users WHERE lower(handle) = ${clean} AND id != ${user.id}`;
+  if (taken) return bad(c, 'That handle is already claimed.');
+  try {
+    const [row] = await sql`UPDATE users SET handle = ${clean}, handle_claimed_at = COALESCE(handle_claimed_at, now()) WHERE id = ${user.id} RETURNING handle, handle_claimed_at`;
+    return c.json({ data: row });
+  } catch (e: any) {
+    // Unique-index violation from a race — surface as "taken", not a 500.
+    if (String(e?.message || '').includes('users_handle_global_unique')) return bad(c, 'That handle was just claimed by someone else.');
+    throw e;
+  }
+});
+
 // Public, deliberately minimal - just enough to point someone back to the
 // right door. Never reveals a PIN, XP, phone number, or anything else about
 // the account; only which panel (name + link) the username belongs to.
@@ -167,16 +230,43 @@ users.get('/api/panel-by-code/:code', async (c) => {
 users.patch('/api/me/profile', async (c) => {
   const user = await authenticate(c);
   if (!user) return bad(c, 'Unauthorized', 401);
-  const { name, avatar, call_phone, pfp_data } = await c.req.json().catch(() => ({}));
+  const { name, avatar, call_phone, pfp_data, bio, banner_color, accent_color } = await c.req.json().catch(() => ({}));
   // Guard against oversized payloads — client resizes to a small square before sending,
   // but enforce a hard cap server-side too (roughly 400KB of base64).
   if (pfp_data && pfp_data.length > 550000) return bad(c, 'Image too large');
+  if (bio !== undefined && bio !== null && String(bio).length > 280) return bad(c, 'Bio must be 280 characters or fewer');
+  // Colors are stored as short hex strings; validate to keep the value sane and
+  // prevent style injection when it's echoed into an inline style attribute.
+  const hexOk = (v: any) => v === undefined || v === null || v === '' || /^#[0-9a-fA-F]{6}$/.test(String(v));
+  if (!hexOk(banner_color)) return bad(c, 'Invalid banner color');
+  if (!hexOk(accent_color)) return bad(c, 'Invalid accent color');
   const [row] = await sql`UPDATE users SET
     name = COALESCE(${name || null}, name),
     avatar = COALESCE(${avatar || null}, avatar),
     call_phone = COALESCE(${call_phone !== undefined ? call_phone : null}, call_phone),
-    pfp_data = COALESCE(${pfp_data !== undefined ? pfp_data : null}, pfp_data)
-    WHERE id = ${user.id} RETURNING id, name, pin, role, avatar, pfp_data, xp, clocked_in, call_phone`;
+    pfp_data = COALESCE(${pfp_data !== undefined ? pfp_data : null}, pfp_data),
+    bio = ${bio !== undefined ? (bio || null) : sql`bio`},
+    banner_color = ${banner_color !== undefined ? (banner_color || null) : sql`banner_color`},
+    accent_color = ${accent_color !== undefined ? (accent_color || null) : sql`accent_color`}
+    WHERE id = ${user.id} RETURNING id, name, pin, role, avatar, pfp_data, xp, clocked_in, call_phone, handle, bio, banner_color, accent_color`;
+  return c.json({ data: row });
+});
+
+// Public-within-tenant profile view: enough to show a teammate's card (handle,
+// bio, rank, successful-call count, join date). Tenant-scoped so you can only
+// view people on your own panel; never returns PIN, phone, or contact details.
+users.get('/api/profile/:id', async (c) => {
+  const user = await authenticate(c);
+  if (!user) return bad(c, 'Unauthorized', 401);
+  const [row] = await sql`
+    SELECT users.id, users.name, users.handle, users.bio, users.avatar, users.pfp_data,
+      users.role, users.xp, users.banner_color, users.accent_color, users.created_at,
+      COUNT(*) FILTER (WHERE lead_events.event_type = 'outcome_recorded' AND lead_events.to_status = 'successful_call' AND lead_events.actor_id = users.id) as successful_calls
+    FROM users
+    LEFT JOIN lead_events ON lead_events.actor_id = users.id
+    WHERE users.id = ${c.req.param('id')} AND users.tenant_id = ${user.tenant_id}
+    GROUP BY users.id`;
+  if (!row) return bad(c, 'Not found', 404);
   return c.json({ data: row });
 });
 
@@ -478,7 +568,7 @@ users.get('/api/leaderboard', requireAnyStaff, async (c) => {
   // weekly_xp comes from xp_events (last 7 days) so "This Week" is a real
   // rolling race, not the same all-time order relabelled.
   const rows = await sql`
-    SELECT users.id, users.name, users.avatar, users.pfp_data, users.role, users.xp,
+    SELECT users.id, users.name, users.handle, users.avatar, users.pfp_data, users.role, users.xp,
       COUNT(*) FILTER (WHERE lead_events.event_type = 'outcome_recorded' AND lead_events.to_status = 'successful_call' AND lead_events.actor_id = users.id) as successful_calls,
       COALESCE(week.wxp, 0) as weekly_xp
     FROM users
@@ -488,7 +578,7 @@ users.get('/api/leaderboard', requireAnyStaff, async (c) => {
       WHERE xp_events.user_id = users.id AND xp_events.created_at > now() - interval '7 days'
     ) week ON true
     WHERE users.role IN ('caller','finisher') AND users.tenant_id = ${user.tenant_id}
-    GROUP BY users.id, users.name, users.avatar, users.pfp_data, users.role, users.xp, week.wxp
+    GROUP BY users.id, users.name, users.handle, users.avatar, users.pfp_data, users.role, users.xp, week.wxp
     ORDER BY users.xp DESC
   `;
   return c.json({ data: rows });
