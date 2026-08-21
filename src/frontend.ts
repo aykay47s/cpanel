@@ -930,8 +930,23 @@ function showRankUp(rk) {
 const BANK_DIR = {
   uk: [["Lloyds","lloydsbank.com"],["Barclays","barclays.co.uk"],["HSBC UK","hsbc.co.uk"],["NatWest","natwest.com"],["Santander UK","santander.co.uk"],["Halifax","halifax.co.uk"],["TSB","tsb.co.uk"],["Nationwide","nationwide.co.uk"],["RBS","rbs.co.uk"],["Metro Bank","metrobankonline.co.uk"],["Monzo","monzo.com"],["Starling","starlingbank.com"],["Revolut","revolut.com"],["First Direct","firstdirect.com"],["Co-operative Bank","co-operativebank.co.uk"],["Virgin Money","virginmoney.com"],["Bank of Scotland","bankofscotland.co.uk"],["Ulster Bank","ulsterbank.co.uk"],["Chase UK","chase.co.uk"],["Tesco Bank","tescobank.com"],["Sainsbury's Bank","sainsburysbank.co.uk"],["Danske Bank UK","danskebank.co.uk"],["Atom Bank","atombank.co.uk"],["Zopa","zopa.com"],["Shawbrook","shawbrook.co.uk"],["Aldermore","aldermore.co.uk"],["Paragon Bank","paragonbank.co.uk"],["Marcus","marcus.co.uk"],["Yorkshire BS","ybs.co.uk"],["Skipton BS","skipton.co.uk"],["Coventry BS","coventrybuildingsociety.co.uk"]],
   intl: [["Chase","chase.com"],["Bank of America","bankofamerica.com"],["Wells Fargo","wellsfargo.com"],["Citibank","citi.com"],["Capital One","capitalone.com"],["US Bank","usbank.com"],["PNC","pnc.com"],["Goldman Sachs","goldmansachs.com"],["Morgan Stanley","morganstanley.com"],["TD Bank","td.com"],["RBC","rbc.com"],["Scotiabank","scotiabank.com"],["BMO","bmo.com"],["CIBC","cibc.com"],["Deutsche Bank","db.com"],["Commerzbank","commerzbank.com"],["BNP Paribas","bnpparibas.com"],["Societe Generale","societegenerale.com"],["Credit Agricole","credit-agricole.com"],["ING","ing.com"],["ABN AMRO","abnamro.com"],["Rabobank","rabobank.com"],["UBS","ubs.com"],["Santander","santander.com"],["BBVA","bbva.com"],["CaixaBank","caixabank.com"],["Intesa Sanpaolo","intesasanpaolo.com"],["UniCredit","unicredit.it"],["Nordea","nordea.com"],["Danske Bank","danskebank.com"],["SEB","seb.se"],["Swedbank","swedbank.com"],["HSBC","hsbc.com"],["Standard Chartered","sc.com"],["DBS","dbs.com"],["OCBC","ocbc.com"],["UOB","uob.com.sg"],["ANZ","anz.com"],["Commonwealth Bank","commbank.com.au"],["Westpac","westpac.com.au"],["NAB","nab.com.au"],["ICICI","icicibank.com"],["HDFC","hdfcbank.com"],["Axis Bank","axisbank.com"],["Emirates NBD","emiratesnbd.com"],["FAB","bankfab.com"],["QNB","qnb.com"],["N26","n26.com"],["Wise","wise.com"],["Bunq","bunq.com"]],
+  crypto_ex: [["Coinbase","coinbase.com"],["Binance","binance.com"],["Kraken","kraken.com"],["Bybit","bybit.com"],["OKX","okx.com"],["KuCoin","kucoin.com"],["Bitget","bitget.com"],["Gate.io","gate.io"],["Crypto.com","crypto.com"],["Gemini","gemini.com"],["Bitstamp","bitstamp.net"],["Bitfinex","bitfinex.com"],["HTX","htx.com"],["MEXC","mexc.com"],["Bitpanda","bitpanda.com"],["Kraken Pro","pro.kraken.com"],["Coinbase Pro","pro.coinbase.com"],["Upbit","upbit.com"],["Bithumb","bithumb.com"],["Coincheck","coincheck.com"],["bitFlyer","bitflyer.com"],["Luno","luno.com"],["Bitso","bitso.com"],["Mercado Bitcoin","mercadobitcoin.com.br"],["WazirX","wazirx.com"],["CoinDCX","coindcx.com"],["Zerodha Coin","coin.zerodha.com"],["BitMEX","bitmex.com"],["Deribit","deribit.com"],["Phemex","phemex.com"],["Bitrue","bitrue.com"],["LBank","lbank.com"],["XT.com","xt.com"],["BingX","bingx.com"],["WhiteBIT","whitebit.com"],["CEX.io","cex.io"],["Poloniex","poloniex.com"],["Bittrex","bittrex.com"],["Coinone","coinone.co.kr"],["Korbit","korbit.co.kr"],["Indodax","indodax.com"],["Tokocrypto","tokocrypto.com"],["BTC Markets","btcmarkets.net"],["Independent Reserve","independentreserve.com"],["Swyftx","swyftx.com"],["CoinSpot","coinspot.com.au"],["Coinbase Exchange","exchange.coinbase.com"],["Bitvavo","bitvavo.com"],["Coinmama","coinmama.com"],["Paxful","paxful.com"],["LocalBitcoins","localbitcoins.com"],["Nexo","nexo.io"],["YouHodler","youhodler.com"],["Uphold","uphold.com"],["eToro","etoro.com"],["Robinhood Crypto","robinhood.com"],["Revolut Crypto","revolut.com"],["Cash App","cash.app"],["PayPal Crypto","paypal.com"],["Kraken Futures","futures.kraken.com"],["Bitso Alpha","bitso.com"],["Woo X","woo.org"],["Ascendex","ascendex.com"],["Digifinex","digifinex.com"],["ProBit","probit.com"],["CoinEx","coinex.com"],["Latoken","latoken.com"],["Bitmart","bitmart.com"],["Hotbit","hotbit.io"],["P2B","p2pb2b.com"],["Toobit","toobit.com"],["Blofin","blofin.com"]],
+  crypto_wallets: [["MetaMask","metamask.io"],["Trust Wallet","trustwallet.com"],["Ledger","ledger.com"],["Trezor","trezor.io"],["Exodus","exodus.com"],["Coinbase Wallet","coinbase.com"],["Phantom","phantom.app"],["Rainbow","rainbow.me"],["Rabby","rabby.io"],["Zerion","zerion.io"],["Argent","argent.xyz"],["Safe","safe.global"],["Electrum","electrum.org"],["BlueWallet","bluewallet.io"],["Muun","muun.com"],["Wasabi","wasabiwallet.io"],["Sparrow","sparrowwallet.com"],["BitBox","bitbox.swiss"],["KeepKey","keepkey.com"],["SafePal","safepal.com"],["Tangem","tangem.com"],["Atomic Wallet","atomicwallet.io"],["Guarda","guarda.com"],["Coinomi","coinomi.com"],["Edge","edge.app"],["MyEtherWallet","myetherwallet.com"],["MyCrypto","mycrypto.com"],["imToken","token.im"],["TokenPocket","tokenpocket.pro"],["Math Wallet","mathwallet.org"],["Bitpay","bitpay.com"],["Blockchain.com","blockchain.com"],["BRD","brd.com"],["Mycelium","wallet.mycelium.com"],["Samourai","samouraiwallet.com"],["ZenGo","zengo.com"],["Solflare","solflare.com"],["Backpack","backpack.app"],["Keplr","keplr.app"],["Cosmostation","cosmostation.io"],["Petra","petra.app"],["Martian","martianwallet.xyz"],["Sui Wallet","suiwallet.com"],["XDEFI","xdefi.io"],["Frame","frame.sh"],["Taho","taho.xyz"],["OKX Wallet","okx.com"],["Bitget Wallet","bitget.com"],["Uniswap Wallet","uniswap.org"],["Enkrypt","enkrypt.com"],["Core","core.app"],["Fireblocks","fireblocks.com"],["Casa","casa.io"],["Unchained","unchained.com"],["Gnosis Safe","safe.global"],["Ambire","ambire.com"],["Onto","onto.app"],["Coin98","coin98.com"],["Bybit Wallet","bybit.com"],["Binance Web3 Wallet","binance.com"],["Ellipal","ellipal.com"],["CoolWallet","coolwallet.io"],["D'CENT","dcentwallet.com"],["Keystone","keyst.one"],["Foundation Passport","foundationdevices.com"],["Blockstream Jade","blockstream.com"]],
 };
 function bankLogoUrl(domain) { return 'https://www.google.com/s2/favicons?domain=' + domain + '&sz=64'; }
+// Logo error fallback: if Google's favicon service has nothing for a domain, try
+// DuckDuckGo's icon service before giving up, then hide the img so the coloured
+// initial shows through. Chaining catches the handful of domains one service
+// misses. Reads the domain from the img's data-domain attr (no inline quoting)
+// and guards with data-fb so it can't loop.
+function bankImgChain(img) {
+  if (!img) return;
+  const domain = img.getAttribute('data-domain') || '';
+  const step = img.getAttribute('data-fb') || '0';
+  if (step === '0' && domain) { img.setAttribute('data-fb', '1'); img.src = 'https://icons.duckduckgo.com/ip3/' + domain + '.ico'; return; }
+  img.remove();
+}
+window.bankImgChain = bankImgChain;
 // ---- Levels ----
 // Cost to clear level n grows by 60 XP per level: 100, 160, 220, ... so early
 // levels come fast (day one feels rewarding) and later ones are a real season.
@@ -1145,12 +1160,28 @@ function avatarWithRankHtml(person, size, rk) {
 // fetched by domain from a logo lookup service, never bytes we store or copy
 // ourselves — with the existing brand-color initial badge as an automatic
 // fallback if the image 404s or the category isn't a bank at all.
-const BANK_DOMAINS = {
-  'lloyds': 'lloydsbank.com', 'barclays': 'barclays.co.uk', 'hsbc': 'hsbc.co.uk',
-  'natwest': 'natwest.com', 'santander': 'santander.co.uk', 'halifax': 'halifax.co.uk',
-  'tsb': 'tsb.co.uk', 'nationwide': 'nationwide.co.uk', 'rbs': 'rbs.co.uk',
-  'metro bank': 'metrobankonline.co.uk', 'monzo': 'monzo.com', 'starling': 'starlingbank.com',
-};
+// Name -> domain for logo lookup. Previously this was a hand-maintained list of
+// ~12 banks, so every other category (and all crypto) fell back to a plain
+// coloured initial with no logo. Now it's derived from the full BANK_DIR (UK +
+// international banks + crypto exchanges + wallets), so any directory entry
+// resolves a mark, and admins adding a bank from the picker get its logo too.
+const BANK_DOMAINS = (function () {
+  const map = {};
+  Object.keys(BANK_DIR).forEach(function (group) {
+    (BANK_DIR[group] || []).forEach(function (pair) {
+      map[String(pair[0]).toLowerCase()] = pair[1];
+    });
+  });
+  // A few default category names differ from their directory label — map the
+  // short forms the seed data uses to the right domain.
+  const aliases = {
+    'hsbc': 'hsbc.co.uk', 'santander': 'santander.co.uk', 'coinbase': 'coinbase.com',
+    'binance': 'binance.com', 'kraken': 'kraken.com', 'metamask': 'metamask.io',
+    'crypto': 'bitcoin.org', 'crypto exchange': 'coinbase.com', 'crypto wallet': 'metamask.io',
+  };
+  Object.keys(aliases).forEach(function (k) { if (!map[k]) map[k] = aliases[k]; });
+  return map;
+})();
 window.BANK_DOMAINS = BANK_DOMAINS;
 let sharedCategoryCache = null;
 async function loadCategoryCache() {
@@ -1167,7 +1198,7 @@ function categoryBadgeHtml(leadType) {
   const color = cat ? cat.color : '#8b8b93';
   const domain = (cat && cat.domain) || BANK_DOMAINS[String(leadType).toLowerCase()];
   const logoImg = domain
-    ? '<img src="https://www.google.com/s2/favicons?domain=' + domain + '&sz=64" alt="" style="width:15px;height:15px;border-radius:4px;object-fit:contain;flex-shrink:0;" onerror="this.remove()" />'
+    ? '<img src="https://www.google.com/s2/favicons?domain=' + domain + '&sz=64" alt="" data-domain="' + domain + '" style="width:15px;height:15px;border-radius:4px;object-fit:contain;flex-shrink:0;" onerror="bankImgChain(this)" />'
     : '';
   return '<span class="badge" style="background:' + color + '22;color:' + color + ';border:1px solid ' + color + '44;gap:5px;">' + logoImg + esc(leadType) + '</span>';
 }
