@@ -13,12 +13,18 @@ const DEFAULT_CALL_TEMPLATE = 'Greeting: Introduce yourself and confirm you\'re 
 // unique-on-name constraint meant A's colour silently overwrote B's. These are
 // now per-tenant rows. Existing global rows are adopted by the self-tenant.
 const DEFAULT_CATEGORIES: Array<[string, string]> = [
-  ['General', '#9c9184'], ['Priority', '#4f8cff'], ['UK', '#3fa89a'],
-  ['International', '#8b6fc9'], ['Callback', '#c04b3f'],
+  // Workflow buckets first — these are the ones used every day regardless of vertical.
+  ['Hot Lead', '#ef4444'], ['Warm Lead', '#f59e0b'], ['Callback', '#c04b3f'],
+  ['Priority', '#4f8cff'], ['General', '#9c9184'],
+  // Crypto — two verticals with their own logo directories in the app.
+  ['Crypto Exchange', '#f7931a'], ['Crypto Wallet', '#7433ff'],
+  // UK banks.
   ['Lloyds', '#026a37'], ['Barclays', '#00aeef'], ['HSBC', '#db0011'],
   ['NatWest', '#5a287d'], ['Santander', '#ec0000'], ['Halifax', '#0e5aa7'],
-  ['TSB', '#0091d4'], ['Nationwide', '#1b3a6b'], ['RBS', '#003087'],
-  ['Metro Bank', '#e2231a'], ['Monzo', '#f15a5a'], ['Starling', '#7433ff'],
+  ['Monzo', '#f15a5a'], ['Starling', '#7433ff'], ['Nationwide', '#1b3a6b'],
+  ['Revolut', '#0666eb'],
+  // Regions.
+  ['UK', '#3fa89a'], ['International', '#8b6fc9'],
 ];
 
 async function migrateTenantScoping() {
