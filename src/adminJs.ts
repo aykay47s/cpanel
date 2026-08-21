@@ -308,9 +308,9 @@ function categoryBadge(leadType) {
   if (!leadType) return '<span style="color:var(--text-faint);">—</span>';
   const cat = categoryCache.find(c => c.name.toLowerCase() === String(leadType).toLowerCase());
   const color = cat ? cat.color : 'var(--text-dim)';
-  const domain = BANK_DOMAINS[String(leadType).toLowerCase()];
+  const domain = (cat && cat.domain) || BANK_DOMAINS[String(leadType).toLowerCase()];
   const logoImg = domain
-    ? '<img src="https://www.google.com/s2/favicons?domain=' + domain + '&sz=64" alt="" style="width:15px;height:15px;border-radius:4px;object-fit:contain;flex-shrink:0;" onerror="this.remove()" />'
+    ? '<img src="https://www.google.com/s2/favicons?domain=' + domain + '&sz=64" alt="" data-domain="' + domain + '" style="width:15px;height:15px;border-radius:4px;object-fit:contain;flex-shrink:0;" onerror="bankImgChain(this)" />'
     : '';
   return '<span class="badge" style="background:' + color + '22;color:' + color + ';border:1px solid ' + color + '44;gap:5px;">' + logoImg + esc(leadType) + '</span>';
 }
@@ -907,6 +907,8 @@ async function renderAdminCategories(el) {
       <div class="seg-tabs" style="margin-bottom:12px;">
         <button class="seg-tab \${bankPickerTab==='uk'?'on':''}" onclick="setBankTab('uk')">UK Banks</button>
         <button class="seg-tab \${bankPickerTab==='intl'?'on':''}" onclick="setBankTab('intl')">International</button>
+        <button class="seg-tab \${bankPickerTab==='crypto_ex'?'on':''}" onclick="setBankTab('crypto_ex')">Exchanges</button>
+        <button class="seg-tab \${bankPickerTab==='crypto_wallets'?'on':''}" onclick="setBankTab('crypto_wallets')">Wallets</button>
         <button class="seg-tab \${bankPickerTab==='custom'?'on':''}" onclick="setBankTab('custom')">Custom</button>
       </div>
       <div id="bankPickerBody"></div>
@@ -914,7 +916,7 @@ async function renderAdminCategories(el) {
     <div class="panel p fade-up">
       <div class="section-title" style="margin-top:0;">Your Categories (\${cats.length})</div>
       \${cats.length ? cats.map(cat => \`<div style="display:flex;align-items:center;gap:11px;padding:10px 0;border-bottom:1px solid var(--border);">
-        \${cat.domain ? '<img src="' + bankLogoUrl(cat.domain) + '" style="width:24px;height:24px;border-radius:6px;object-fit:contain;flex-shrink:0;" onerror="this.remove()" />' : '<span style="width:14px;height:14px;border-radius:4px;background:' + cat.color + ';flex-shrink:0;"></span>'}
+        \${cat.domain ? '<img src="' + bankLogoUrl(cat.domain) + '" data-domain="' + cat.domain + '" style="width:24px;height:24px;border-radius:6px;object-fit:contain;flex-shrink:0;" onerror="bankImgChain(this)" />' : '<span style="width:14px;height:14px;border-radius:4px;background:' + cat.color + ';flex-shrink:0;"></span>'}
         <span style="flex:1;font-size:13px;">\${esc(cat.name)}</span>
         <button class="btn btn-danger btn-sm" onclick="deleteCategory(\${cat.id})">Delete</button>
       </div>\`).join('') : '<div style="color:var(--text-dim);">No categories yet — add your first bank above.</div>'}
@@ -948,7 +950,7 @@ function renderBankPicker() {
       + (added ? '' : ' data-bank-name="' + esc(b[0]) + '" data-bank-domain="' + esc(b[1]) + '"')
       + '><img src="' + bankLogoUrl(b[1]) + '" onerror="this.remove()" /><span class="bn">' + esc(b[0]) + '</span></div>';
   }
-  wrap.innerHTML = '<input placeholder="Search ' + filtered.length + ' banks…" value="' + esc(bankPickerQuery) + '" oninput="bankPickerQuery=this.value;renderBankPicker()" style="margin-bottom:6px;" autofocus />'
+  wrap.innerHTML = '<input placeholder="Search ' + filtered.length + ' — tap to add…" value="' + esc(bankPickerQuery) + '" oninput="bankPickerQuery=this.value;renderBankPicker()" style="margin-bottom:6px;" autofocus />'
     + '<div class="bank-grid">' + cards + '</div>'
     + (filtered.length === 0 ? '<div style="color:var(--text-dim);font-size:12.5px;padding:8px 2px;">No match. Try the Custom tab to add it by hand.</div>' : '');
 }
