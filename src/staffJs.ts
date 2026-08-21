@@ -341,6 +341,7 @@ function finisherCardHtml(o) {
     <button class="btn btn-teal btn-block" onclick="startFinishingCall(\${o.id})">Begin Working This Lead</button></div>\`;
 }
 let workingFinisherLeadId = null;
+let activeCallCtx = null;
 function startFinishingCall(id) { workingFinisherLeadId = id; renderStaffQueue(); }
 
 async function claimLead(id) {
@@ -381,6 +382,7 @@ function renderActiveCallShell(body, lead, role, scripts, template) {
   const isFinisher = role === 'finisher';
   const statusColor = lead.status === 'active_call' ? 'var(--success)' : 'var(--violet-bright)';
   const isOnCall = lead.status === 'active_call';
+  activeCallCtx = { body, lead, role, scripts, template };
 
   body.innerHTML = \`
     \${template && !isFinisher ? \`<div class="panel p fade-up" style="border-color:rgba(79,140,255,.25);background:rgba(79,140,255,.05);padding:16px 18px;margin-bottom:12px;">
@@ -574,8 +576,26 @@ function startCallTimer() {
   tick();
   callTimerInterval = setInterval(tick, 1000);
 }
-async function connectCall(id) { await api('/api/caller/leads/' + id + '/connect', { method: 'POST' }); renderStaffQueue(); }
-async function endCall(id) { await api('/api/caller/leads/' + id + '/end-call', { method: 'POST' }); renderStaffQueue(); }
+async function connectCall(id) {
+  // Optimistically flip to on-call the instant they tap, reusing the cached
+  // scripts/template so the outcome buttons unlock immediately. The old version
+  // round-tripped through renderStaffQueue() whose refetch raced the server
+  // write, so the button appeared to do nothing until the call was ended.
+  if (activeCallCtx && activeCallCtx.lead && activeCallCtx.lead.id === id) {
+    activeCallCtx.lead.status = 'active_call';
+    if (!callStart) callStart = Date.now();
+    renderActiveCallShell(activeCallCtx.body, activeCallCtx.lead, activeCallCtx.role, activeCallCtx.scripts, activeCallCtx.template);
+  }
+  const res = await api('/api/caller/leads/' + id + '/connect', { method: 'POST' });
+  if (!res || !res.ok) { if (typeof toast === 'function') toast('Could not mark on call — check your connection.'); }
+}
+async function endCall(id) {
+  if (activeCallCtx && activeCallCtx.lead && activeCallCtx.lead.id === id) {
+    activeCallCtx.lead.status = 'calling';
+    renderActiveCallShell(activeCallCtx.body, activeCallCtx.lead, activeCallCtx.role, activeCallCtx.scripts, activeCallCtx.template);
+  }
+  await api('/api/caller/leads/' + id + '/end-call', { method: 'POST' });
+}
 // After XP lands, roll me.xp forward locally and fire the rank-up moment if the
 // tier changed — the emblem animation only shows on a genuine promotion.
 function applyXpEarned(amount, label) {
