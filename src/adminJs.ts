@@ -894,7 +894,7 @@ async function saveTemplate() {
   document.getElementById('templateStatus').style.color = 'var(--success)';
 }
 
-let bankPickerTab = 'uk';
+let bankPickerTab = 'all';
 let bankPickerQuery = '';
 async function renderAdminCategories(el) {
   const res = await api('/api/lead-categories');
@@ -902,11 +902,20 @@ async function renderAdminCategories(el) {
   window._catNames = new Set(cats.map(c => c.name.toLowerCase()));
   el.innerHTML = \`
     <div class="panel p fade-up">
-      <div class="section-title" style="margin-top:0;">Add a Bank</div>
-      <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:14px;line-height:1.5;">Search UK or international banks and tap to add — the real logo comes with it and shows on every lead. Not listed? Type any bank name under Custom and it still gets a logo.</p>
-      <div class="seg-tabs" style="margin-bottom:12px;">
-        <button class="seg-tab \${bankPickerTab==='uk'?'on':''}" onclick="setBankTab('uk')">UK Banks</button>
-        <button class="seg-tab \${bankPickerTab==='intl'?'on':''}" onclick="setBankTab('intl')">International</button>
+      <div class="section-title" style="margin-top:0;">Add a Category</div>
+      <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:14px;line-height:1.5;">Pick a region and tap a bank to add it — the real logo comes with it and shows on every lead. Crypto exchanges and wallets have their own tabs. Not listed? Use Custom to add anything by name.</p>
+      <div class="seg-tabs" style="margin-bottom:12px;flex-wrap:wrap;gap:6px;">
+        <button class="seg-tab \${bankPickerTab==='all'?'on':''}" onclick="setBankTab('all')">All</button>
+        <button class="seg-tab \${bankPickerTab==='uk_high_street'?'on':''}" onclick="setBankTab('uk_high_street')">UK High Street</button>
+        <button class="seg-tab \${bankPickerTab==='uk_digital'?'on':''}" onclick="setBankTab('uk_digital')">UK Digital</button>
+        <button class="seg-tab \${bankPickerTab==='uk_building_societies'?'on':''}" onclick="setBankTab('uk_building_societies')">UK Building Societies</button>
+        <button class="seg-tab \${bankPickerTab==='uk_lenders'?'on':''}" onclick="setBankTab('uk_lenders')">UK Specialist</button>
+        <button class="seg-tab \${bankPickerTab==='us'?'on':''}" onclick="setBankTab('us')">US</button>
+        <button class="seg-tab \${bankPickerTab==='canada'?'on':''}" onclick="setBankTab('canada')">Canada</button>
+        <button class="seg-tab \${bankPickerTab==='europe'?'on':''}" onclick="setBankTab('europe')">Europe</button>
+        <button class="seg-tab \${bankPickerTab==='asia_pacific'?'on':''}" onclick="setBankTab('asia_pacific')">Asia-Pacific</button>
+        <button class="seg-tab \${bankPickerTab==='mideast_africa'?'on':''}" onclick="setBankTab('mideast_africa')">Middle East & Africa</button>
+        <button class="seg-tab \${bankPickerTab==='latam'?'on':''}" onclick="setBankTab('latam')">Latin America</button>
         <button class="seg-tab \${bankPickerTab==='crypto_ex'?'on':''}" onclick="setBankTab('crypto_ex')">Exchanges</button>
         <button class="seg-tab \${bankPickerTab==='crypto_wallets'?'on':''}" onclick="setBankTab('crypto_wallets')">Wallets</button>
         <button class="seg-tab \${bankPickerTab==='custom'?'on':''}" onclick="setBankTab('custom')">Custom</button>
@@ -915,11 +924,17 @@ async function renderAdminCategories(el) {
     </div>
     <div class="panel p fade-up">
       <div class="section-title" style="margin-top:0;">Your Categories (\${cats.length})</div>
-      \${cats.length ? cats.map(cat => \`<div style="display:flex;align-items:center;gap:11px;padding:10px 0;border-bottom:1px solid var(--border);">
-        \${cat.domain ? '<img src="' + bankLogoUrl(cat.domain) + '" data-domain="' + cat.domain + '" style="width:24px;height:24px;border-radius:6px;object-fit:contain;flex-shrink:0;" onerror="bankImgChain(this)" />' : '<span style="width:14px;height:14px;border-radius:4px;background:' + cat.color + ';flex-shrink:0;"></span>'}
-        <span style="flex:1;font-size:13px;">\${esc(cat.name)}</span>
+      \${cats.length ? cats.map(cat => {
+          const catDomain = cat.domain || (window.BANK_DOMAINS && window.BANK_DOMAINS[String(cat.name).toLowerCase()]) || '';
+          const mark = catDomain
+            ? '<img src="' + bankLogoUrl(catDomain) + '" data-domain="' + catDomain + '" style="width:28px;height:28px;border-radius:7px;object-fit:contain;background:#fff;padding:2px;flex-shrink:0;box-sizing:border-box;" onerror="bankImgChain(this)" />'
+            : '<span style="width:28px;height:28px;border-radius:7px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;background:' + (cat.color || '#8b8b93') + ';box-shadow:inset 0 0 0 1px rgba(255,255,255,.12);">' + esc(String(cat.name).trim().charAt(0).toUpperCase()) + '</span>';
+          return \`<div style="display:flex;align-items:center;gap:12px;padding:11px 0;border-bottom:1px solid var(--border);">
+        \${mark}
+        <span style="flex:1;font-size:13.5px;font-weight:500;">\${esc(cat.name)}</span>
         <button class="btn btn-danger btn-sm" onclick="deleteCategory(\${cat.id})">Delete</button>
-      </div>\`).join('') : '<div style="color:var(--text-dim);">No categories yet — add your first bank above.</div>'}
+      </div>\`;
+        }).join('') : '<div style="color:var(--text-dim);font-size:13px;padding:6px 2px;">No categories yet — add your first one above.</div>'}
     </div>\`;
   renderBankPicker();
 }
@@ -937,7 +952,22 @@ function renderBankPicker() {
       + '<p style="font-size:11px;color:var(--text-faint);margin-top:10px;line-height:1.5;">The website is only used to fetch the logo — enter the bank main domain, no https. Leave it blank for a plain coloured tag.</p>';
     return;
   }
-  const list = BANK_DIR[bankPickerTab] || [];
+  // 'all' flattens every region + crypto group into one searchable list (deduped
+  // by name) so an admin who just wants to find their bank doesn't have to guess
+  // the right region tab first.
+  let list;
+  if (bankPickerTab === 'all') {
+    const seen = {}; list = [];
+    for (const g of Object.keys(BANK_DIR)) {
+      for (const b of (BANK_DIR[g] || [])) {
+        const key = b[0].toLowerCase();
+        if (!seen[key]) { seen[key] = 1; list.push(b); }
+      }
+    }
+    list.sort((a, b) => a[0].localeCompare(b[0]));
+  } else {
+    list = BANK_DIR[bankPickerTab] || [];
+  }
   const q = bankPickerQuery.toLowerCase();
   const filtered = q ? list.filter(b => b[0].toLowerCase().includes(q)) : list;
   // Cards carry the name/domain as data-* and are handled by one delegated
