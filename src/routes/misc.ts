@@ -538,7 +538,10 @@ misc.get('/api/branding', async (c) => {
     tenantLogo = logoRow?.value || null;
   }
 
-  return c.json({ data: { name: tenantName, logo: tenantLogo, panel_code: tenantSlug } });
+  // Unbranded panels get the standard ClearPanel mark + name so they never look
+  // half-finished — the admin's own logo/name replaces this the moment they set it.
+  const DEFAULT_LOGO = '/clearpanel-icon.png';
+  return c.json({ data: { name: tenantName || 'ClearPanel', logo: tenantLogo || DEFAULT_LOGO, panel_code: tenantSlug } });
 });
 const BLOCKED_PANEL_NAMES = new Set(['niggers', 'nigger', 'nigga', 'niggas']);
 misc.post('/api/admin/branding', requireManager, async (c) => {
