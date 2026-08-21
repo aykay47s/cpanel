@@ -474,6 +474,12 @@ function renderActiveCallShell(body, lead, role, scripts, template) {
       \`}
       \` : \`
       <!-- Finisher actions -->
+      <!-- Everything the starter logged on the first call, so the finisher walks
+           in knowing the story instead of cold. Loaded after render. -->
+      <div style="padding:14px;border-radius:14px;background:rgba(63,168,154,.06);border:1px solid rgba(63,168,154,.25);margin-bottom:14px;">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#5fd3c0;margin-bottom:4px;">Notes from the starter</div>
+        <div id="finisherNotes_\${lead.id}"><div style="font-size:12px;color:var(--text-faint);padding:4px 0;">Loading notes…</div></div>
+      </div>
       <div style="display:grid;gap:10px;margin-bottom:14px;">
         <a class="dial-btn" href="tel:\${lead.phone}" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:16px;border-radius:14px;background:linear-gradient(135deg,var(--violet),rgba(124,92,255,.7));color:#fff;font-weight:700;font-size:15px;text-decoration:none;">\${ICONS.phone} Dial \${lead.phone}</a>
         <button onclick="finisherOutcome(\${lead.id},'completed')" style="padding:16px;border-radius:14px;background:linear-gradient(135deg,rgba(34,197,94,.2),rgba(34,197,94,.12));border:1px solid rgba(34,197,94,.4);color:var(--success);font-size:16px;font-weight:800;cursor:pointer;">✓ Mark Completed</button>
@@ -489,6 +495,8 @@ function renderActiveCallShell(body, lead, role, scripts, template) {
   \`;
   if (!callStart) callStart = Date.now();
   startCallTimer();
+  // Populate the starter's note history on the finisher screen (fire-and-forget).
+  if (isFinisher) loadLeadNotesInto('finisherNotes_' + lead.id, lead.id);
 }
 // The browser has no way to actually detect a real phone call connecting - there's
 // no web API for that. So this stays a manual "Mark On Call" tap, but the flow
@@ -521,6 +529,31 @@ function renderOutcomeSection(lead) {
       <button class="review-btn" onclick="recordOutcome(\${lead.id},'requires_review')">Requires Review</button>
     </div>
   </div>\`;
+}
+// Loads the full attributed note history for a lead into a container. Used on
+// the finisher's active-call screen so whoever closes the deal can read exactly
+// what the starter learned on the first call — the notes follow the lead through
+// the hand-off instead of dying with the starter.
+async function loadLeadNotesInto(containerId, leadId) {
+  const box = document.getElementById(containerId);
+  if (!box) return;
+  try {
+    const res = await api('/api/leads/' + leadId + '/notes');
+    const notes = (await res.json()).data || [];
+    if (!notes.length) { box.innerHTML = '<div style="font-size:12px;color:var(--text-faint);padding:2px 0;">No call notes from the starter yet.</div>'; return; }
+    box.innerHTML = notes.map(function(n) {
+      const when = n.created_at ? new Date(n.created_at).toLocaleString(undefined, { month:'short', day:'numeric', hour:'numeric', minute:'2-digit' }) : '';
+      const av = avatarHtml({ name: n.author_name, pfp_data: n.author_pfp_data, avatar: n.author_avatar }, 26);
+      return '<div style="display:flex;gap:9px;padding:9px 0;border-top:1px solid var(--border);">'
+        + '<div style="flex-shrink:0;">' + av + '</div>'
+        + '<div style="flex:1;min-width:0;">'
+        +   '<div style="display:flex;align-items:baseline;gap:8px;"><span style="font-size:12px;font-weight:600;">' + esc(n.author_name || 'Unknown') + '</span><span style="font-size:10.5px;color:var(--text-faint);">' + when + '</span></div>'
+        +   '<div style="font-size:12.5px;color:var(--text-dim);line-height:1.5;white-space:pre-wrap;word-break:break-word;margin-top:2px;">' + esc(n.content) + '</div>'
+        + '</div></div>';
+    }).join('');
+  } catch (e) {
+    box.innerHTML = '<div style="font-size:12px;color:var(--danger);">Could not load notes.</div>';
+  }
 }
 async function pushLiveNote(leadId) {
   const input = document.getElementById('liveNoteInput');
