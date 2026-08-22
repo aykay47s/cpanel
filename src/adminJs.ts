@@ -77,6 +77,13 @@ async function renderAdminDashboard(el) {
         <button class="btn btn-ghost" id="maintenanceBtn" onclick="toggleMaintenance()" style="color:var(--gold-bright);border-color:rgba(245,158,11,.3);">🔧 Updating…</button>
       </div>
     </div>
+    <div class="panel p fade-up" style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;">
+      <div style="flex:1;min-width:220px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;"><span style="font-size:15px;">\u267b\ufe0f</span><b style="font-size:14px;">Recycle unsuccessful leads</b></div>
+        <p style="font-size:12px;color:var(--text-dim);margin:0;line-height:1.5;">\${d.recycle_attempted ? 'On \u2014 leads that were called but did not connect recirculate into the caller queue (up to 3 attempts).' : 'Off \u2014 once a lead is attempted without success it will not reappear for callers. Turn on to recycle them.'}</p>
+      </div>
+      <button class="btn \${d.recycle_attempted ? 'btn-danger' : 'btn-gold'}" onclick="toggleRecycle(\${d.recycle_attempted})">\${d.recycle_attempted ? 'Turn Off' : 'Turn On'}</button>
+    </div>
     <div class="stat-grid stagger">
       <div class="stat-box panel accent"><div class="num" data-count="\${d.total}">0</div><div class="lbl">Total Leads</div></div>
       <div class="stat-box panel"><div class="num" data-count="\${d.uncalled}">0</div><div class="lbl">Not Called</div></div>
@@ -130,6 +137,10 @@ async function toggleMaintenance() {
     if (btn) { btn.textContent = '✓ Clear Update Banner'; btn.style.color = 'var(--success)'; btn.style.borderColor = 'rgba(34,197,94,.3)'; }
     if (typeof toast === 'function') toast('Maintenance banner shown to all callers');
   }
+}
+async function toggleRecycle(cur) {
+  await api('/api/admin/recycle-attempted', { method: 'POST', body: JSON.stringify({ enabled: !cur }) });
+  renderAdminTab('dashboard');
 }
 async function toggleCenterStatus(currentlyOpen) {  if (currentlyOpen) {
     const reason = prompt('Message callers will see when they try to clock in (e.g. "Back at 9am tomorrow"):', 'The call center is closed right now. Check back soon.');
