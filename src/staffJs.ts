@@ -12,7 +12,7 @@ async function switchStaffTab(tab) {
     return;
   }
   staffTab = tab;
-  try { applyCpSettings(); } catch (e) {}
+  try { applyCpSettings(); cpBindShortcuts(); } catch (e) {}
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   if (tab === 'queue' || tab === 'chat') clearNavBadge(tab);
   const body = document.getElementById('staffBody');
@@ -101,6 +101,43 @@ function cpSettingsPanelHtml() {
     + cpSettingRow('largeText', 'Larger text', 'Bump the font size up for easier reading.', false)
     + cpSettingRow('reduceMotion', 'Reduce motion', 'Turn off animations and transitions.', false)
     + '</div>';
+}
+
+// ---- Keyboard shortcuts (single-key nav when not typing) ----
+function cpBindShortcuts() {
+  if (window.__cpShortcutsBound) return;
+  window.__cpShortcutsBound = true;
+  document.addEventListener('keydown', cpHandleShortcut);
+}
+function cpHandleShortcut(e) {
+  const t = e.target;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+  const k = (e.key || '').toLowerCase();
+  if (e.key === '?') { e.preventDefault(); cpToggleShortcutHelp(); return; }
+  if (k === 'escape') { const o = document.getElementById('cpShortcutHelp'); if (o) o.remove(); return; }
+  const map = { h: 'home', q: 'queue', c: 'chat', b: 'board', s: 'scripts', p: 'profile' };
+  if (map[k] && typeof switchStaffTab === 'function' && document.querySelector('.nav-btn')) {
+    e.preventDefault(); switchStaffTab(map[k]);
+  }
+}
+function cpToggleShortcutHelp() {
+  const ex = document.getElementById('cpShortcutHelp');
+  if (ex) { ex.remove(); return; }
+  const rows = [['H', 'Home'], ['Q', 'Queue'], ['C', 'Chat'], ['B', 'Board'], ['S', 'Scripts'], ['P', 'Profile'], ['?', 'This help']];
+  const ov = document.createElement('div');
+  ov.id = 'cpShortcutHelp';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.55);backdrop-filter:blur(3px);';
+  ov.addEventListener('click', function (e) { if (e.target === ov) ov.remove(); });
+  ov.innerHTML = '<div style="background:var(--s1,#14141c);border:1px solid var(--border-2);border-radius:16px;padding:22px 24px;max-width:320px;width:90%;box-shadow:0 20px 60px rgba(0,0,0,.5);">'
+    + '<div style="font-size:15px;font-weight:800;margin-bottom:4px;">Keyboard shortcuts</div>'
+    + '<div style="font-size:11.5px;color:var(--text-dim);margin-bottom:14px;">Press a key from anywhere \u2014 except while typing.</div>'
+    + rows.map(function (r) { return '<div style="display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-top:1px solid var(--border);"><span style="font-size:13px;color:var(--text);">' + r[1] + '</span><kbd style="font-family:monospace;font-size:12px;font-weight:700;background:rgba(255,255,255,.08);border:1px solid var(--border-2);border-radius:6px;padding:2px 9px;min-width:22px;text-align:center;">' + r[0] + '</kbd></div>'; }).join('')
+    + '<button class="cpHelpClose" style="margin-top:16px;width:100%;padding:10px;border-radius:10px;background:var(--gold-bright,#f59e0b);color:#000;font-weight:700;border:none;cursor:pointer;">Got it</button>'
+    + '</div>';
+  document.body.appendChild(ov);
+  const close = ov.querySelector('.cpHelpClose');
+  if (close) close.addEventListener('click', function () { ov.remove(); });
 }
 
 async function renderStaffHome() {
