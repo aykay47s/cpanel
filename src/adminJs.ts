@@ -1301,10 +1301,19 @@ function renderTelephonyLocal() {
       </div>
     </div>
 
-    <div class="panel p fade-up" style="padding:6px;display:flex;gap:4px;flex-wrap:wrap;">
-      <button class="btn \${(cfg.provider || 'twilio') === 'twilio' ? 'btn-gold' : 'btn-ghost'}" style="flex:1;min-width:90px;" onclick="switchTelephonyProvider('twilio')">Twilio</button>
-      <button class="btn \${cfg.provider === 'telnyx' ? 'btn-gold' : 'btn-ghost'}" style="flex:1;min-width:90px;" onclick="switchTelephonyProvider('telnyx')">Telnyx</button>
-      <button class="btn \${cfg.provider === '3cx' ? 'btn-gold' : 'btn-ghost'}" style="flex:1;min-width:90px;" onclick="switchTelephonyProvider('3cx')">3CX</button>
+    <div class="stat-grid fade-up" style="grid-template-columns:repeat(3,1fr);gap:10px;">
+      <button onclick="switchTelephonyProvider('twilio')" style="display:flex;flex-direction:column;gap:5px;padding:14px 13px;border-radius:14px;cursor:pointer;text-align:left;transition:transform .12s,border-color .15s,background .15s;background:\${(cfg.provider || 'twilio') === 'twilio' ? 'linear-gradient(160deg,rgba(245,158,11,.16),rgba(245,158,11,.05))' : 'rgba(255,255,255,.03)'};border:1px solid \${(cfg.provider || 'twilio') === 'twilio' ? 'var(--gold-glow)' : 'var(--border)'};">
+        <span style="font-size:14.5px;font-weight:800;color:\${(cfg.provider || 'twilio') === 'twilio' ? 'var(--gold-bright)' : 'var(--text)'};">Twilio</span>
+        <span style="font-size:10.5px;color:var(--text-dim);line-height:1.35;">Most popular \u00b7 full docs</span>
+      </button>
+      <button onclick="switchTelephonyProvider('telnyx')" style="display:flex;flex-direction:column;gap:5px;padding:14px 13px;border-radius:14px;cursor:pointer;text-align:left;transition:transform .12s,border-color .15s,background .15s;background:\${cfg.provider === 'telnyx' ? 'linear-gradient(160deg,rgba(245,158,11,.16),rgba(245,158,11,.05))' : 'rgba(255,255,255,.03)'};border:1px solid \${cfg.provider === 'telnyx' ? 'var(--gold-glow)' : 'var(--border)'};">
+        <span style="font-size:14.5px;font-weight:800;color:\${cfg.provider === 'telnyx' ? 'var(--gold-bright)' : 'var(--text)'};">Telnyx</span>
+        <span style="font-size:10.5px;color:var(--text-dim);line-height:1.35;">Lightest sign-up</span>
+      </button>
+      <button onclick="switchTelephonyProvider('3cx')" style="display:flex;flex-direction:column;gap:5px;padding:14px 13px;border-radius:14px;cursor:pointer;text-align:left;transition:transform .12s,border-color .15s,background .15s;background:\${cfg.provider === '3cx' ? 'linear-gradient(160deg,rgba(245,158,11,.16),rgba(245,158,11,.05))' : 'rgba(255,255,255,.03)'};border:1px solid \${cfg.provider === '3cx' ? 'var(--gold-glow)' : 'var(--border)'};">
+        <span style="font-size:14.5px;font-weight:800;color:\${cfg.provider === '3cx' ? 'var(--gold-bright)' : 'var(--text)'};">3CX</span>
+        <span style="font-size:10.5px;color:var(--text-dim);line-height:1.35;">Self-hosted PBX</span>
+      </button>
     </div>
 
     \${cfg.provider === 'telnyx' ? \`
@@ -1315,8 +1324,14 @@ function renderTelephonyLocal() {
       </div>
       <div id="telnyxNumberStatus"></div>
       <p style="font-size:12px;color:var(--text-dim);margin-bottom:8px;line-height:1.6;">Telnyx works exactly like Twilio here — same menu, same hold, same bridge-to-caller routing — but with much lighter sign-up. Most accounts can buy a local number after just confirming their email and a quick ID check, with no lengthy business review.</p>
-      <div style="font-size:11.5px;color:var(--text-dim);background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:14px;line-height:1.6;">
-        <b style="color:var(--text);">Setup:</b> 1) Sign up at telnyx.com and verify your email. 2) Buy a phone number in Mission Control. 3) Create an API key (Mission Control → API Keys). 4) Paste the key and number below — we auto-create the Call Control app and wire the webhook for you.
+      <div style="background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:14px;">
+        <div style="font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim);margin-bottom:11px;">Setup</div>
+        <div style="display:flex;flex-direction:column;gap:11px;">
+          <div style="display:flex;gap:10px;align-items:flex-start;"><span style="flex-shrink:0;width:22px;height:22px;border-radius:50%;background:rgba(245,158,11,.15);color:var(--gold-bright);font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;">1</span><span style="font-size:12px;color:var(--text-dim);line-height:1.5;">Sign up at telnyx.com and verify your email.</span></div>
+          <div style="display:flex;gap:10px;align-items:flex-start;"><span style="flex-shrink:0;width:22px;height:22px;border-radius:50%;background:rgba(245,158,11,.15);color:var(--gold-bright);font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;">2</span><span style="font-size:12px;color:var(--text-dim);line-height:1.5;">Buy a phone number in Mission Control.</span></div>
+          <div style="display:flex;gap:10px;align-items:flex-start;"><span style="flex-shrink:0;width:22px;height:22px;border-radius:50%;background:rgba(245,158,11,.15);color:var(--gold-bright);font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;">3</span><span style="font-size:12px;color:var(--text-dim);line-height:1.5;">Create an API key (Mission Control → API Keys).</span></div>
+          <div style="display:flex;gap:10px;align-items:flex-start;"><span style="flex-shrink:0;width:22px;height:22px;border-radius:50%;background:rgba(245,158,11,.15);color:var(--gold-bright);font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;">4</span><span style="font-size:12px;color:var(--text-dim);line-height:1.5;">Paste the key and number below — we auto-create the Call Control app and wire the webhook for you.</span></div>
+        </div>
       </div>
       \${cfg.telnyx_connected ? \`
         <div class="info-row"><span class="k">Number</span><span class="v mono">\${esc(cfg.telnyx_phone_number || '')}</span></div>
