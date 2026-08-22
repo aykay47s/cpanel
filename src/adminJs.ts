@@ -1086,8 +1086,24 @@ async function renderAdminBranding(el) {
       <button class="btn btn-gold" onclick="renewPanelAccess()">Redeem &amp; Extend</button>
       <div id="renewStatus" style="font-size:12px;margin-top:10px;"></div>
     </div>\` : '';
+    const uu = as && as.usage;
+    const daysLeft = as && as.expires_at ? Math.max(0, Math.ceil((new Date(as.expires_at).getTime() - Date.now()) / 86400000)) : null;
+    const usageCard = uu ? \`<div class="panel p fade-up">
+      <div class="section-title" style="margin-top:0;">Panel Usage</div>
+      <div class="stat-grid stagger">
+        <div class="stat-box panel accent"><div class="num">\${uu.callers}</div><div class="lbl">Callers</div></div>
+        <div class="stat-box panel"><div class="num">\${uu.finishers}</div><div class="lbl">Finishers</div></div>
+        <div class="stat-box panel"><div class="num">\${uu.leads_total}</div><div class="lbl">Leads \u00b7 all time</div></div>
+        <div class="stat-box panel"><div class="num">\${uu.leads_month}</div><div class="lbl">Leads this month</div></div>
+        <div class="stat-box panel"><div class="num">\${uu.calls_made}</div><div class="lbl">Calls made</div></div>
+        <div class="stat-box panel"><div class="num">\${uu.successful}</div><div class="lbl">Successful</div></div>
+        <div class="stat-box panel"><div class="num">\${uu.completed}</div><div class="lbl">Completed</div></div>
+        \${daysLeft !== null ? '<div class="stat-box panel" style="' + (daysLeft <= 7 ? 'border-color:var(--gold-glow);' : '') + '"><div class="num" style="' + (daysLeft <= 7 ? 'color:var(--gold-bright);' : '') + '">' + daysLeft + '</div><div class="lbl">Days left</div></div>' : ''}
+      </div>
+    </div>\` : '';
     el.innerHTML = \`
     \${renewCard}
+    \${usageCard}
     <div class="panel p fade-up">
       <div class="section-title" style="margin-top:0;">Panel Branding</div>
       <p style="font-size:12px;color:var(--text-dim);margin-bottom:16px;">Sets the name and logo shown across the whole app - title bar, login screen, topbar, and home screen icon on mobile.</p>
