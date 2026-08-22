@@ -1118,9 +1118,20 @@ async function renderAdminBranding(el) {
         \${daysLeft !== null ? '<div class="stat-box panel" style="' + (daysLeft <= 7 ? 'border-color:var(--gold-glow);' : '') + '"><div class="num" style="' + (daysLeft <= 7 ? 'color:var(--gold-bright);' : '') + '">' + daysLeft + '</div><div class="lbl">Days left</div></div>' : ''}
       </div>
     </div>\` : '';
+    const rf = as && as.referral;
+    const refCard = (rf && rf.code) ? \`<div class="panel p fade-up">
+      <div class="section-title" style="margin-top:0;">Refer a call center</div>
+      <p style="font-size:12px;color:var(--text-dim);line-height:1.6;margin:0 0 12px;">Share your code. When someone opens a ClearPanel by redeeming a key with it, the signup is credited to you here.</p>
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <div style="font-family:'Geist Mono',monospace;font-weight:700;font-size:17px;letter-spacing:.08em;padding:9px 16px;border-radius:12px;background:rgba(245,158,11,.1);border:1px solid var(--gold-glow);color:var(--gold-bright);">\${rf.code}</div>
+        <button class="btn btn-ghost btn-sm" onclick="navigator.clipboard.writeText('\${rf.code}');this.textContent='Copied'">Copy code</button>
+        <div style="margin-left:auto;text-align:right;"><div style="font-size:22px;font-weight:800;line-height:1;">\${rf.count}</div><div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;margin-top:3px;">Signups</div></div>
+      </div>
+    </div>\` : '';
     el.innerHTML = \`
     \${renewCard}
     \${usageCard}
+    \${refCard}
     <div class="panel p fade-up">
       <div class="section-title" style="margin-top:0;">Panel Branding</div>
       <p style="font-size:12px;color:var(--text-dim);margin-bottom:16px;">Sets the name and logo shown across the whole app - title bar, login screen, topbar, and home screen icon on mobile.</p>
