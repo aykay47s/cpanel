@@ -624,7 +624,7 @@ function renderActiveCallShell(body, lead, role, scripts, template) {
           <span style="flex-shrink:0;width:42px;height:42px;border-radius:50%;background:rgba(34,197,94,.22);display:flex;align-items:center;justify-content:center;">\${iconInline(ICONS.check)}</span>
           <span style="display:flex;flex-direction:column;line-height:1.25;">
             <span style="font-size:16px;font-weight:800;letter-spacing:-.01em;">Mark Completed</span>
-            <span style="font-size:11.5px;font-weight:500;color:rgba(74,222,128,.8);">Deal closed — nothing left to do</span>
+            <span style="font-size:11.5px;font-weight:500;color:rgba(74,222,128,.8);">Won — closed and off the floor</span>
           </span>
         </button>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
