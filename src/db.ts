@@ -438,6 +438,9 @@ export async function ensureDb() {
     `ALTER TABLE announcements ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id)`,
     `ALTER TABLE scripts ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id)`,
     `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ`,
+    // recycle_attempted: when ON, previously-attempted (unsuccessful) leads go back
+    // into the caller queue. OFF by default so dead numbers don't keep popping up.
+    `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS recycle_attempted BOOLEAN NOT NULL DEFAULT false`,
     `ALTER TABLE inbound_calls ADD COLUMN IF NOT EXISTS provider TEXT NOT NULL DEFAULT 'twilio'`,
     `ALTER TABLE inbound_calls ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id)`,
     // lead_categories and clock_sessions were platform-global: every tenant read,
