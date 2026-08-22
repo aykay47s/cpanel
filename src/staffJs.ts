@@ -12,6 +12,7 @@ async function switchStaffTab(tab) {
     return;
   }
   staffTab = tab;
+  try { applyCpSettings(); } catch (e) {}
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
   if (tab === 'queue' || tab === 'chat') clearNavBadge(tab);
   const body = document.getElementById('staffBody');
@@ -51,6 +52,56 @@ function stopQueuePolling() {
   if (queuePollInterval) { clearInterval(queuePollInterval); queuePollInterval = null; }
 }
 let onActiveCallScreen = false;
+
+// ---- Caller settings (saved on this device via localStorage, applied live) ----
+function cpGetSettings() { try { return JSON.parse(localStorage.getItem('cp_settings') || '{}') || {}; } catch (e) { return {}; } }
+function applyCpSettings() {
+  const s = cpGetSettings();
+  document.body.classList.toggle('cp-compact', !!s.compact);
+  document.body.classList.toggle('cp-large-text', !!s.largeText);
+  document.body.classList.toggle('cp-reduce-motion', !!s.reduceMotion);
+  let st = document.getElementById('cpSettingsStyle');
+  if (!st) { st = document.createElement('style'); st.id = 'cpSettingsStyle'; (document.head || document.documentElement).appendChild(st); }
+  st.textContent = 'body.cp-reduce-motion *{animation:none!important;transition:none!important}body.cp-compact .panel.p{padding:11px!important}body.cp-compact .stat-box{padding:10px!important}body.cp-large-text{font-size:16.5px!important}';
+}
+// Called from the new_lead SSE handler in main.js (guarded there in case this
+// file hasn't parsed yet). Sound defaults on; vibrate defaults off.
+function cpNewLeadAlert() {
+  const s = cpGetSettings();
+  if (s.soundNewLead !== false) { try { playPing('lead'); } catch (e) {} }
+  if (s.vibrateNewLead) { try { if (navigator.vibrate) navigator.vibrate([70, 40, 70]); } catch (e) {} }
+}
+function cpToggleSetting(el) {
+  const key = el.getAttribute('data-key');
+  const next = !el.classList.contains('on');
+  const s = cpGetSettings(); s[key] = next;
+  try { localStorage.setItem('cp_settings', JSON.stringify(s)); } catch (e) {}
+  el.classList.toggle('on', next);
+  el.style.background = next ? 'var(--gold-bright, #f59e0b)' : 'rgba(255,255,255,.14)';
+  const knob = el.querySelector('span'); if (knob) knob.style.left = next ? '23px' : '3px';
+  applyCpSettings();
+}
+function cpSettingRow(key, label, desc, defaultOn) {
+  const s = cpGetSettings();
+  const on = s[key] === undefined ? !!defaultOn : !!s[key];
+  return '<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);">'
+    + '<div style="flex:1;min-width:0;"><div style="font-size:13.5px;font-weight:600;">' + label + '</div><div style="font-size:11.5px;color:var(--text-dim);line-height:1.45;margin-top:2px;">' + desc + '</div></div>'
+    + '<button class="cp-switch' + (on ? ' on' : '') + '" data-key="' + key + '" onclick="cpToggleSetting(this)" style="flex-shrink:0;width:46px;height:26px;border-radius:20px;border:none;cursor:pointer;position:relative;transition:background .15s;background:' + (on ? 'var(--gold-bright, #f59e0b)' : 'rgba(255,255,255,.14)') + ';">'
+    + '<span style="position:absolute;top:3px;left:' + (on ? '23px' : '3px') + ';width:20px;height:20px;border-radius:50%;background:#fff;transition:left .15s;box-shadow:0 1px 3px rgba(0,0,0,.3);"></span></button>'
+    + '</div>';
+}
+function cpSettingsPanelHtml() {
+  return '<div class="panel p fade-up">'
+    + '<div class="section-title" style="margin-top:0;">Settings</div>'
+    + '<p style="font-size:11.5px;color:var(--text-dim);margin-bottom:4px;line-height:1.5;">Saved on this device \u2014 they apply to your panel only.</p>'
+    + cpSettingRow('soundNewLead', 'Sound on new lead', 'Play a chime when a new lead lands in the queue.', true)
+    + cpSettingRow('vibrateNewLead', 'Vibrate on new lead', 'Buzz your phone when a new lead lands (mobile only).', false)
+    + cpSettingRow('confirmRelease', 'Confirm before releasing a lead', 'Ask before dropping a lead without logging a result.', true)
+    + cpSettingRow('compact', 'Compact mode', 'Tighter spacing so more fits on screen.', false)
+    + cpSettingRow('largeText', 'Larger text', 'Bump the font size up for easier reading.', false)
+    + cpSettingRow('reduceMotion', 'Reduce motion', 'Turn off animations and transitions.', false)
+    + '</div>';
+}
 
 async function renderStaffHome() {
   const body = document.getElementById('staffBody');
@@ -627,7 +678,7 @@ async function scheduleCallback(leadId) {
 async function recordOutcome(id, outcome, cookieLevel) {
   // 'cancelled' is the one outcome that records no real result — make it a
   // deliberate choice rather than an accidental tap that drops the lead.
-  if (outcome === 'cancelled' && !confirm('Release this lead without logging a result?')) return;
+  if (outcome === 'cancelled' && cpGetSettings().confirmRelease !== false && !confirm('Release this lead without logging a result?')) return;
   // Successful call + callback hand the lead to a finisher — force a 1–10 cookie
   // (how convinced the lead is) before it submits, so the finisher knows how warm
   // it is before dialing. Any other outcome skips this.
@@ -705,6 +756,7 @@ async function renderStaffProfile() {
   me = { ...me, ...fresh }; localStorage.setItem('dispatch_me', JSON.stringify(me));
   body.innerHTML = \`
     \${profileCardHtml(me, { self: true })}
+    \${cpSettingsPanelHtml()}
     <div class="panel p fade-up">
       <div class="section-title" style="margin-top:0;">Your @handle</div>
       <p style="font-size:11.5px;color:var(--text-dim);margin-bottom:10px;line-height:1.5;">Your public identity across ClearPanel — claimed once, yours everywhere. 3–20 characters: letters, numbers, underscore. \${me.handle ? 'Claimed handles are permanent.' : 'Pick a good one.'}</p>
