@@ -464,6 +464,7 @@ function renderActiveCallShell(body, lead, role, scripts, template) {
         </div>
         \${lead.email ? '<div style="font-size:12.5px;color:var(--text-dim);margin-top:6px;">' + iconInline(ICONS.mail) + ' ' + esc(lead.email) + '</div>' : ''}
         \${lead.address ? '<div style="font-size:12.5px;color:var(--text-dim);margin-top:3px;">' + iconInline(ICONS.pin) + ' ' + esc(lead.address) + '</div>' : ''}
+        \${lead.date_of_birth ? '<div style="font-size:12.5px;color:var(--text-dim);margin-top:3px;">' + iconInline(ICONS.calendar) + ' ' + esc(cpDob(lead.date_of_birth)) + '</div>' : ''}
         \${lead.notes ? '<div style="margin-top:10px;padding:10px 12px;border-radius:10px;background:rgba(255,255,255,.04);border:1px solid var(--border);font-size:12.5px;color:var(--text-dim);line-height:1.5;white-space:pre-wrap;">' + esc(lead.notes) + '</div>' : ''}
       </div>
 
@@ -517,7 +518,9 @@ function renderActiveCallShell(body, lead, role, scripts, template) {
 
       <!-- Live note -->
       <div style="padding:14px;border-radius:14px;background:rgba(255,255,255,.03);border:1px solid var(--border);">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text-dim);margin-bottom:8px;">Quick Note for Admin</div>
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text-dim);margin-bottom:4px;">Note for the finisher</div>
+        <div style="font-size:11px;color:var(--text-faint);margin-bottom:9px;line-height:1.4;">Tap what applies, then add anything specific. The finisher reads this before they call.</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:9px;">\${['OTP ready','Bank confirmed','Needs spouse','Callback booked','Keen','Wants time','Do not recall'].map(t => '<button type=\"button\" data-tag=\"' + t + '\" onclick=\"cpAddNoteTag(this)\" style=\"font-size:11px;padding:4px 10px;border-radius:100px;background:rgba(255,255,255,.05);border:1px solid var(--border-2);color:var(--text-dim);cursor:pointer;white-space:nowrap;\">+ ' + t + '</button>').join('')}</div>
         <div style="display:flex;gap:8px;align-items:flex-end;">
           <textarea id="liveNoteInput" placeholder="Callback Fri 2pm · keen but needs spouse · any flag worth mentioning…" style="flex:1;min-height:56px;max-height:120px;resize:vertical;font-size:12.5px;line-height:1.5;background:var(--s2);border:1px solid var(--border-2);border-radius:10px;padding:9px 11px;color:var(--text);font-family:inherit;" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();pushLiveNote(\${lead.id});}"></textarea>
           <button onclick="pushLiveNote(\${lead.id})" style="padding:10px 14px;border-radius:10px;background:linear-gradient(135deg,var(--violet-bright),var(--gold));color:#fff;font-weight:700;font-size:13px;border:none;cursor:pointer;flex-shrink:0;">Send</button>
@@ -537,7 +540,7 @@ function renderActiveCallShell(body, lead, role, scripts, template) {
         </div>
       </div>\` : ''}
       <div style="padding:14px;border-radius:14px;background:rgba(63,168,154,.06);border:1px solid rgba(63,168,154,.25);margin-bottom:14px;">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#5fd3c0;margin-bottom:4px;">Notes from the starter</div>
+        <div style="font-size:12px;font-weight:800;letter-spacing:.02em;color:#5fd3c0;margin-bottom:6px;display:flex;align-items:center;gap:6px;">\u2709 Starter\u2019s hand-off \u2014 read before you dial</div>
         <div id="finisherNotes_\${lead.id}"><div style="font-size:12px;color:var(--text-faint);padding:4px 0;">Loading notes…</div></div>
       </div>
       <div style="display:grid;gap:10px;margin-bottom:14px;">
@@ -594,6 +597,24 @@ function renderOutcomeSection(lead) {
 // the finisher's active-call screen so whoever closes the deal can read exactly
 // what the starter learned on the first call — the notes follow the lead through
 // the hand-off instead of dying with the starter.
+// Format a DOB with age for the call screen so the finisher can verify identity.
+function cpDob(dob) {
+  if (!dob) return '';
+  try {
+    const d = new Date(dob);
+    if (isNaN(d.getTime())) return String(dob);
+    const s = d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+    const age = Math.floor((Date.now() - d.getTime()) / 31557600000);
+    return s + (age > 0 && age < 130 ? ' \u00b7 ' + age + ' yrs' : '');
+  } catch (e) { return String(dob); }
+}
+// Append a quick-tag onto the caller's note so hand-off notes are consistent + useful.
+function cpAddNoteTag(el) {
+  const ta = document.getElementById('liveNoteInput'); if (!ta) return;
+  const tag = el.getAttribute('data-tag');
+  ta.value = ta.value.trim() ? (ta.value.replace(/\s*$/, '') + ' \u00b7 ' + tag) : tag;
+  ta.focus();
+}
 async function loadLeadNotesInto(containerId, leadId) {
   const box = document.getElementById(containerId);
   if (!box) return;
