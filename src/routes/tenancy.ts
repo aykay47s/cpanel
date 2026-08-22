@@ -139,6 +139,10 @@ tenancy.post('/api/redeem', async (c) => {
         VALUES (${aff.id}, ${claimedKey.id}, ${tenant.id}, ${tenant.name}, ${saleAmount}, ${commission}, ${pct})`;
       await sql`UPDATE license_keys SET referral_code = ${code} WHERE id = ${claimedKey.id}`;
       referralCredited = true;
+    } else {
+      // Not a registered affiliate — may be a tenant's own referral code. Stamp it
+      // for tracking so the referring panel can count the signup. No commission.
+      await sql`UPDATE license_keys SET referral_code = ${code} WHERE id = ${claimedKey.id}`;
     }
   }
 
