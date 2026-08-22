@@ -429,7 +429,29 @@ async function renderActiveCall(body, lead, role) {
   if (scripts.length || template) renderActiveCallShell(body, lead, role, scripts, template);
 }
 
+// One-time injected stylesheet that gives the whole active-call screen tactile
+// motion \u2014 entrance pop, button hover-lift + press feedback, a breathing glow on
+// the dial button and a pulsing live dot. Pure CSS on the existing .call-card
+// markup (no handler/id/layout changes), and it honours the Reduce-motion setting.
+function acsInjectPolish() {
+  if (document.getElementById('acsPolishStyle')) return;
+  const st = document.createElement('style');
+  st.id = 'acsPolishStyle';
+  st.textContent = [
+    '@keyframes acsPop{0%{opacity:0;transform:translateY(14px) scale(.985)}100%{opacity:1;transform:none}}',
+    '@keyframes acsDialGlow{0%,100%{box-shadow:0 0 0 0 rgba(124,92,255,0)}50%{box-shadow:0 0 22px 2px rgba(124,92,255,.35)}}',
+    '@keyframes acsDotPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.3)}}',
+    'body:not(.cp-reduce-motion) .call-card{animation:acsPop .42s cubic-bezier(.2,.9,.25,1)}',
+    '.call-card button,.call-card a.dial-btn{transition:transform .12s ease,box-shadow .2s ease,filter .12s ease}',
+    'body:not(.cp-reduce-motion) .call-card button:hover,body:not(.cp-reduce-motion) .call-card a.dial-btn:hover{transform:translateY(-2px);filter:brightness(1.09);box-shadow:0 7px 20px rgba(0,0,0,.34)}',
+    '.call-card button:active,.call-card a.dial-btn:active{transform:translateY(0) scale(.97);filter:brightness(.98)}',
+    'body:not(.cp-reduce-motion) .call-card a.dial-btn{animation:acsDialGlow 2.6s ease-in-out infinite}',
+    'body:not(.cp-reduce-motion) .call-card .tdot{animation:acsDotPulse 1.4s ease-in-out infinite}'
+  ].join('');
+  (document.head || document.documentElement).appendChild(st);
+}
 function renderActiveCallShell(body, lead, role, scripts, template) {
+  acsInjectPolish();
   const isFinisher = role === 'finisher';
   const statusColor = lead.status === 'active_call' ? 'var(--success)' : 'var(--violet-bright)';
   const isOnCall = lead.status === 'active_call';
