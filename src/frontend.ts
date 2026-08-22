@@ -544,7 +544,7 @@ function connectEvents() {
   if (_esReconnectTimer) { clearTimeout(_esReconnectTimer); _esReconnectTimer = null; }
   es = new EventSource('/api/events?uid=' + me.id + '&pin=' + me.pin);
   es.addEventListener('open', () => { _esBackoff = 3000; });
-  es.addEventListener('new_lead', () => { if (me.role !== 'admin') playPing('lead'); if (staffTab === 'queue' && !onActiveCallScreen) smoothRerender(renderStaffQueue); pingNav('queue'); if (me.role==='admin') maybeRefreshAdmin('leads'); });
+  es.addEventListener('new_lead', () => { if (me.role !== 'admin') { if (typeof cpNewLeadAlert === 'function') cpNewLeadAlert(); else playPing('lead'); } if (staffTab === 'queue' && !onActiveCallScreen) smoothRerender(renderStaffQueue); pingNav('queue'); if (me.role==='admin') maybeRefreshAdmin('leads'); });
   es.addEventListener('center_closed', (e) => {
     if (me.role === 'admin') return; // admins are exempt from the gate, nothing changes for them
     const d = JSON.parse(e.data);
