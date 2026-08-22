@@ -271,7 +271,16 @@ leads.get('/api/admin/dashboard', requireRole('admin'), async (c) => {
     FROM leads JOIN users ON users.id = leads.assigned_caller_id
     WHERE leads.status IN ('calling', 'active_call') AND leads.tenant_id = ${user.tenant_id}
     ORDER BY leads.call_started_at ASC`;
-  return c.json({ data: { ...counts, ...staff, recentEvents, onCall } });
+  const [tsettings] = await sql`SELECT recycle_attempted FROM tenants WHERE id = ${user.tenant_id}`;
+  return c.json({ data: { ...counts, ...staff, recentEvents, onCall, recycle_attempted: !!(tsettings && tsettings.recycle_attempted) } });
+});
+
+// Toggle whether unsuccessful/attempted leads recirculate into the caller queue.
+leads.post('/api/admin/recycle-attempted', requireRole('admin'), async (c) => {
+  const user = c.get('user');
+  const { enabled } = await c.req.json().catch(() => ({}));
+  const [row] = await sql`UPDATE tenants SET recycle_attempted = ${!!enabled} WHERE id = ${user.tenant_id} RETURNING recycle_attempted`;
+  return c.json({ data: { recycle_attempted: !!(row && row.recycle_attempted) } });
 });
 
 // ================= FINISHING QUEUE (ADMIN) =================
@@ -337,7 +346,11 @@ leads.get('/api/caller/queue', requireRole('caller'), async (c) => {
   const user = c.get('user');
   const MAX_ATTEMPTS = 3; // Leads attempted this many times drop out of the caller queue
   // and become admin-only to recirculate. Keeps callers off dead leads.
-  const rows = await sql`SELECT * FROM leads WHERE status IN ('not_called','attempted') AND tenant_id = ${user.tenant_id} AND (assigned_caller_id IS NULL OR assigned_caller_id = ${user.id}) AND merged_into_id IS NULL AND call_attempts < ${MAX_ATTEMPTS} ORDER BY (assigned_caller_id = ${user.id}) DESC, (status = 'not_called') DESC, created_at ASC LIMIT 20`;
+  // Attempted (unsuccessful) leads only recirculate when the tenant has opted in;
+  // by default a lead that was called and didn't connect will NOT pop back up.
+  const [tset] = await sql`SELECT recycle_attempted FROM tenants WHERE id = ${user.tenant_id}`;
+  const statuses = (tset && tset.recycle_attempted) ? ['not_called', 'attempted'] : ['not_called'];
+  const rows = await sql`SELECT * FROM leads WHERE status = ANY(${statuses}) AND tenant_id = ${user.tenant_id} AND (assigned_caller_id IS NULL OR assigned_caller_id = ${user.id}) AND merged_into_id IS NULL AND call_attempts < ${MAX_ATTEMPTS} ORDER BY (assigned_caller_id = ${user.id}) DESC, (status = 'not_called') DESC, created_at ASC LIMIT 20`;
   return c.json({ data: rows });
 });
 
@@ -484,11 +497,13 @@ leads.post('/api/caller/leads/:id/outcome', requireRole('caller'), async (c) => 
     await notifyRole('admin', 'successful_call', `${user.name} logged a successful call: ${updated.first_name || 'Unknown'} ${updated.last_name || ''}`.trim(), updated.id, undefined, user.tenant_id);
   }
   if (REQUEUE_OUTCOMES.includes(outcome)) {
-    broadcast('new_lead', updated, user.tenant_id);
-    // A requeued lead is genuinely available to claim again - same real push as a
-    // fresh import, since from a caller's perspective it's the same "something to
-    // claim right now" moment, whatever put it back in the pool.
-    await sendPushToRole('caller', 'Lead available', `${updated.first_name || 'A lead'} is back in the queue.`, '/', user.tenant_id);
+    // Only recirculate + ping callers if this tenant recycles attempted leads;
+    // otherwise the lead stays 'attempted' but won't reappear in anyone's queue.
+    const [rc] = await sql`SELECT recycle_attempted FROM tenants WHERE id = ${user.tenant_id}`;
+    if (rc && rc.recycle_attempted) {
+      broadcast('new_lead', updated, user.tenant_id);
+      await sendPushToRole('caller', 'Lead available', `${updated.first_name || 'A lead'} is back in the queue.`, '/', user.tenant_id);
+    }
   }
   const xpAwarded = await awardXp(user.id, XP_MAP[outcome] || 0, 'outcome:' + outcome, updated.id);
   broadcast('lead_updated', updated, user.tenant_id);
