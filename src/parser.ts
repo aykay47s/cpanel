@@ -138,6 +138,12 @@ export function smartParse(rawText: string): { leads: ParsedLead[]; redacted: Re
 
   let leads: ParsedLead[] = [];
 
+  // JSON import: a pasted/dropped JSON array of objects (or newline-delimited JSON).
+  // A common export shape the delimiter/freeform parsers would mangle, so detect it
+  // first. If it isn't JSON, tryParseJson returns [] and we fall through unchanged.
+  const jsonLeads = tryParseJson(text);
+  if (jsonLeads.length) return { leads: jsonLeads, redacted };
+
   // Try delimiter-based parsing first (CSV / pipe / tab), if most lines share a delimiter count.
   for (const delim of ['|', '\t', ',']) {
     const counts = rawLines.map(l => l.split(delim).length);
@@ -155,6 +161,62 @@ export function smartParse(rawText: string): { leads: ParsedLead[]; redacted: Re
   if (!leads.length) leads = lastResortScan(rawLines);
 
   return { leads, redacted };
+}
+
+// Loosely match a field on a JSON object by any of several key aliases (case- and
+// punctuation-insensitive), returning the first non-empty string value.
+function pickField(obj: any, keys: string[]): string | null {
+  for (const k of Object.keys(obj)) {
+    const kn = k.toLowerCase().replace(/[^a-z]/g, '');
+    if (keys.indexOf(kn) !== -1) {
+      const v = obj[k];
+      if (v == null) continue;
+      const sv = String(v).trim();
+      if (sv) return sv;
+    }
+  }
+  return null;
+}
+function jsonObjToLead(obj: any): ParsedLead | null {
+  if (!obj || typeof obj !== 'object') return null;
+  const phone = pickField(obj, ['phone', 'mobile', 'tel', 'telephone', 'number', 'phonenumber', 'cell', 'contact', 'msisdn']);
+  if (!phone) return null;
+  let first = pickField(obj, ['firstname', 'fname', 'givenname', 'first']);
+  let last = pickField(obj, ['lastname', 'lname', 'surname', 'familyname', 'last']);
+  const full = pickField(obj, ['name', 'fullname', 'contactname']);
+  if (!first && !last && full) { const [f, l] = splitName(full); first = f; last = l; }
+  const lead: ParsedLead = {
+    first_name: first,
+    last_name: last,
+    phone,
+    email: pickField(obj, ['email', 'emailaddress', 'mail']),
+    address: pickField(obj, ['address', 'addr', 'street', 'location']),
+    notes: pickField(obj, ['notes', 'note', 'comment', 'comments', 'remarks']),
+    date_of_birth: pickField(obj, ['dob', 'dateofbirth', 'birthdate', 'birthday']),
+  };
+  const extra = pickField(obj, ['extra', 'extrainfo', 'info', 'other', 'details']);
+  if (extra) (lead as any).extra_info = extra;
+  return lead;
+}
+// Try to read the text as JSON: a whole array/object, or newline-delimited objects.
+// Returns [] (so callers fall through to text parsing) when it isn't valid JSON.
+function tryParseJson(text: string): ParsedLead[] {
+  const t = text.trim();
+  if (!t || (t[0] !== '[' && t[0] !== '{')) return [];
+  const out: ParsedLead[] = [];
+  try {
+    const parsed = JSON.parse(t);
+    const arr = Array.isArray(parsed) ? parsed : [parsed];
+    for (const ob of arr) { const l = jsonObjToLead(ob); if (l) out.push(l); }
+    if (out.length) return out;
+  } catch (e) { /* not whole-document JSON — try line-delimited below */ }
+  const lines = t.split('\n').map(l => l.trim()).filter(Boolean);
+  let any = false;
+  for (const line of lines) {
+    if (line[0] !== '{') continue;
+    try { const ob = JSON.parse(line); const l = jsonObjToLead(ob); if (l) { out.push(l); any = true; } } catch (e) { /* skip bad line */ }
+  }
+  return any ? out : [];
 }
 
 function lastResortScan(lines: string[]): ParsedLead[] {
