@@ -489,7 +489,7 @@ misc.post('/api/admin/telephony-config/test-call', requireRole('admin'), async (
 
 misc.get('/api/admin/access-status', requireRole('admin'), async (c) => {
   const user = c.get('user');
-  const [t] = await sql`SELECT slug, expires_at, is_self FROM tenants WHERE id = ${user.tenant_id}`;
+  const [t] = await sql`SELECT slug, expires_at, is_self, referral_code FROM tenants WHERE id = ${user.tenant_id}`;
   // Usage metrics for the Panel Usage dashboard \u2014 all strictly tenant-scoped.
   const [su] = await sql`SELECT
     COUNT(*) FILTER (WHERE role = 'caller')::int AS callers,
@@ -504,8 +504,23 @@ misc.get('/api/admin/access-status', requireRole('admin'), async (c) => {
     COUNT(*) FILTER (WHERE status = 'completed')::int AS completed
     FROM leads WHERE tenant_id = ${user.tenant_id} AND merged_into_id IS NULL`;
   const usage = { ...su, ...lu };
-  if (!t || t.is_self) return c.json({ data: { renewable: false, usage } });
-  return c.json({ data: { renewable: true, slug: t.slug, expires_at: t.expires_at, usage } });
+  // Referral: the tenant's shareable code (generated once if missing) + how many
+  // redeemed signups used it. Tracking only \u2014 no billing effect.
+  let refCode = t ? t.referral_code : null;
+  if (t && !refCode) {
+    refCode = ('CP' + Math.random().toString(36).slice(2, 10)).toUpperCase();
+    await sql`UPDATE tenants SET referral_code = ${refCode} WHERE id = ${user.tenant_id} AND referral_code IS NULL`;
+    const [r2] = await sql`SELECT referral_code FROM tenants WHERE id = ${user.tenant_id}`;
+    refCode = r2 ? r2.referral_code : refCode;
+  }
+  let refCount = 0;
+  if (refCode) {
+    const [rc] = await sql`SELECT COUNT(*)::int AS n FROM license_keys WHERE lower(referral_code) = lower(${refCode}) AND redeemed = true`;
+    refCount = rc ? rc.n : 0;
+  }
+  const referral = { code: refCode || null, count: refCount };
+  if (!t || t.is_self) return c.json({ data: { renewable: false, usage, referral } });
+  return c.json({ data: { renewable: true, slug: t.slug, expires_at: t.expires_at, usage, referral } });
 });
 
 misc.get('/api/branding', async (c) => {
