@@ -420,9 +420,12 @@ async function renderAdminImport(el) {
     <div class="panel p fade-up">
       <div class="section-title" style="margin-top:0;">Paste your leads</div>
       <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:14px;line-height:1.5;">Any format works — CSV, pipe-separated, or freeform text, local or international numbers. Card numbers, CVVs and passwords are stripped automatically before anything is stored.</p>
-      <textarea id="importText" rows="8" placeholder="John Smith, 07515 944454, john@email.com, 42 Oak St&#10;paste one lead per line — thousands at once is fine" oninput="importStepActive(this.value.trim()?2:1)"></textarea>
+      <div id="importDropZone" ondragover="onImportDragOver(event)" ondragleave="onImportDragLeave(event)" ondrop="onImportDrop(event)" style="border:2px dashed var(--border-2);border-radius:14px;padding:8px;transition:border-color .15s,background .15s;">
+        <textarea id="importText" rows="8" placeholder="John Smith, 07515 944454, john@email.com, 42 Oak St&#10;paste one lead per line — thousands at once is fine" oninput="importStepActive(this.value.trim()?2:1)"></textarea>
+        <div style="text-align:center;font-size:11.5px;color:var(--text-faint);padding:6px 0 2px;">or drag &amp; drop a .csv, .txt, .tsv or .json file anywhere in this box</div>
+      </div>
       <div style="display:flex;align-items:center;gap:10px;margin-top:10px;">
-        <label class="btn btn-ghost btn-sm" style="cursor:pointer;">Upload a file<input type="file" id="importFile" accept=".txt,.csv,.tsv" style="display:none;" onchange="handleImportFile(event)" /></label>
+        <label class="btn btn-ghost btn-sm" style="cursor:pointer;">Upload a file<input type="file" id="importFile" accept=".txt,.csv,.tsv,.json" style="display:none;" onchange="handleImportFile(event)" /></label>
         <span id="importFileName" style="font-size:11.5px;color:var(--text-dim);"></span>
       </div>
       <div class="field" style="margin-top:16px;">
@@ -448,13 +451,21 @@ function importStepActive(n) {
   if (s2) s2.classList.toggle('on', n >= 2);
   if (s3) s3.classList.toggle('on', n >= 3);
 }
-function handleImportFile(event) {
-  const file = event.target.files[0];
+function loadImportFile(file) {
   if (!file) return;
   document.getElementById('importFileName').textContent = file.name + ' (' + Math.round(file.size / 1024) + 'KB)';
   const reader = new FileReader();
-  reader.onload = (e) => { document.getElementById('importText').value = e.target.result; };
+  reader.onload = (e) => { const ta = document.getElementById('importText'); ta.value = e.target.result; importStepActive(ta.value.trim() ? 2 : 1); };
   reader.readAsText(file);
+}
+function handleImportFile(event) { loadImportFile(event.target.files[0]); }
+function onImportDragOver(e) { e.preventDefault(); const d = document.getElementById('importDropZone'); if (d) { d.style.borderColor = 'var(--gold-bright)'; d.style.background = 'rgba(245,158,11,.06)'; } }
+function onImportDragLeave(e) { e.preventDefault(); const d = document.getElementById('importDropZone'); if (d) { d.style.borderColor = 'var(--border-2)'; d.style.background = 'transparent'; } }
+function onImportDrop(e) {
+  e.preventDefault(); onImportDragLeave(e);
+  const dt = e.dataTransfer; if (!dt) return;
+  if (dt.files && dt.files.length) { loadImportFile(dt.files[0]); return; }
+  const txt = dt.getData('text'); if (txt) { const ta = document.getElementById('importText'); ta.value = txt; importStepActive(ta.value.trim() ? 2 : 1); }
 }
 let lastImportPreview = [];
 // Click-to-select for the import bank picker. Toggles the .selected state and
