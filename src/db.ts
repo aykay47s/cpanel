@@ -441,6 +441,8 @@ export async function ensureDb() {
     // recycle_attempted: when ON, previously-attempted (unsuccessful) leads go back
     // into the caller queue. OFF by default so dead numbers don't keep popping up.
     `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS recycle_attempted BOOLEAN NOT NULL DEFAULT false`,
+    // last time we DM'd this panel's admins a renewal reminder (dedupes the sweep).
+    `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS renewal_reminded_at TIMESTAMPTZ`,
     `ALTER TABLE inbound_calls ADD COLUMN IF NOT EXISTS provider TEXT NOT NULL DEFAULT 'twilio'`,
     `ALTER TABLE inbound_calls ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id)`,
     // lead_categories and clock_sessions were platform-global: every tenant read,
