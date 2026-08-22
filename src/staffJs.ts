@@ -478,6 +478,13 @@ function renderActiveCallShell(body, lead, role, scripts, template) {
       <!-- Finisher actions -->
       <!-- Everything the starter logged on the first call, so the finisher walks
            in knowing the story instead of cold. Loaded after render. -->
+      \${lead.cookie_level ? \`<div style="display:flex;align-items:center;gap:12px;padding:13px 15px;border-radius:14px;background:rgba(250,204,21,.06);border:1px solid rgba(250,204,21,.22);margin-bottom:14px;">
+        <span style="font-size:26px;line-height:1;">\ud83c\udf6a</span>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:10px;font-weight:800;letter-spacing:.12em;text-transform:uppercase;color:#fbbf24;margin-bottom:5px;">Lead warmth \u00b7 \${lead.cookie_level}/10</div>
+          <div style="height:7px;border-radius:6px;background:rgba(255,255,255,.08);overflow:hidden;"><div style="height:100%;width:\${lead.cookie_level*10}%;background:linear-gradient(90deg,#f59e0b,#fbbf24);border-radius:6px;"></div></div>
+        </div>
+      </div>\` : ''}
       <div style="padding:14px;border-radius:14px;background:rgba(63,168,154,.06);border:1px solid rgba(63,168,154,.25);margin-bottom:14px;">
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#5fd3c0;margin-bottom:4px;">Notes from the starter</div>
         <div id="finisherNotes_\${lead.id}"><div style="font-size:12px;color:var(--text-faint);padding:4px 0;">Loading notes…</div></div>
@@ -617,11 +624,15 @@ async function scheduleCallback(leadId) {
   if (typeof toast === 'function') toast('Callback booked — Telegram reminder sent');
   renderStaffQueue();
 }
-async function recordOutcome(id, outcome) {
+async function recordOutcome(id, outcome, cookieLevel) {
   // 'cancelled' is the one outcome that records no real result — make it a
   // deliberate choice rather than an accidental tap that drops the lead.
   if (outcome === 'cancelled' && !confirm('Release this lead without logging a result?')) return;
-  const res = await api('/api/caller/leads/' + id + '/outcome', { method: 'POST', body: JSON.stringify({ outcome, duration: callStart ? Math.floor((Date.now()-callStart)/1000) : 0 }) });
+  // Successful call + callback hand the lead to a finisher — force a 1–10 cookie
+  // (how convinced the lead is) before it submits, so the finisher knows how warm
+  // it is before dialing. Any other outcome skips this.
+  if ((outcome === 'successful_call' || outcome === 'callback_requested') && cookieLevel == null) { showCookiePrompt(id, outcome); return; }
+  const res = await api('/api/caller/leads/' + id + '/outcome', { method: 'POST', body: JSON.stringify({ outcome, cookie_level: cookieLevel != null ? cookieLevel : undefined, duration: callStart ? Math.floor((Date.now()-callStart)/1000) : 0 }) });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) { alert((data && data.error) || 'Could not save that outcome — try again.'); return; }
   callStart = null; clearInterval(callTimerInterval);
@@ -630,6 +641,35 @@ async function recordOutcome(id, outcome) {
   renderStaffQueue();
   applyXpEarned(data.xp_awarded, titleCase(outcome));
 }
+// Forced cookie step. Built with data-attrs + addEventListener (no inline quoted
+// handlers — those break inside this template string). Each pick re-calls
+// recordOutcome with the level so it flows through the normal submit path.
+function showCookiePrompt(id, outcome) {
+  var ex = document.getElementById('cookieOverlay'); if (ex) ex.remove();
+  var btns = '';
+  for (var n = 1; n <= 10; n++) {
+    btns += '<button class="cookie-pick" data-n="' + n + '" style="padding:11px 0;border-radius:12px;background:rgba(255,255,255,.04);border:1px solid var(--border);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:3px;transition:transform .08s,background .12s;"><span style="font-size:20px;line-height:1;">\ud83c\udf6a</span><span style="font-size:10px;font-weight:800;color:var(--text-dim);">' + n + '</span></button>';
+  }
+  var wrap = document.createElement('div');
+  wrap.id = 'cookieOverlay';
+  wrap.style.cssText = 'position:fixed;inset:0;z-index:9999;background:rgba(6,6,10,.74);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:20px;';
+  wrap.innerHTML = '<div class="cookie-card" style="width:100%;max-width:370px;background:linear-gradient(160deg,rgba(22,22,30,.99),rgba(12,12,18,.99));border:1px solid var(--border-2);border-radius:22px;padding:24px;box-shadow:0 30px 90px rgba(0,0,0,.65);">'
+    + '<div style="text-align:center;font-size:34px;line-height:1;margin-bottom:8px;">\ud83c\udf6a</div>'
+    + '<div style="text-align:center;font-size:18px;font-weight:800;margin-bottom:5px;">How convinced are they?</div>'
+    + '<div style="text-align:center;font-size:12.5px;color:var(--text-dim);line-height:1.55;margin-bottom:18px;">Give the lead a cookie level from 1–10. The finisher sees this before they call — required to hand the lead on.</div>'
+    + '<div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;">' + btns + '</div>'
+    + '<div style="display:flex;justify-content:space-between;font-size:10px;font-weight:600;color:var(--text-faint);margin-top:11px;padding:0 3px;"><span>1 · Cold</span><span>10 · Red hot</span></div>'
+    + '<button class="cookie-cancel" style="width:100%;margin-top:18px;padding:11px;border-radius:12px;background:transparent;border:1px solid var(--border);color:var(--text-dim);font-size:13px;font-weight:600;cursor:pointer;">Cancel</button>'
+    + '</div>';
+  document.body.appendChild(wrap);
+  wrap.querySelectorAll('.cookie-pick').forEach(function (b) {
+    b.addEventListener('click', function () { closeCookiePrompt(); recordOutcome(id, outcome, parseInt(b.getAttribute('data-n'), 10)); });
+    b.addEventListener('mouseover', function () { b.style.background = 'rgba(250,204,21,.14)'; b.style.transform = 'translateY(-2px)'; });
+    b.addEventListener('mouseout', function () { b.style.background = 'rgba(255,255,255,.04)'; b.style.transform = 'none'; });
+  });
+  var cancel = wrap.querySelector('.cookie-cancel'); if (cancel) cancel.addEventListener('click', closeCookiePrompt);
+}
+function closeCookiePrompt() { var o = document.getElementById('cookieOverlay'); if (o) o.remove(); }
 async function finisherOutcome(id, outcome) {
   const res = await api('/api/finisher/leads/' + id + '/outcome', { method: 'POST', body: JSON.stringify({ outcome }) });
   const data = await res.json().catch(() => ({}));
