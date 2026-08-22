@@ -476,9 +476,15 @@ function acsInjectPolish() {
   st.id = 'acsPolishStyle';
   st.textContent = [
     '@keyframes acsPop{0%{opacity:0;transform:translateY(14px) scale(.985)}100%{opacity:1;transform:none}}',
+    '@keyframes acsRise{0%{opacity:0;transform:translateY(10px)}100%{opacity:1;transform:none}}',
+    '@keyframes acsBadgePop{0%{opacity:0;transform:scale(.55)}62%{transform:scale(1.14)}100%{opacity:1;transform:scale(1)}}',
     '@keyframes acsDialGlow{0%,100%{box-shadow:0 0 0 0 rgba(124,92,255,0)}50%{box-shadow:0 0 22px 2px rgba(124,92,255,.35)}}',
     '@keyframes acsDotPulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.3)}}',
+    '@keyframes acsRing{0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,0)}50%{box-shadow:0 0 0 4px rgba(34,197,94,.13)}}',
     'body:not(.cp-reduce-motion) .call-card{animation:acsPop .42s cubic-bezier(.2,.9,.25,1)}',
+    'body:not(.cp-reduce-motion) .call-card.acs-oncall{animation:acsPop .42s cubic-bezier(.2,.9,.25,1),acsRing 2.6s .5s ease-in-out infinite}',
+    'body:not(.cp-reduce-motion) .call-card .outcome-btn{animation:acsRise .5s .06s both}',
+    'body:not(.cp-reduce-motion) .call-card button>span:first-child,body:not(.cp-reduce-motion) .call-card a.dial-btn>span:first-child{animation:acsBadgePop .5s .12s both}',
     '.call-card button,.call-card a.dial-btn{transition:transform .12s ease,box-shadow .2s ease,filter .12s ease}',
     'body:not(.cp-reduce-motion) .call-card button:hover,body:not(.cp-reduce-motion) .call-card a.dial-btn:hover{transform:translateY(-2px);filter:brightness(1.09);box-shadow:0 7px 20px rgba(0,0,0,.34)}',
     '.call-card button:active,.call-card a.dial-btn:active{transform:translateY(0) scale(.97);filter:brightness(.98)}',
@@ -500,7 +506,7 @@ function renderActiveCallShell(body, lead, role, scripts, template) {
       <div style="font-size:13px;line-height:1.75;white-space:pre-wrap;color:var(--text);">\${esc(template)}</div>
     </div>\` : ''}
 
-    <div class="panel call-card fade-up" style="padding:20px;border-color:\${statusColor}33;background:linear-gradient(160deg,rgba(18,18,26,.9),rgba(12,12,18,.95));position:relative;overflow:hidden;">
+    <div class="panel call-card fade-up \${isOnCall ? 'acs-oncall' : ''}" style="padding:20px;border-color:\${statusColor}33;background:linear-gradient(160deg,rgba(18,18,26,.9),rgba(12,12,18,.95));position:relative;overflow:hidden;">
       <div style="position:absolute;top:-50px;left:-30px;width:180px;height:180px;border-radius:50%;background:radial-gradient(circle,\${statusColor}18,transparent 70%);pointer-events:none;"></div>
 
       <!-- Status bar -->
@@ -531,11 +537,11 @@ function renderActiveCallShell(body, lead, role, scripts, template) {
       <!-- Action buttons -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px;">
         <a class="dial-btn" href="tel:\${lead.phone}" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:16px;border-radius:14px;background:linear-gradient(135deg,var(--violet),rgba(124,92,255,.7));color:#fff;font-weight:700;font-size:15px;text-decoration:none;">
-          \${ICONS.phone} Dial
+          <span style="width:26px;height:26px;border-radius:50%;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center;">\${iconInline(ICONS.phone)}</span> Dial
         </a>
         \${!isOnCall
-          ? '<button class="oncall-btn" onclick="connectCall(' + lead.id + ')" style="padding:16px;border-radius:14px;background:linear-gradient(135deg,var(--success),rgba(34,197,94,.7));color:#fff;font-weight:700;font-size:15px;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;"><span style=\\"font-size:18px;\\">✓</span>Mark On Call</button>'
-          : '<button class="endcall-btn" onclick="endCall(' + lead.id + ')" style="padding:16px;border-radius:14px;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);color:var(--danger);font-weight:700;font-size:14px;cursor:pointer;">End Call</button>'
+          ? '<button class="oncall-btn" onclick="connectCall(' + lead.id + ')" style="padding:16px;border-radius:14px;background:linear-gradient(135deg,var(--success),rgba(34,197,94,.7));color:#fff;font-weight:700;font-size:15px;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;"><span style="width:26px;height:26px;border-radius:50%;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;">' + iconInline(ICONS.check) + '</span>Mark On Call</button>'
+          : '<button class="endcall-btn" onclick="endCall(' + lead.id + ')" style="padding:16px;border-radius:14px;background:rgba(239,68,68,.15);border:1px solid rgba(239,68,68,.4);color:var(--danger);font-weight:700;font-size:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;"><span style="width:26px;height:26px;border-radius:50%;background:rgba(239,68,68,.18);display:flex;align-items:center;justify-content:center;">' + iconInline(ICONS.phoneOff) + '</span>End Call</button>'
         }
       </div>
 
@@ -554,8 +560,12 @@ function renderActiveCallShell(body, lead, role, scripts, template) {
       \` : \`
       <!-- On call: outcome buttons -->
       <div style="margin-bottom:14px;">
-        <button onclick="recordOutcome(\${lead.id},'successful_call')" style="width:100%;padding:16px;border-radius:14px;background:linear-gradient(135deg,rgba(34,197,94,.2),rgba(34,197,94,.12));border:1px solid rgba(34,197,94,.4);color:var(--success);font-size:16px;font-weight:800;cursor:pointer;margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:8px;">
-          ✓ Successful Call
+        <button onclick="recordOutcome(\${lead.id},'successful_call')" style="display:flex;align-items:center;gap:13px;width:100%;padding:15px 18px;border-radius:16px;background:linear-gradient(135deg,rgba(34,197,94,.3),rgba(16,140,70,.15));border:1px solid rgba(34,197,94,.5);color:var(--success);cursor:pointer;text-align:left;margin-bottom:10px;box-shadow:0 6px 22px rgba(34,197,94,.16);">
+          <span style="flex-shrink:0;width:42px;height:42px;border-radius:50%;background:rgba(34,197,94,.22);display:flex;align-items:center;justify-content:center;">\${iconInline(ICONS.check)}</span>
+          <span style="display:flex;flex-direction:column;line-height:1.25;">
+            <span style="font-size:16px;font-weight:800;letter-spacing:-.01em;">Successful Call</span>
+            <span style="font-size:11.5px;font-weight:500;color:rgba(74,222,128,.8);">Warm — hands off to a finisher</span>
+          </span>
         </button>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
           <button onclick="recordOutcome(\${lead.id},'callback_requested')" style="padding:12px;border-radius:12px;background:rgba(250,204,21,.08);border:1px solid rgba(250,204,21,.3);color:#fbbf24;font-size:13px;font-weight:600;cursor:pointer;">\${iconInline(ICONS.calendar)} Callback</button>
@@ -603,7 +613,13 @@ function renderActiveCallShell(body, lead, role, scripts, template) {
         <div id="finisherNotes_\${lead.id}"><div style="font-size:12px;color:var(--text-faint);padding:4px 0;">Loading notes…</div></div>
       </div>
       <div style="display:grid;gap:10px;margin-bottom:14px;">
-        <a class="dial-btn" href="tel:\${lead.phone}" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:16px;border-radius:14px;background:linear-gradient(135deg,var(--violet),rgba(124,92,255,.7));color:#fff;font-weight:700;font-size:15px;text-decoration:none;">\${ICONS.phone} Dial \${lead.phone}</a>
+        <a class="dial-btn" href="tel:\${lead.phone}" style="display:flex;align-items:center;gap:13px;width:100%;padding:15px 18px;border-radius:16px;background:linear-gradient(135deg,rgba(124,92,255,.32),rgba(88,60,200,.16));border:1px solid rgba(124,92,255,.5);color:#fff;text-decoration:none;box-shadow:0 6px 22px rgba(124,92,255,.18);">
+          <span style="flex-shrink:0;width:42px;height:42px;border-radius:50%;background:rgba(124,92,255,.28);display:flex;align-items:center;justify-content:center;">\${iconInline(ICONS.phone)}</span>
+          <span style="display:flex;flex-direction:column;line-height:1.25;">
+            <span style="font-size:16px;font-weight:800;letter-spacing:-.01em;">Dial \${fullName(lead)}</span>
+            <span style="font-size:12px;font-weight:600;color:rgba(255,255,255,.72);font-family:monospace;">\${lead.phone}</span>
+          </span>
+        </a>
         <button onclick="finisherOutcome(\${lead.id},'completed')" style="display:flex;align-items:center;gap:13px;width:100%;padding:15px 18px;border-radius:16px;background:linear-gradient(135deg,rgba(34,197,94,.3),rgba(16,140,70,.15));border:1px solid rgba(34,197,94,.5);color:var(--success);cursor:pointer;text-align:left;box-shadow:0 6px 22px rgba(34,197,94,.16);">
           <span style="flex-shrink:0;width:42px;height:42px;border-radius:50%;background:rgba(34,197,94,.22);display:flex;align-items:center;justify-content:center;">\${iconInline(ICONS.check)}</span>
           <span style="display:flex;flex-direction:column;line-height:1.25;">
@@ -612,8 +628,14 @@ function renderActiveCallShell(body, lead, role, scripts, template) {
           </span>
         </button>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-          <button onclick="finisherOutcome(\${lead.id},'requires_review')" style="display:flex;align-items:center;justify-content:center;gap:6px;padding:12px;border-radius:12px;background:rgba(79,140,255,.08);border:1px solid rgba(79,140,255,.25);color:var(--gold-bright);font-size:13px;font-weight:600;cursor:pointer;">\${iconInline(ICONS.search)} Review</button>
-          <button onclick="finisherOutcome(\${lead.id},'failed')" style="display:flex;align-items:center;justify-content:center;gap:6px;padding:12px;border-radius:12px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);color:var(--danger);font-size:13px;font-weight:600;cursor:pointer;">\${iconInline(ICONS.phoneOff)} Unsuccessful</button>
+          <button onclick="finisherOutcome(\${lead.id},'requires_review')" style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px 10px;border-radius:14px;background:rgba(79,140,255,.1);border:1px solid rgba(79,140,255,.28);color:var(--gold-bright);cursor:pointer;">
+            <span style="width:34px;height:34px;border-radius:50%;background:rgba(79,140,255,.2);display:flex;align-items:center;justify-content:center;">\${iconInline(ICONS.search)}</span>
+            <span style="font-size:12.5px;font-weight:700;">Review</span>
+          </button>
+          <button onclick="finisherOutcome(\${lead.id},'failed')" style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px 10px;border-radius:14px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.28);color:var(--danger);cursor:pointer;">
+            <span style="width:34px;height:34px;border-radius:50%;background:rgba(239,68,68,.2);display:flex;align-items:center;justify-content:center;">\${iconInline(ICONS.phoneOff)}</span>
+            <span style="font-size:12.5px;font-weight:700;">Unsuccessful</span>
+          </button>
         </div>
       </div>
       \`}
