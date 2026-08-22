@@ -443,6 +443,9 @@ export async function ensureDb() {
     `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS recycle_attempted BOOLEAN NOT NULL DEFAULT false`,
     // last time we DM'd this panel's admins a renewal reminder (dedupes the sweep).
     `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS renewal_reminded_at TIMESTAMPTZ`,
+    // Per-tenant referral code: shareable by the admin, stamped onto any license
+    // key redeemed with it, so a panel can see how many signups it brought in.
+    `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS referral_code TEXT`,
     `ALTER TABLE inbound_calls ADD COLUMN IF NOT EXISTS provider TEXT NOT NULL DEFAULT 'twilio'`,
     `ALTER TABLE inbound_calls ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id)`,
     // lead_categories and clock_sessions were platform-global: every tenant read,
@@ -797,6 +800,11 @@ export async function ensureDb() {
   // Let a redeemed key remember which affiliate code was used, so the master
   // history and per-tenant view can show the referral source.
   await sql.unsafe(`DO $$ BEGIN ALTER TABLE license_keys ADD COLUMN IF NOT EXISTS referral_code TEXT; EXCEPTION WHEN OTHERS THEN NULL; END $$;`);
+
+  // Give every existing tenant a stable, non-sequential referral code derived from
+  // its slug, then lock it unique. New tenants get one lazily on first view.
+  await sql`UPDATE tenants SET referral_code = upper(substr(md5(slug || 'cpref'), 1, 8)) WHERE referral_code IS NULL`;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS tenants_referral_code_uniq ON tenants (referral_code) WHERE referral_code IS NOT NULL`;
 
   // Runs last: both need the tenants table populated (self-tenant is created
   // further up in this function), and the category seed needs the unique index
