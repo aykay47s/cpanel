@@ -604,10 +604,16 @@ function renderActiveCallShell(body, lead, role, scripts, template) {
       </div>
       <div style="display:grid;gap:10px;margin-bottom:14px;">
         <a class="dial-btn" href="tel:\${lead.phone}" style="display:flex;align-items:center;justify-content:center;gap:8px;padding:16px;border-radius:14px;background:linear-gradient(135deg,var(--violet),rgba(124,92,255,.7));color:#fff;font-weight:700;font-size:15px;text-decoration:none;">\${ICONS.phone} Dial \${lead.phone}</a>
-        <button onclick="finisherOutcome(\${lead.id},'completed')" style="padding:16px;border-radius:14px;background:linear-gradient(135deg,rgba(34,197,94,.2),rgba(34,197,94,.12));border:1px solid rgba(34,197,94,.4);color:var(--success);font-size:16px;font-weight:800;cursor:pointer;">✓ Mark Completed</button>
+        <button onclick="finisherOutcome(\${lead.id},'completed')" style="display:flex;align-items:center;gap:13px;width:100%;padding:15px 18px;border-radius:16px;background:linear-gradient(135deg,rgba(34,197,94,.3),rgba(16,140,70,.15));border:1px solid rgba(34,197,94,.5);color:var(--success);cursor:pointer;text-align:left;box-shadow:0 6px 22px rgba(34,197,94,.16);">
+          <span style="flex-shrink:0;width:42px;height:42px;border-radius:50%;background:rgba(34,197,94,.22);display:flex;align-items:center;justify-content:center;">\${iconInline(ICONS.check)}</span>
+          <span style="display:flex;flex-direction:column;line-height:1.25;">
+            <span style="font-size:16px;font-weight:800;letter-spacing:-.01em;">Mark Completed</span>
+            <span style="font-size:11.5px;font-weight:500;color:rgba(74,222,128,.8);">Deal closed — nothing left to do</span>
+          </span>
+        </button>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
-          <button onclick="finisherOutcome(\${lead.id},'requires_review')" style="padding:12px;border-radius:12px;background:rgba(79,140,255,.08);border:1px solid rgba(79,140,255,.25);color:var(--gold-bright);font-size:13px;font-weight:600;cursor:pointer;">Review</button>
-          <button onclick="finisherOutcome(\${lead.id},'failed')" style="padding:12px;border-radius:12px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);color:var(--danger);font-size:13px;font-weight:600;cursor:pointer;">Unsuccessful</button>
+          <button onclick="finisherOutcome(\${lead.id},'requires_review')" style="display:flex;align-items:center;justify-content:center;gap:6px;padding:12px;border-radius:12px;background:rgba(79,140,255,.08);border:1px solid rgba(79,140,255,.25);color:var(--gold-bright);font-size:13px;font-weight:600;cursor:pointer;">\${iconInline(ICONS.search)} Review</button>
+          <button onclick="finisherOutcome(\${lead.id},'failed')" style="display:flex;align-items:center;justify-content:center;gap:6px;padding:12px;border-radius:12px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);color:var(--danger);font-size:13px;font-weight:600;cursor:pointer;">\${iconInline(ICONS.phoneOff)} Unsuccessful</button>
         </div>
       </div>
       \`}
