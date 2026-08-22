@@ -155,6 +155,19 @@ telegram.post('/api/telegram/confirm-code', requireAnyStaff, async (c) => {
     const bannerUrl = `${new URL(c.req.url).origin}/clearpanel-logo.png`;
     sendTelegramPhoto(botToken, chatId, bannerUrl, welcome).catch(() => {});
   }
+  // Loop the panel's admins in when a team member finishes linking Telegram \u2014
+  // previously only the person verifying got a DM, so admins never knew a caller
+  // had signed up. Tenant-scoped (same tenant_id only) and best-effort so it can
+  // never block or fail the verification itself.
+  if (s === 'tenant' && user.role !== 'admin' && botToken) {
+    try {
+      const admins = await sql`SELECT telegram_chat_id_tenant AS chat_id FROM users
+        WHERE tenant_id = ${user.tenant_id} AND role = 'admin' AND telegram_chat_id_tenant IS NOT NULL`;
+      const roleLabel = user.role ? String(user.role) : 'team member';
+      const notify = `\u2705 <b>${fresh?.name || 'A team member'}</b> (${roleLabel}) just linked their Telegram and is verified on your panel.`;
+      for (const adm of admins) { if (adm.chat_id) sendTelegramDM(botToken, adm.chat_id, notify).catch(() => {}); }
+    } catch (e) { /* best-effort \u2014 never block verification */ }
+  }
   return c.json({ data: { verified: true, name: fresh?.name || '' } });
 });
 
