@@ -490,8 +490,22 @@ misc.post('/api/admin/telephony-config/test-call', requireRole('admin'), async (
 misc.get('/api/admin/access-status', requireRole('admin'), async (c) => {
   const user = c.get('user');
   const [t] = await sql`SELECT slug, expires_at, is_self FROM tenants WHERE id = ${user.tenant_id}`;
-  if (!t || t.is_self) return c.json({ data: { renewable: false } });
-  return c.json({ data: { renewable: true, slug: t.slug, expires_at: t.expires_at } });
+  // Usage metrics for the Panel Usage dashboard \u2014 all strictly tenant-scoped.
+  const [su] = await sql`SELECT
+    COUNT(*) FILTER (WHERE role = 'caller')::int AS callers,
+    COUNT(*) FILTER (WHERE role = 'finisher')::int AS finishers,
+    COUNT(*) FILTER (WHERE role IN ('admin', 'manager'))::int AS admins
+    FROM users WHERE tenant_id = ${user.tenant_id}`;
+  const [lu] = await sql`SELECT
+    COUNT(*)::int AS leads_total,
+    COUNT(*) FILTER (WHERE created_at >= date_trunc('month', now()))::int AS leads_month,
+    COALESCE(SUM(call_attempts), 0)::int AS calls_made,
+    COUNT(*) FILTER (WHERE outcome = 'successful_call')::int AS successful,
+    COUNT(*) FILTER (WHERE status = 'completed')::int AS completed
+    FROM leads WHERE tenant_id = ${user.tenant_id} AND merged_into_id IS NULL`;
+  const usage = { ...su, ...lu };
+  if (!t || t.is_self) return c.json({ data: { renewable: false, usage } });
+  return c.json({ data: { renewable: true, slug: t.slug, expires_at: t.expires_at, usage } });
 });
 
 misc.get('/api/branding', async (c) => {
