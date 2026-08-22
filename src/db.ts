@@ -411,6 +411,9 @@ export async function ensureDb() {
     // #3: callback scheduling — when the contact asked to be called back.
     `ALTER TABLE leads ADD COLUMN IF NOT EXISTS callback_at TIMESTAMPTZ`,
     `ALTER TABLE leads ADD COLUMN IF NOT EXISTS callback_caller_id INTEGER REFERENCES users(id)`,
+    // cookie level 1–10: how convinced/OTP-ready the lead is, set by the caller
+    // at the end of a successful/callback outcome and shown to the finisher.
+    `ALTER TABLE leads ADD COLUMN IF NOT EXISTS cookie_level SMALLINT`,
     // age index so stale-lead queries are fast
     `CREATE INDEX IF NOT EXISTS leads_created_tenant ON leads (tenant_id, created_at)`,
     `ALTER TABLE announcements ADD COLUMN IF NOT EXISTS important BOOLEAN NOT NULL DEFAULT false`,
