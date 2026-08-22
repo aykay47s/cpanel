@@ -62,6 +62,22 @@ async function renderAdminDashboard(el) {
   const [res, statusRes] = await Promise.all([api('/api/admin/dashboard'), api('/api/center-status')]);
   const d = (await res.json()).data;
   const center = (await statusRes.json()).data;
+  const _t = d.total || 0, _work = Math.max(0, _t - (d.uncalled || 0)), _s = d.successful || 0, _c = d.completed || 0;
+  const _pipe = (d.awaiting_finishing || 0) + (d.assigned_finishing || 0);
+  const _pct = (n, dn) => dn > 0 ? Math.round((n / dn) * 100) : 0;
+  const _bar = (label, val, of, color) => '<div style="margin-bottom:9px;"><div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:3px;"><span style="color:var(--text-dim);">' + label + '</span><span style="font-weight:700;">' + val + (of ? ' <span style="color:var(--text-faint);font-weight:500;">(' + _pct(val, of) + '%)</span>' : '') + '</span></div><div style="height:7px;border-radius:6px;background:rgba(255,255,255,.06);overflow:hidden;"><div style="height:100%;width:' + (_t > 0 ? Math.round(val / _t * 100) : 0) + '%;background:' + color + ';border-radius:6px;"></div></div></div>';
+  const perfCard = '<div class="panel p fade-up"><div class="section-title" style="margin-top:0;">Floor performance</div>'
+    + '<div class="stat-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:14px;">'
+    + '<div class="stat-box panel"><div class="num">' + _pct(_work, _t) + '%</div><div class="lbl">Contacted</div></div>'
+    + '<div class="stat-box panel accent"><div class="num">' + _pct(_s, _work) + '%</div><div class="lbl">Success rate</div></div>'
+    + '<div class="stat-box panel"><div class="num">' + _pct(_c, _s) + '%</div><div class="lbl">Closed by finishers</div></div>'
+    + '</div>'
+    + _bar('Total leads', _t, 0, 'rgba(124,92,255,.65)')
+    + _bar('Worked', _work, _t, 'rgba(79,140,255,.7)')
+    + _bar('Successful', _s, _work, 'rgba(34,197,94,.7)')
+    + _bar('In finishing', _pipe, _s, 'rgba(245,158,11,.75)')
+    + _bar('Completed', _c, _s, 'rgba(34,197,94,.95)')
+    + '</div>';
   el.innerHTML = \`
     <div id="callerIdPopZone"></div>
     <div class="panel p fade-up" style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;\${center.open ? '' : 'border-color:var(--gold-glow);'}">
@@ -95,6 +111,7 @@ async function renderAdminDashboard(el) {
       <div class="stat-box panel"><div class="num" data-count="\${d.completed}">0</div><div class="lbl">Completed</div></div>
       <div class="stat-box panel" style="\${d.requires_review > 0 ? 'border-color:var(--gold-glow);' : ''}"><div class="num" data-count="\${d.requires_review}">0</div><div class="lbl">Needs Review</div></div>
     </div>
+    \${perfCard}
     <div class="stat-grid" style="grid-template-columns:repeat(2,1fr);">
       <div class="stat-box panel"><div class="num" data-count="\${d.callers_online}">0</div><div class="lbl">Callers Online</div></div>
       <div class="stat-box panel"><div class="num" data-count="\${d.finishers_online}">0</div><div class="lbl">Finishers Online</div></div>
