@@ -458,8 +458,10 @@ const OUTCOME_STATUS_MAP: Record<string, string> = {
 
 leads.post('/api/caller/leads/:id/outcome', requireRole('caller'), async (c) => {
   const user = c.get('user');
-  const { outcome, notes, duration } = await c.req.json().catch(() => ({}));
+  const { outcome, notes, duration, cookie_level } = await c.req.json().catch(() => ({}));
   const durationSec = duration && Number.isFinite(Number(duration)) ? Math.max(0, Math.round(Number(duration))) : null;
+  // cookie level: how convinced the lead is (1–10), set at hand-off. Clamp hard.
+  const cookieLevel = (cookie_level != null && Number.isFinite(Number(cookie_level))) ? Math.max(1, Math.min(10, Math.round(Number(cookie_level)))) : null;
   const validOutcomes = ['successful_call', 'failed', 'requires_review', 'chopped_previously', 'number_not_recognised', ...REQUEUE_OUTCOMES];
   if (!validOutcomes.includes(outcome)) return bad(c, 'Invalid outcome');
   const [lead] = await sql`SELECT status, assigned_caller_id FROM leads WHERE id = ${c.req.param('id')} AND tenant_id = ${user.tenant_id}`;
@@ -474,8 +476,8 @@ leads.post('/api/caller/leads/:id/outcome', requireRole('caller'), async (c) => 
   else finalStatus = OUTCOME_STATUS_MAP[outcome] || outcome; // 'failed' | 'requires_review' | mapped
 
   const [updated] = REQUEUE_OUTCOMES.includes(outcome)
-    ? await sql`UPDATE leads SET status = ${finalStatus}, outcome = ${outcome}, notes = COALESCE(${notes || null}, notes), last_call_duration_seconds = COALESCE(${durationSec}, last_call_duration_seconds), call_attempts = call_attempts + 1, assigned_caller_id = NULL, updated_at = now() WHERE id = ${c.req.param('id')} AND tenant_id = ${user.tenant_id} RETURNING *`
-    : await sql`UPDATE leads SET status = ${finalStatus}, outcome = ${outcome}, notes = COALESCE(${notes || null}, notes), last_call_duration_seconds = COALESCE(${durationSec}, last_call_duration_seconds), call_attempts = call_attempts + 1, updated_at = now() WHERE id = ${c.req.param('id')} AND tenant_id = ${user.tenant_id} RETURNING *`;
+    ? await sql`UPDATE leads SET status = ${finalStatus}, outcome = ${outcome}, notes = COALESCE(${notes || null}, notes), last_call_duration_seconds = COALESCE(${durationSec}, last_call_duration_seconds), call_attempts = call_attempts + 1, assigned_caller_id = NULL, cookie_level = COALESCE(${cookieLevel}, cookie_level), updated_at = now() WHERE id = ${c.req.param('id')} AND tenant_id = ${user.tenant_id} RETURNING *`
+    : await sql`UPDATE leads SET status = ${finalStatus}, outcome = ${outcome}, notes = COALESCE(${notes || null}, notes), last_call_duration_seconds = COALESCE(${durationSec}, last_call_duration_seconds), call_attempts = call_attempts + 1, cookie_level = COALESCE(${cookieLevel}, cookie_level), updated_at = now() WHERE id = ${c.req.param('id')} AND tenant_id = ${user.tenant_id} RETURNING *`;
   await logEvent(updated.id, 'outcome_recorded', user, lead.status, outcome, { notes: notes || null, duration_seconds: durationSec });
   if (outcome === 'successful_call') {
     await logEvent(updated.id, 'queued_for_finishing', user, outcome, 'ready_for_finishing', {});
