@@ -315,6 +315,33 @@ app.get('/:slug', async (c) => {
   return c.html(html);
 });
 
+// Proactively remind panel admins over Telegram before their access lapses. Runs
+// on a timer (not per-request) so a panel that nobody opens still gets warned.
+// Everything here is best-effort: a failure must never affect serving.
+async function runRenewalReminders() {
+  try {
+    const { sendTelegramDM } = await import('./src/telegram');
+    const soon = await sql`SELECT id, name, slug, expires_at, telegram_bot_token
+      FROM tenants
+      WHERE is_self = false AND status = 'active' AND expires_at IS NOT NULL
+        AND expires_at > now() AND expires_at < now() + interval '7 days'
+        AND (renewal_reminded_at IS NULL OR renewal_reminded_at < now() - interval '3 days')`;
+    for (const t of soon) {
+      try {
+        if (!t.telegram_bot_token) continue;
+        const admins = await sql`SELECT telegram_chat_id_tenant AS chat_id FROM users
+          WHERE tenant_id = ${t.id} AND role = 'admin' AND telegram_chat_id_tenant IS NOT NULL`;
+        if (!admins.length) continue;
+        const days = Math.max(0, Math.ceil((new Date(t.expires_at).getTime() - Date.now()) / 86400000));
+        const when = new Date(t.expires_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+        const msg = `\u23f0 <b>Panel renewal reminder</b>\n\nYour ClearPanel access expires in <b>${days} day${days === 1 ? '' : 's'}</b> (on ${when}).\n\nRedeem a new license key under <b>Branding \u2192 Panel Access</b> to extend it \u2014 same panel, nothing resets.`;
+        for (const a of admins) { if (a.chat_id) await sendTelegramDM(t.telegram_bot_token, a.chat_id, msg).catch(() => {}); }
+        await sql`UPDATE tenants SET renewal_reminded_at = now() WHERE id = ${t.id}`;
+      } catch (e) { /* one panel failing must not stop the sweep */ }
+    }
+  } catch (e: any) { console.warn('[renewal] reminder sweep skipped:', e?.message); }
+}
+
 // The 3CX Call Control connection is a long-lived socket, not a request handler,
 // so it starts with the process rather than lazily on first request — otherwise
 // nothing would route inbound calls until an admin happened to open the panel.
@@ -341,6 +368,11 @@ ensureDb()
         else console.log('[telegram] gateway webhook installed');
       }
     } catch (e: any) { console.warn('[telegram] webhook setup skipped:', e?.message); }
+  })
+  .then(() => {
+    // Kick the renewal-reminder sweep now, then every 6 hours. Each panel is
+    // reminded at most once per 3 days (guarded in the query above).
+    try { runRenewalReminders(); setInterval(runRenewalReminders, 6 * 60 * 60 * 1000); } catch (e) {}
   })
   .catch((err) => console.error('[3cx] startup skipped:', err?.message));
 
