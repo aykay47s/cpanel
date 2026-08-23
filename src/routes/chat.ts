@@ -82,7 +82,14 @@ chat.post('/api/chat/messages', async (c) => {
   if (!user) return bad(c, 'Unauthorized', 401);
   const { content, replyToId, expiresInSeconds } = await c.req.json().catch(() => ({}));
   if (!content || !content.trim()) return bad(c, 'Message cannot be empty');
-  const expiresAt = expiresInSeconds ? new Date(Date.now() + expiresInSeconds * 1000) : null;
+  // Effective TTL: an explicit per-message value wins; otherwise fall back to the
+  // panel's tenant-wide disappearing default (0 = permanent).
+  let ttl = (typeof expiresInSeconds === 'number' && expiresInSeconds > 0) ? expiresInSeconds : 0;
+  if (!ttl) {
+    const [tt] = await sql`SELECT chat_ttl_seconds FROM tenants WHERE id = ${user.tenant_id}`;
+    if (tt && tt.chat_ttl_seconds > 0) ttl = tt.chat_ttl_seconds;
+  }
+  const expiresAt = ttl > 0 ? new Date(Date.now() + ttl * 1000) : null;
   const plain = content.trim();
   const [row] = await sql`INSERT INTO chat_messages (sender_id, content, reply_to_id, expires_at, tenant_id) VALUES (${user.id}, ${encryptMessage(plain)}, ${replyToId || null}, ${expiresAt}, ${user.tenant_id}) RETURNING *`;
   // Broadcast and return the PLAINTEXT (clients can't decrypt); only the DB row is encrypted.
@@ -129,4 +136,35 @@ chat.get('/api/chat/presence', async (c) => {
   if (!user) return bad(c, 'Unauthorized', 401);
   const rows = await sql`SELECT id, name, avatar, role, clocked_in, last_seen_at FROM users WHERE role IN ('admin','caller','finisher') AND tenant_id = ${user.tenant_id} ORDER BY clocked_in DESC, name ASC`;
   return c.json({ data: rows });
+});
+
+// Allowed disappearing-message durations (seconds). Off, 1h, 24h, 7d, 30d.
+const CHAT_TTL_ALLOWED = [0, 3600, 86400, 604800, 2592000];
+
+// Read the panel's tenant-wide disappearing default (any staff, to show the badge).
+chat.get('/api/chat/disappearing', async (c) => {
+  const user = await authenticate(c);
+  if (!user) return bad(c, 'Unauthorized', 401);
+  const [tt] = await sql`SELECT chat_ttl_seconds FROM tenants WHERE id = ${user.tenant_id}`;
+  return c.json({ data: { ttl_seconds: (tt && tt.chat_ttl_seconds) || 0 } });
+});
+
+// Set the tenant-wide disappearing default (admins only).
+chat.post('/api/chat/disappearing', requireRole('admin'), async (c) => {
+  const user = c.get('user');
+  const { ttl_seconds } = await c.req.json().catch(() => ({}));
+  const ttl = Number(ttl_seconds);
+  if (!CHAT_TTL_ALLOWED.includes(ttl)) return bad(c, 'Invalid duration');
+  await sql`UPDATE tenants SET chat_ttl_seconds = ${ttl} WHERE id = ${user.tenant_id}`;
+  // Let everyone's chat header update in realtime.
+  broadcast('chat_disappearing', { ttl_seconds: ttl }, user.tenant_id);
+  return c.json({ data: { ttl_seconds: ttl } });
+});
+
+// Panic wipe: permanently delete every team-chat message for this panel (admins only).
+chat.delete('/api/chat/all', requireRole('admin'), async (c) => {
+  const user = c.get('user');
+  await sql`DELETE FROM chat_messages WHERE tenant_id = ${user.tenant_id}`;
+  broadcast('chat_cleared', { by: user.name || 'An admin' }, user.tenant_id);
+  return c.json({ data: { ok: true } });
 });
