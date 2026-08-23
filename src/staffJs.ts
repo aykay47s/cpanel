@@ -864,6 +864,13 @@ async function renderStaffProfile() {
   me = { ...me, ...fresh }; localStorage.setItem('dispatch_me', JSON.stringify(me));
   body.innerHTML = \`
     \${profileCardHtml(me, { self: true })}
+    \${(me.other_panels && me.other_panels.length) ? \`<div class="panel p fade-up">
+      <div class="section-title" style="margin-top:0;">Your other panels</div>
+      <p style="font-size:11.5px;color:var(--text-dim);margin-bottom:10px;line-height:1.5;">You're set up on these call centers too \u2014 open one to sign in there.</p>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        \${me.other_panels.map(pnl => '<a href="/' + esc(pnl.slug) + '" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid var(--border-2);color:var(--text);text-decoration:none;transition:border-color .15s,background .15s;"><span style="font-weight:700;font-size:13.5px;">' + esc(pnl.name) + '</span><span style="font-size:11px;font-weight:600;color:var(--gold-bright);">Open &rarr;</span></a>').join('')}
+      </div>
+    </div>\` : ''}
     \${cpSettingsPanelHtml()}
     <div class="panel p fade-up">
       <div class="section-title" style="margin-top:0;">Your @handle</div>
