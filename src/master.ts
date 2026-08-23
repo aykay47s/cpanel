@@ -98,6 +98,34 @@ export const MASTER_PAGE = `<!DOCTYPE html>
   .gate-err{color:var(--danger);font-size:12.5px;margin-top:12px;min-height:16px;}
   .gate .btn{width:100%;margin-top:12px;padding:13px;font-size:13.5px;}
   @media(max-width:700px){.panel{padding:16px;} td,th{padding:9px;} .topbar{flex-wrap:wrap;}}
+
+  /* ---------- master v2: motion, hierarchy, polish ---------- */
+  @keyframes mFade{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:none;}}
+  @keyframes mPop{from{opacity:0;transform:translateY(10px) scale(.98);}to{opacity:1;transform:none;}}
+  #body{animation:mFade .38s var(--ease-smooth) both;}
+  #body > .stat-grid > .stat{animation:mPop .5s var(--ease-spring) both;}
+  #body > .stat-grid > .stat:nth-child(2){animation-delay:.04s;}
+  #body > .stat-grid > .stat:nth-child(3){animation-delay:.08s;}
+  #body > .stat-grid > .stat:nth-child(4){animation-delay:.12s;}
+  #body > .stat-grid > .stat:nth-child(5){animation-delay:.16s;}
+  #body > .stat-grid > .stat:nth-child(n+6){animation-delay:.2s;}
+  #body > .panel{animation:mFade .45s var(--ease-smooth) both;animation-delay:.05s;}
+  /* nav stays reachable while scrolling long tables */
+  .tabs{position:sticky;top:10px;z-index:20;backdrop-filter:blur(14px) saturate(1.3);-webkit-backdrop-filter:blur(14px) saturate(1.3);background:rgba(10,10,14,.72);}
+  /* section headers get an accent bar so the eye can group things */
+  #body h3{display:flex;align-items:center;gap:9px;}
+  #body h3::before{content:'';width:3px;height:1.05em;border-radius:2px;background:var(--grad);flex-shrink:0;box-shadow:0 0 10px rgba(124,92,255,.4);}
+  #body > .panel:hover{border-color:rgba(124,92,255,.24);}
+  /* nested rows (Panels tab) lift on hover so each panel feels tappable */
+  .panel .panel{transition:transform .2s var(--ease-smooth),border-color .2s,box-shadow .2s;}
+  .panel .panel:hover{transform:translateY(-2px);border-color:rgba(124,92,255,.32);box-shadow:0 10px 26px rgba(0,0,0,.34);}
+  /* table rows ease in rather than snapping */
+  tbody tr{animation:mFade .4s both;}
+  tbody tr:nth-child(2){animation-delay:.03s;} tbody tr:nth-child(3){animation-delay:.06s;}
+  tbody tr:nth-child(4){animation-delay:.09s;} tbody tr:nth-child(n+5){animation-delay:.12s;}
+  /* the status chip line at the top of Overview reads as a banner, not a stray pill */
+  #body > div:first-child > .chip{padding:7px 14px 7px 12px;font-size:11.5px;}
+  @media(prefers-reduced-motion:reduce){#body,#body *,.tabs{animation:none!important;}}
 </style>
 </head>
 <body>
