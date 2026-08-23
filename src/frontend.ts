@@ -586,6 +586,8 @@ function connectEvents() {
   es.addEventListener('lead_updated', () => { if (me.role === 'admin') maybeRefreshAdmin(['dashboard','leads','finishing']); });
   es.addEventListener('announcement', () => { if (staffTab === 'home') scheduleStaffHomeRefresh(); if (me.role==='admin') maybeRefreshAdmin('announcements'); });
   es.addEventListener('chat_message', (e) => { const d = JSON.parse(e.data); if (staffTab === 'chat' || (me.role==='admin' && currentAdminTab==='chat')) appendChatMessage(d); else pingNav('chat'); });
+  es.addEventListener('chat_disappearing', (e) => { try { window._chatTtl = JSON.parse(e.data).ttl_seconds; } catch (x) {} if (staffTab === 'chat' || (me.role==='admin' && currentAdminTab==='chat')) refreshTeamChat(); });
+  es.addEventListener('chat_cleared', () => { if (staffTab === 'chat' || (me.role==='admin' && currentAdminTab==='chat')) refreshTeamChat(); });
   es.addEventListener('panel_update', (e) => {
     const d = JSON.parse(e.data);
     if (d.maintenance === false) {
@@ -1217,9 +1219,11 @@ function categoryBadgeHtml(leadType) {
 
 // ---------- Shared chat panel (used by both admin and staff shells) ----------
 async function renderChatInto(containerEl) {
-  const [msgsRes, presenceRes] = await Promise.all([api('/api/chat/messages'), api('/api/chat/presence')]);
+  const [msgsRes, presenceRes, disRes] = await Promise.all([api('/api/chat/messages'), api('/api/chat/presence'), api('/api/chat/disappearing')]);
   const msgs = (await msgsRes.json()).data;
   const presence = (await presenceRes.json()).data;
+  const chatTtl = (((await disRes.json()).data) || {}).ttl_seconds || 0;
+  window._chatTtl = chatTtl;
   const onlineCount = presence.filter(p => p.clocked_in).length;
   containerEl.innerHTML = \`
     <div class="tg-chat">
@@ -1231,7 +1235,7 @@ async function renderChatInto(containerEl) {
             <div class="tg-chat-sub">\${presence.length} member\${presence.length===1?'':'s'} · <span style="color:var(--success);">\${onlineCount} online</span></div>
           </div>
         </div>
-        <span class="tg-lock" title="Messages are encrypted at rest in the database">\${ICONS.key || ''} Encrypted</span>
+        <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">\${chatTtl > 0 ? '<span class="tg-lock" style="color:var(--gold-bright);background:rgba(245,158,11,.1);border-color:var(--gold-glow);" title="Every new message disappears after this long">⏱ ' + ttlShort(chatTtl) + '</span>' : ''}<span class="tg-lock" title="Messages are encrypted at rest in the database">\${ICONS.key || ''} Encrypted</span></div>
       </div>
       <div class="tg-messages" id="chatMessages">\${msgs.map(chatMsgHtml).join('')}</div>
       <div class="tg-composer">
@@ -1242,11 +1246,14 @@ async function renderChatInto(containerEl) {
           <select id="disappearDuration" style="width:100%;padding:8px;font-size:12px;">
             <option value="60">1 minute</option><option value="3600">1 hour</option><option value="86400" selected>24 hours</option><option value="604800">7 days</option>
           </select>
+          \${me.role === 'admin' ? '<div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);"><div style="font-size:11px;color:var(--text-dim);margin-bottom:8px;font-weight:600;">Whole-panel default</div><select id="tenantDisappear" onchange="setChatDisappearing(this)" style="width:100%;padding:8px;font-size:12px;margin-bottom:10px;"><option value="0">Off — messages stay</option><option value="3600">Vanish after 1 hour</option><option value="86400">Vanish after 24 hours</option><option value="604800">Vanish after 7 days</option><option value="2592000">Vanish after 30 days</option></select><button class="btn btn-danger btn-sm" style="width:100%;" onclick="clearAllChat()">Clear all messages now</button></div>' : ''}
         </div>
         <input id="chatInput" placeholder="Message…" autocomplete="off" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChatMessage();}" />
         <button class="tg-send" onclick="sendChatMessage()" aria-label="Send">\${ICONS.arrowRight || ''}</button>
       </div>
     </div>\`;
+  const td = document.getElementById('tenantDisappear');
+  if (td) td.value = String(chatTtl);
   const toggle = document.getElementById('disappearToggle');
   if (toggle) toggle.addEventListener('change', (e) => {
     const btn = document.getElementById('disappearBtn');
@@ -1260,6 +1267,22 @@ async function renderChatInto(containerEl) {
 function toggleDisappearMenu() {
   const m = document.getElementById('disappearMenu');
   if (m) m.classList.toggle('hidden');
+}
+// Short label for the header timer badge.
+function ttlShort(sec) { if (sec >= 2592000) return '30d'; if (sec >= 604800) return '7d'; if (sec >= 86400) return '24h'; if (sec >= 3600) return '1h'; return Math.round(sec / 60) + 'm'; }
+// Re-render whichever chat wrap is currently mounted.
+function refreshTeamChat() { const w = document.getElementById(me.role === 'admin' ? 'adminChatWrap' : 'staffChatWrap'); if (w && !w.classList.contains('hidden')) renderChatInto(w); }
+// Admin sets the whole-panel disappearing default; the server broadcasts to everyone.
+async function setChatDisappearing(sel) {
+  const v = Number(sel.value);
+  try { await api('/api/chat/disappearing', { method: 'POST', body: JSON.stringify({ ttl_seconds: v }) }); } catch (e) {}
+  refreshTeamChat();
+}
+// Admin panic wipe: delete every message in the team chat for this panel.
+async function clearAllChat() {
+  if (!confirm('Permanently delete every message in this team chat? This cannot be undone.')) return;
+  try { await api('/api/chat/all', { method: 'DELETE' }); } catch (e) {}
+  refreshTeamChat();
 }
 function scrollChatToBottom() {
   const box = document.getElementById('chatMessages');
