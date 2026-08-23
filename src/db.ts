@@ -446,6 +446,9 @@ export async function ensureDb() {
     // Per-tenant referral code: shareable by the admin, stamped onto any license
     // key redeemed with it, so a panel can see how many signups it brought in.
     `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS referral_code TEXT`,
+    // Tenant-wide disappearing-messages default: every new team-chat message gets
+    // this TTL unless the sender overrides it. 0 = off (messages are permanent).
+    `ALTER TABLE tenants ADD COLUMN IF NOT EXISTS chat_ttl_seconds INTEGER NOT NULL DEFAULT 0`,
     `ALTER TABLE inbound_calls ADD COLUMN IF NOT EXISTS provider TEXT NOT NULL DEFAULT 'twilio'`,
     `ALTER TABLE inbound_calls ADD COLUMN IF NOT EXISTS tenant_id INTEGER REFERENCES tenants(id)`,
     // lead_categories and clock_sessions were platform-global: every tenant read,
