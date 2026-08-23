@@ -105,7 +105,6 @@ async function renderAdminDashboard(el) {
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
         <button class="btn \${center.open ? 'btn-danger' : 'btn-gold'}" onclick="toggleCenterStatus(\${center.open})">\${center.open ? 'Close for the Day' : 'Start the Day'}</button>
-        <button class="btn btn-ghost" id="maintenanceBtn" onclick="toggleMaintenance()" style="color:var(--gold-bright);border-color:rgba(245,158,11,.3);">🔧 Updating…</button>
       </div>
     </div>
     <div class="panel p fade-up" style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;">
@@ -151,26 +150,7 @@ function filterExhaustedLeads() {
     if (typeof toast === 'function') toast('Showing leads that hit the 3-attempt cap — reassign or vault them');
   }, 600);
 }
-let _maintenanceActive = false;
-async function toggleMaintenance() {
-  if (_maintenanceActive) {
-    // Turn it off
-    await api('/api/updates/maintenance-off', { method: 'POST' });
-    _maintenanceActive = false;
-    const btn = document.getElementById('maintenanceBtn');
-    if (btn) { btn.textContent = '🔧 Updating…'; btn.style.color = 'var(--gold-bright)'; btn.style.borderColor = 'rgba(245,158,11,.3)'; }
-    if (typeof toast === 'function') toast('Maintenance banner cleared for all callers');
-  } else {
-    // Turn it on — let admin customise the message
-    const msg = prompt('Message to show callers while updating:', 'The panel is currently being updated. Hang tight — it will be back in a moment.');
-    if (msg === null) return; // cancelled
-    await api('/api/updates/maintenance-on', { method: 'POST', body: JSON.stringify({ message: msg || undefined }) });
-    _maintenanceActive = true;
-    const btn = document.getElementById('maintenanceBtn');
-    if (btn) { btn.textContent = '✓ Clear Update Banner'; btn.style.color = 'var(--success)'; btn.style.borderColor = 'rgba(34,197,94,.3)'; }
-    if (typeof toast === 'function') toast('Maintenance banner shown to all callers');
-  }
-}
+// Panel updates are pushed globally from the master panel now — no per-panel control here.
 async function toggleRecycle(cur) {
   await api('/api/admin/recycle-attempted', { method: 'POST', body: JSON.stringify({ enabled: !cur }) });
   renderAdminTab('dashboard');
@@ -235,7 +215,7 @@ async function renderAdminLeads(el) {
   el.innerHTML = \`
     <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
       <button class="btn btn-ghost btn-sm" onclick="renderAdminLeads(document.getElementById('adminContent'))">All Leads</button>
-      <button class="btn btn-ghost btn-sm" onclick="renderAdminCallbacks()">📅 Callbacks</button>
+      <button class="btn btn-ghost btn-sm" onclick="renderAdminCallbacks()">\${ICONS_SVG.calendar} Callbacks</button>
       <button class="btn btn-ghost btn-sm" onclick="renderStaleLeads()">⏳ Stale</button>
     </div>
     <div class="row-flex" style="margin-bottom:14px;gap:10px;">
@@ -255,7 +235,7 @@ async function renderAdminLeads(el) {
       <button class="btn btn-ghost btn-sm" onclick="bulkVault()">Vault</button>
       <button class="btn btn-ghost btn-sm" onclick="bulkReset()">Reset to uncalled</button>
       <button class="btn btn-danger btn-sm" onclick="bulkDelete()">Delete</button>
-      <button class="btn btn-ghost btn-sm" onclick="clearBulk()">✕</button>
+      <button class="btn btn-ghost btn-sm" onclick="clearBulk()" aria-label="Clear selection">\${ICONS_SVG.x}</button>
     </div>
     <div class="panel p fade-up"><div class="table-scroll"><table><thead><tr>
       <th style="width:28px;"><input type="checkbox" class="cp-check" id="selectAllLeads" onchange="toggleSelectAll(this)" /></th>
