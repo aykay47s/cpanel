@@ -1189,7 +1189,9 @@ async function renderAdminBranding(el) {
         <div style="margin-left:auto;text-align:right;"><div style="font-size:22px;font-weight:800;line-height:1;">\${rf.count}</div><div style="font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;margin-top:3px;">Signups</div></div>
       </div>
     </div>\` : '';
+    const otherPanelsCard = (me.other_panels && me.other_panels.length) ? '<div class="panel p fade-up"><div class="section-title" style="margin-top:0;">Your other panels</div><p style="font-size:11.5px;color:var(--text-dim);margin-bottom:10px;line-height:1.5;">You run these call centers too \u2014 open one to sign in there.</p><div style="display:flex;flex-direction:column;gap:8px;">' + me.other_panels.map(function(pnl){ return '<a href="/' + esc(pnl.slug) + '" style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;border-radius:12px;background:rgba(255,255,255,.03);border:1px solid var(--border-2);color:var(--text);text-decoration:none;"><span style="font-weight:700;font-size:13.5px;">' + esc(pnl.name) + '</span><span style="font-size:11px;font-weight:600;color:var(--gold-bright);">Open &rarr;</span></a>'; }).join('') + '</div></div>' : '';
     el.innerHTML = \`
+    \${otherPanelsCard}
     \${renewCard}
     \${refCard}
     <div class="panel p fade-up">
