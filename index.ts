@@ -66,7 +66,12 @@ app.use('*', async (c, next) => {
   // Bootstrap: ensure at least one admin exists, seeded from ADMIN_PIN.
   const [existingAdmin] = await sql`SELECT id FROM users WHERE role = 'admin' LIMIT 1`;
   if (!existingAdmin) {
-    await sql`INSERT INTO users (name, pin, role) VALUES ('Admin', ${ADMIN_PIN}, 'admin') ON CONFLICT (pin) DO NOTHING`;
+    // Scope the bootstrap admin to the self-tenant, and use an untargeted
+    // ON CONFLICT: the old `ON CONFLICT (pin)` named the users_pin_key constraint,
+    // which was dropped when PINs became unique per-tenant (tenant_id, pin) \u2014 so
+    // on a fresh deployment this INSERT threw and no admin ever got seeded.
+    const [selfT] = await sql`SELECT id FROM tenants WHERE is_self = true LIMIT 1`;
+    await sql`INSERT INTO users (name, pin, role, tenant_id) VALUES ('Admin', ${ADMIN_PIN}, 'admin', ${selfT?.id ?? null}) ON CONFLICT DO NOTHING`;
   }
   await next();
 });
