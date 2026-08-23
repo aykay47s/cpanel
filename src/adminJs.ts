@@ -227,18 +227,7 @@ async function renderAdminLeads(el) {
       <select id="leadStatusFilter" onchange="filterLeadsByStatus()"><option value="">All statuses</option>\${LEAD_STATUSES.map(s => '<option value="' + s + '">' + titleCase(s) + '</option>').join('')}</select>
       <select id="leadOutcomeFilter" onchange="filterLeadsByOutcome()"><option value="">All outcomes</option>\${OUTCOMES.map(s => '<option value="' + s + '">' + titleCase(s) + '</option>').join('')}</select>
     </div>
-    <!-- Bulk action bar — hidden until at least one lead is checked -->
-    <div id="bulkBar" style="display:none;margin-bottom:10px;padding:10px 14px;border-radius:12px;background:rgba(124,92,255,.1);border:1px solid rgba(124,92,255,.3);display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-      <span id="bulkCount" style="font-size:13px;font-weight:600;flex:1;"></span>
-      <select id="bulkCallerSel" style="max-width:160px;"><option value="">Assign to caller…</option>\${callerListCache.map(c => '<option value="' + c.id + '">' + esc(c.name) + '</option>').join('')}</select>
-      <button class="btn btn-ghost btn-sm" onclick="bulkAssign()">Assign</button>
-      <button class="btn btn-ghost btn-sm" onclick="bulkVault()">Vault</button>
-      <button class="btn btn-ghost btn-sm" onclick="bulkReset()">Reset to uncalled</button>
-      <button class="btn btn-danger btn-sm" onclick="bulkDelete()">Delete</button>
-      <button class="btn btn-ghost btn-sm" onclick="clearBulk()" aria-label="Clear selection">\${ICONS_SVG.x}</button>
-    </div>
     <div class="panel p fade-up"><div class="table-scroll"><table><thead><tr>
-      <th style="width:28px;"><input type="checkbox" class="cp-check" id="selectAllLeads" onchange="toggleSelectAll(this)" /></th>
       <th>Lead</th><th>Category</th><th>Phone</th><th>Status</th><th>Caller</th><th>Finisher</th><th>Uploaded</th><th>Send To</th><th></th></tr></thead>
     <tbody id="leadsTbody">\${rows.map(leadRowHtml).join('')}</tbody></table></div></div>\`;
   animateCountUps(el);
@@ -343,7 +332,6 @@ function leadRowHtml(l) {
     ? \`<select onclick="event.stopPropagation()" onchange="event.stopPropagation(); sendLeadToCaller(\${l.id}, this.value)"><option value="">Send to…</option>\${callerListCache.map(c => '<option value="' + c.id + '">' + esc(c.name) + '</option>').join('')}</select>\`
     : '<span style="color:var(--text-faint);">—</span>';
   return \`<tr class="clickable" data-lead-row="\${l.id}">
-    <td onclick="event.stopPropagation()"><input type="checkbox" class="cp-check lead-check" data-id="\${l.id}" onchange="toggleLeadCheck(this)" /></td>
     <td onclick="openLeadDetail(\${l.id})">\${esc(fullName(l))} \${l.dedup_status === 'flagged' ? '<span class="dup-warn">possible dup</span>' : ''}\${l.note_count > 0 ? ' <span class="badge" style="background:rgba(79,140,255,.15);color:var(--gold-bright);" title="' + l.note_count + ' caller note(s)">' + l.note_count + ' note' + (l.note_count === 1 ? '' : 's') + '</span>' : ''}</td>
     <td onclick="openLeadDetail(\${l.id})">\${categoryBadge(l.lead_type)}</td>
     <td class="mono" onclick="openLeadDetail(\${l.id})">\${l.phone}</td>
