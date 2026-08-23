@@ -2181,6 +2181,24 @@ tr.clickable:active{background:rgba(255,255,255,.05);}
   .side-sec{display:none;}
   .admin-content{padding:16px 12px 60px;}
 }
+
+/* ---- responsive fixes: admin usable on phones, caller usable on desktop ---- */
+@media (max-width:640px){
+  /* Admin was desktop-first: multi-column inline grids stayed wide on a phone and
+     got clipped by the body's overflow-x:hidden (the "only half the screen" bug).
+     Collapse any multi-column grid in the admin area to a single column. */
+  .admin-content [style*="grid-template-columns"]{grid-template-columns:1fr !important;}
+  .admin-content .stat-grid{grid-template-columns:repeat(2,minmax(0,1fr)) !important;}
+  .admin-content img{max-width:100%;height:auto;}
+  .admin-content .row-flex .field{min-width:0;}
+}
+@media (min-width:900px){
+  /* Caller/finisher shell was a fixed 600px column — a phone view stranded in the
+     middle of a desktop screen. Give it real width on PC and align the bottom nav
+     to the same column so the tab items don't spread across the whole monitor. */
+  .staff-body{max-width:920px;padding-left:22px;padding-right:22px;}
+  .bottom-nav{padding-left:max(16px,calc((100vw - 920px) / 2));padding-right:max(16px,calc((100vw - 920px) / 2));}
+}
 </style>
 </head>
 <body>
