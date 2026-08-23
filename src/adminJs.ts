@@ -937,11 +937,17 @@ let bankPickerTab = 'all';
 let bankPickerQuery = '';
 let cryptoPickerTab = 'exchanges';
 let cryptoPickerQuery = '';
+let catType = 'banks';
 async function renderAdminCategories(el) {
   const res = await api('/api/lead-categories');
   const cats = (await res.json()).data;
   window._catNames = new Set(cats.map(c => c.name.toLowerCase()));
   el.innerHTML = \`
+    <div class="seg-tabs" style="margin-bottom:14px;gap:8px;">
+      <button class="seg-tab \${catType==='banks'?'on':''}" onclick="setCatType('banks')" style="flex:1;justify-content:center;padding:12px;font-size:13px;font-weight:700;">Banks</button>
+      <button class="seg-tab \${catType==='crypto'?'on':''}" onclick="setCatType('crypto')" style="flex:1;justify-content:center;padding:12px;font-size:13px;font-weight:700;">Crypto</button>
+    </div>
+    <div id="bankTypePanel" class="\${catType==='banks'?'':'hidden'}">
     <div class="panel p fade-up">
       <div class="section-title" style="margin-top:0;">Add a bank category</div>
       <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:14px;line-height:1.5;">Pick a region and tap a bank to add it — the real logo comes with it and shows on every lead. Not listed? Use Custom to add anything by name.</p>
@@ -957,6 +963,8 @@ async function renderAdminCategories(el) {
       </div>
       <div id="bankPickerBody"></div>
     </div>
+    </div>
+    <div id="cryptoTypePanel" class="\${catType==='crypto'?'':'hidden'}">
     <div class="panel p fade-up" style="border-color:rgba(247,147,26,.32);">
       <div class="section-title" style="margin-top:0;display:flex;align-items:center;gap:8px;"><span style="width:8px;height:8px;border-radius:50%;background:#f7931a;box-shadow:0 0 9px #f7931a;flex-shrink:0;"></span>Add a crypto category</div>
       <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:14px;line-height:1.5;">Crypto is its own thing, kept separate from banking. Pick an exchange or a wallet — its logo comes with it.</p>
@@ -965,6 +973,7 @@ async function renderAdminCategories(el) {
         <button class="seg-tab \${cryptoPickerTab==='wallets'?'on':''}" onclick="setCryptoTab('wallets')">Wallets</button>
       </div>
       <div id="cryptoPickerBody"></div>
+    </div>
     </div>
     <div class="panel p fade-up">
       <div class="section-title" style="margin-top:0;">Your Categories (\${cats.length})</div>
@@ -985,6 +994,7 @@ async function renderAdminCategories(el) {
 }
 function setBankTab(t) { bankPickerTab = t; bankPickerQuery = ''; renderAdminTab('categories'); }
 function setCryptoTab(t) { cryptoPickerTab = t; cryptoPickerQuery = ''; renderCryptoPicker(); }
+function setCatType(t) { catType = t; renderAdminTab('categories'); }
 function renderCryptoPicker() {
   const wrap = document.getElementById('cryptoPickerBody');
   if (!wrap) return;
