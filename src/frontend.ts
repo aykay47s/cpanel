@@ -1413,11 +1413,12 @@ function renderDMMessages(messages) {
   const myPub = nu.encodeBase64(_dmKeyPair.publicKey);
   box.innerHTML = messages.map(function(m){
     var own = m.sender_id === me.id;
-    // Decrypt the copy meant for me. If I'm the sender, open my own copy with the
-    // recipient's public key; if recipient, open the recipient copy with sender's.
+    // Decrypt the copy meant for me. If I'm the sender, open my own self-copy with
+    // MY OWN public key (it was sealed to me, not to them); if I'm the recipient,
+    // open the recipient copy with the sender's key.
     var plain;
     if (own) {
-      plain = dmOpen(m.ciphertext_for_sender, m.nonce_for_sender, _dmActive.dm_public_key);
+      plain = dmOpen(m.ciphertext_for_sender, m.nonce_for_sender, myPub);
     } else {
       plain = dmOpen(m.ciphertext_for_recipient, m.nonce_for_recipient, _dmActive.dm_public_key);
     }
@@ -2105,7 +2106,7 @@ tr.clickable:active{background:rgba(255,255,255,.05);}
 /* Telegram-style team chat. Full-height column: fixed header, internally
    scrolling message list, fixed composer at the bottom — the page itself never
    scrolls, which was the mobile bug. Height is dvh-based minus the chrome. */
-.tg-chat{display:flex;flex-direction:column;background:linear-gradient(180deg,rgba(20,19,30,.6),rgba(14,13,20,.7));border:1px solid var(--border-2);border-radius:var(--r-xl);overflow:hidden;box-shadow:0 2px 4px rgba(0,0,0,.3), 0 16px 40px rgba(0,0,0,.4);}
+.tg-chat{display:flex;flex-direction:column;max-height:calc(100dvh - 150px);background:linear-gradient(180deg,rgba(20,19,30,.6),rgba(14,13,20,.7));border:1px solid var(--border-2);border-radius:var(--r-xl);overflow:hidden;box-shadow:0 2px 4px rgba(0,0,0,.3), 0 16px 40px rgba(0,0,0,.4);}
 .tg-chat-header{flex-shrink:0;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 16px;background:linear-gradient(180deg,rgba(147,112,255,.08),rgba(255,255,255,.02));border-bottom:1px solid rgba(255,255,255,.08);}
 .tg-chat-icon{width:36px;height:36px;border-radius:11px;background:linear-gradient(135deg,var(--violet-bright),var(--gold));display:flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0;}
 .tg-chat-icon .ic{width:19px;height:19px;}
