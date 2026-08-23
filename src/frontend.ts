@@ -1669,6 +1669,32 @@ a{color:inherit;text-decoration:none;}
 /* Gentle auto-stagger for the caller screen's top-level panels — each screen's
    cards cascade in on load without needing the .stagger class added everywhere. */
 .staff-body > .panel, .staff-body > .fade-up{animation:fadeUp .4s var(--ease-out) both;}
+
+/* ---- admin panel motion + polish (ui-ux-pro-max principles: transform/opacity
+   only, spring easing, staggered + meaningful motion, reduced-motion honoured) ---- */
+.admin-content > .panel, .admin-content > .fade-up{animation:fadeUp .42s var(--ease-out) both;}
+.admin-content > *:nth-child(2){animation-delay:.05s;}
+.admin-content > *:nth-child(3){animation-delay:.1s;}
+.admin-content > *:nth-child(4){animation-delay:.15s;}
+.admin-content > *:nth-child(n+5){animation-delay:.19s;}
+.panel{transition:transform .22s var(--ease-smooth), border-color .22s, box-shadow .22s;}
+.admin-content > .panel:hover{transform:translateY(-2px);border-color:rgba(167,139,250,.24);}
+@keyframes statPop{from{opacity:0;transform:translateY(9px) scale(.96);}to{opacity:1;transform:none;}}
+.stat-box{transition:transform .2s var(--ease-spring), border-color .2s, box-shadow .2s;}
+.stat-box:hover{transform:translateY(-3px);border-color:rgba(167,139,250,.3);box-shadow:0 10px 26px rgba(0,0,0,.32);}
+.stat-grid.stagger > .stat-box{animation:statPop .5s var(--ease-spring) both;}
+.section-title{display:flex;align-items:center;gap:9px;}
+.section-title::before{content:'';width:3px;height:1.02em;border-radius:2px;background:linear-gradient(180deg,var(--violet-bright),var(--gold));flex-shrink:0;box-shadow:0 0 9px var(--violet-glow);}
+.btn{transition:transform .12s var(--ease-out), filter .15s, box-shadow .2s, background .2s;}
+.btn:active{transform:translateY(1px) scale(.985);}
+.bank-card{transition:transform .16s var(--ease-spring), border-color .16s, background .16s;}
+.bank-card:hover{transform:translateY(-2px) scale(1.02);border-color:var(--gold-glow);}
+.admin-content tbody tr{transition:background .15s;}
+.admin-content tbody tr:hover{background:rgba(167,139,250,.05);}
+@media (prefers-reduced-motion:reduce){
+  .admin-content > .panel,.admin-content > .fade-up,.stat-grid.stagger > .stat-box{animation:none!important;}
+  .admin-content > .panel:hover,.stat-box:hover,.bank-card:hover,.btn:active{transform:none!important;}
+}
 .staff-body > *:nth-child(1){animation-delay:.02s;} .staff-body > *:nth-child(2){animation-delay:.06s;}
 .staff-body > *:nth-child(3){animation-delay:.10s;} .staff-body > *:nth-child(4){animation-delay:.14s;}
 .staff-body > *:nth-child(5){animation-delay:.18s;} .staff-body > *:nth-child(n+6){animation-delay:.2s;}
