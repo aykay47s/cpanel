@@ -140,9 +140,18 @@ tenancy.post('/api/redeem', async (c) => {
       await sql`UPDATE license_keys SET referral_code = ${code} WHERE id = ${claimedKey.id}`;
       referralCredited = true;
     } else {
-      // Not a registered affiliate — may be a tenant's own referral code. Stamp it
-      // for tracking so the referring panel can count the signup. No commission.
+      // Not a registered affiliate — treat it as a tenant's own referral code: stamp
+      // it for tracking, and reward the referring panel with bonus days on their
+      // access (skip lifetime and terminated panels; never touches billing).
       await sql`UPDATE license_keys SET referral_code = ${code} WHERE id = ${claimedKey.id}`;
+      const REFERRAL_REWARD_DAYS = 7;
+      const [refTenant] = await sql`SELECT id, expires_at, status FROM tenants WHERE lower(referral_code) = lower(${code}) AND is_self = false AND id <> ${tenant.id} LIMIT 1`;
+      if (refTenant && refTenant.expires_at && refTenant.status !== 'terminated') {
+        const rbase = new Date(refTenant.expires_at) > new Date() ? new Date(refTenant.expires_at) : new Date();
+        const rewardExpiry = new Date(rbase.getTime() + REFERRAL_REWARD_DAYS * 86400000);
+        await sql`UPDATE tenants SET expires_at = ${rewardExpiry} WHERE id = ${refTenant.id}`;
+        referralCredited = true;
+      }
     }
   }
 
