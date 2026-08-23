@@ -59,9 +59,13 @@ async function renderAdminTab(tab) {
 }
 
 async function renderAdminDashboard(el) {
-  const [res, statusRes] = await Promise.all([api('/api/admin/dashboard'), api('/api/center-status')]);
+  const [res, statusRes, asRes] = await Promise.all([api('/api/admin/dashboard'), api('/api/center-status'), api('/api/admin/access-status')]);
   const d = (await res.json()).data;
   const center = (await statusRes.json()).data;
+  // Usage moved here from the Branding tab \u2014 headcount + tenure belong on the dashboard.
+  const das = (await asRes.json()).data;
+  const uu = das && das.usage;
+  const daysLeft = das && das.expires_at ? Math.max(0, Math.ceil((new Date(das.expires_at).getTime() - Date.now()) / 86400000)) : null;
   const _t = d.total || 0, _work = Math.max(0, _t - (d.uncalled || 0)), _s = d.successful || 0, _c = d.completed || 0;
   const _pipe = (d.awaiting_finishing || 0) + (d.assigned_finishing || 0);
   const _pct = (n, dn) => dn > 0 ? Math.round((n / dn) * 100) : 0;
@@ -78,6 +82,17 @@ async function renderAdminDashboard(el) {
     + _bar('In finishing', _pipe, _s, 'rgba(245,158,11,.75)')
     + _bar('Completed', _c, _s, 'rgba(34,197,94,.95)')
     + '</div>';
+  const usageCard = uu ? '<div class="panel p fade-up"><div class="section-title" style="margin-top:0;">Panel Usage</div>'
+    + '<div class="stat-grid stagger">'
+    + '<div class="stat-box panel accent"><div class="num" data-count="' + uu.callers + '">0</div><div class="lbl">Callers</div></div>'
+    + '<div class="stat-box panel"><div class="num" data-count="' + uu.finishers + '">0</div><div class="lbl">Finishers</div></div>'
+    + '<div class="stat-box panel"><div class="num" data-count="' + uu.leads_total + '">0</div><div class="lbl">Leads \u00b7 all time</div></div>'
+    + '<div class="stat-box panel"><div class="num" data-count="' + uu.leads_month + '">0</div><div class="lbl">Leads this month</div></div>'
+    + '<div class="stat-box panel"><div class="num" data-count="' + uu.calls_made + '">0</div><div class="lbl">Calls made</div></div>'
+    + '<div class="stat-box panel"><div class="num" data-count="' + uu.successful + '">0</div><div class="lbl">Successful</div></div>'
+    + '<div class="stat-box panel"><div class="num" data-count="' + uu.completed + '">0</div><div class="lbl">Completed</div></div>'
+    + (daysLeft !== null ? '<div class="stat-box panel" style="' + (daysLeft <= 7 ? 'border-color:var(--gold-glow);' : '') + '"><div class="num" style="' + (daysLeft <= 7 ? 'color:var(--gold-bright);' : '') + '" data-count="' + daysLeft + '">0</div><div class="lbl">Days left</div></div>' : '')
+    + '</div></div>' : '';
   el.innerHTML = \`
     <div id="callerIdPopZone"></div>
     <div class="panel p fade-up" style="display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;\${center.open ? '' : 'border-color:var(--gold-glow);'}">
@@ -112,6 +127,7 @@ async function renderAdminDashboard(el) {
       <div class="stat-box panel" style="\${d.requires_review > 0 ? 'border-color:var(--gold-glow);' : ''}"><div class="num" data-count="\${d.requires_review}">0</div><div class="lbl">Needs Review</div></div>
     </div>
     \${perfCard}
+    \${usageCard}
     <div class="stat-grid" style="grid-template-columns:repeat(2,1fr);">
       <div class="stat-box panel"><div class="num" data-count="\${d.callers_online}">0</div><div class="lbl">Callers Online</div></div>
       <div class="stat-box panel"><div class="num" data-count="\${d.finishers_online}">0</div><div class="lbl">Finishers Online</div></div>
@@ -1175,7 +1191,6 @@ async function renderAdminBranding(el) {
     </div>\` : '';
     el.innerHTML = \`
     \${renewCard}
-    \${usageCard}
     \${refCard}
     <div class="panel p fade-up">
       <div class="section-title" style="margin-top:0;">Panel Branding</div>
