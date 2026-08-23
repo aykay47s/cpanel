@@ -935,21 +935,19 @@ async function saveTemplate() {
 
 let bankPickerTab = 'all';
 let bankPickerQuery = '';
+let cryptoPickerTab = 'exchanges';
+let cryptoPickerQuery = '';
 async function renderAdminCategories(el) {
   const res = await api('/api/lead-categories');
   const cats = (await res.json()).data;
   window._catNames = new Set(cats.map(c => c.name.toLowerCase()));
   el.innerHTML = \`
     <div class="panel p fade-up">
-      <div class="section-title" style="margin-top:0;">Add a Category</div>
-      <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:14px;line-height:1.5;">Pick a group and tap a bank to add it — the real logo comes with it and shows on every lead. Not listed? Use Custom to add anything by name.</p>
+      <div class="section-title" style="margin-top:0;">Add a bank category</div>
+      <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:14px;line-height:1.5;">Pick a region and tap a bank to add it — the real logo comes with it and shows on every lead. Not listed? Use Custom to add anything by name.</p>
       <div class="seg-tabs" style="margin-bottom:12px;flex-wrap:wrap;gap:6px;">
         <button class="seg-tab \${bankPickerTab==='all'?'on':''}" onclick="setBankTab('all')">All</button>
-        <button class="seg-tab \${bankPickerTab==='crypto'?'on':''}" onclick="setBankTab('crypto')">Crypto</button>
-        <button class="seg-tab \${bankPickerTab==='uk_high_street'?'on':''}" onclick="setBankTab('uk_high_street')">UK Mainstream</button>
-        <button class="seg-tab \${bankPickerTab==='uk_digital'?'on':''}" onclick="setBankTab('uk_digital')">UK Digital</button>
-        <button class="seg-tab \${bankPickerTab==='uk_building_societies'?'on':''}" onclick="setBankTab('uk_building_societies')">UK Building Societies</button>
-        <button class="seg-tab \${bankPickerTab==='uk_lenders'?'on':''}" onclick="setBankTab('uk_lenders')">UK Specialist</button>
+        <button class="seg-tab \${bankPickerTab==='uk'?'on':''}" onclick="setBankTab('uk')">UK</button>
         <button class="seg-tab \${bankPickerTab==='europe'?'on':''}" onclick="setBankTab('europe')">Europe</button>
         <button class="seg-tab \${bankPickerTab==='north_america'?'on':''}" onclick="setBankTab('north_america')">North America</button>
         <button class="seg-tab \${bankPickerTab==='asia_pacific'?'on':''}" onclick="setBankTab('asia_pacific')">Asia-Pacific</button>
@@ -958,6 +956,15 @@ async function renderAdminCategories(el) {
         <button class="seg-tab \${bankPickerTab==='custom'?'on':''}" onclick="setBankTab('custom')">Custom</button>
       </div>
       <div id="bankPickerBody"></div>
+    </div>
+    <div class="panel p fade-up" style="border-color:rgba(247,147,26,.32);">
+      <div class="section-title" style="margin-top:0;display:flex;align-items:center;gap:8px;"><span style="width:8px;height:8px;border-radius:50%;background:#f7931a;box-shadow:0 0 9px #f7931a;flex-shrink:0;"></span>Add a crypto category</div>
+      <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:14px;line-height:1.5;">Crypto is its own thing, kept separate from banking. Pick an exchange or a wallet — its logo comes with it.</p>
+      <div class="seg-tabs" style="margin-bottom:12px;gap:6px;">
+        <button class="seg-tab \${cryptoPickerTab==='exchanges'?'on':''}" onclick="setCryptoTab('exchanges')">Exchanges</button>
+        <button class="seg-tab \${cryptoPickerTab==='wallets'?'on':''}" onclick="setCryptoTab('wallets')">Wallets</button>
+      </div>
+      <div id="cryptoPickerBody"></div>
     </div>
     <div class="panel p fade-up">
       <div class="section-title" style="margin-top:0;">Your Categories (\${cats.length})</div>
@@ -974,8 +981,28 @@ async function renderAdminCategories(el) {
         }).join('') : '<div style="color:var(--text-dim);font-size:13px;padding:6px 2px;">No categories yet — add your first one above.</div>'}
     </div>\`;
   renderBankPicker();
+  renderCryptoPicker();
 }
 function setBankTab(t) { bankPickerTab = t; bankPickerQuery = ''; renderAdminTab('categories'); }
+function setCryptoTab(t) { cryptoPickerTab = t; cryptoPickerQuery = ''; renderCryptoPicker(); }
+function renderCryptoPicker() {
+  const wrap = document.getElementById('cryptoPickerBody');
+  if (!wrap) return;
+  const group = cryptoPickerTab === 'wallets' ? 'crypto_wallets' : 'crypto_ex';
+  const list = BANK_DIR[group] || [];
+  const q = cryptoPickerQuery.toLowerCase();
+  const filtered = q ? list.filter(b => b[0].toLowerCase().includes(q)) : list;
+  let cards = '';
+  for (const b of filtered) {
+    const added = window._catNames && window._catNames.has(b[0].toLowerCase());
+    cards += '<div class="bank-card' + (added ? ' added' : '') + '"'
+      + (added ? '' : ' data-bank-name="' + esc(b[0]) + '" data-bank-domain="' + esc(b[1]) + '"')
+      + '><img src="' + bankLogoUrl(b[1]) + '" onerror="this.remove()" /><span class="bn">' + esc(b[0]) + '</span></div>';
+  }
+  wrap.innerHTML = '<input placeholder="Search ' + filtered.length + ' — tap to add…" value="' + esc(cryptoPickerQuery) + '" oninput="cryptoPickerQuery=this.value;renderCryptoPicker()" style="margin-bottom:6px;" />'
+    + '<div class="bank-grid">' + cards + '</div>'
+    + (filtered.length === 0 ? '<div style="color:var(--text-dim);font-size:12.5px;padding:8px 2px;">No match.</div>' : '');
+}
 function renderBankPicker() {
   const wrap = document.getElementById('bankPickerBody');
   if (!wrap) return;
@@ -996,16 +1023,18 @@ function renderBankPicker() {
   if (bankPickerTab === 'all') {
     const seen = {}; list = [];
     for (const g of Object.keys(BANK_DIR)) {
+      if (g === 'crypto_ex' || g === 'crypto_wallets') continue;
       for (const b of (BANK_DIR[g] || [])) {
         const key = b[0].toLowerCase();
         if (!seen[key]) { seen[key] = 1; list.push(b); }
       }
     }
     list.sort((a, b) => a[0].localeCompare(b[0]));
-  } else if (bankPickerTab === 'crypto' || bankPickerTab === 'north_america') {
-    // A couple of tabs merge several directory groups into one clean list:
-    // Crypto = every exchange + wallet; North America = US + Canada. Deduped by name.
-    const groups = bankPickerTab === 'crypto' ? ['crypto_ex', 'crypto_wallets'] : ['us', 'canada'];
+  } else if (bankPickerTab === 'uk' || bankPickerTab === 'north_america') {
+    // A couple of tabs merge several directory groups into one clean list so the
+    // admin isn't hunting across sub-tabs: UK = mainstream + digital + building
+    // societies + specialist; North America = US + Canada. Deduped by name.
+    const groups = bankPickerTab === 'uk' ? ['uk_high_street', 'uk_digital', 'uk_building_societies', 'uk_lenders'] : ['us', 'canada'];
     const seen = {}; list = [];
     for (const g of groups) {
       for (const b of (BANK_DIR[g] || [])) { const k = b[0].toLowerCase(); if (!seen[k]) { seen[k] = 1; list.push(b); } }
