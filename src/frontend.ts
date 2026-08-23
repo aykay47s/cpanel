@@ -103,16 +103,45 @@ async function api(url, opts = {}) {
 // ---------- Login ----------
 // Guard the attach: if the element is missing or anything upstream failed, this
 // must not throw (a throw here would leave the keypad dead — taps not registering).
+// One code path for taps and physical keys, so both behave identically.
+function pressKey(k) {
+  if (k === 'clear') pinBuffer = '';
+  else if (k === 'back') pinBuffer = pinBuffer.slice(0, -1);
+  else if (pinBuffer.length < 4) pinBuffer += k;
+  renderPinDots();
+  if (pinBuffer.length === 4) attemptLogin();
+}
+// Light up the on-screen key so typing on a desktop still feels physical.
+function flashKey(k) {
+  const btn = document.querySelector('.key[data-k="' + k + '"]');
+  if (!btn) return;
+  btn.classList.add('pressed');
+  setTimeout(() => btn.classList.remove('pressed'), 130);
+}
 (function attachKeypad() {
   const kp = document.getElementById('keypad');
   if (!kp) return;
   kp.addEventListener('click', (e) => {
     const btn = e.target.closest('.key'); if (!btn) return;
-    const k = btn.dataset.k;
-    if (k === 'clear') pinBuffer = ''; else if (k === 'back') pinBuffer = pinBuffer.slice(0, -1);
-    else if (pinBuffer.length < 4) pinBuffer += k;
-    renderPinDots();
-    if (pinBuffer.length === 4) attemptLogin();
+    pressKey(btn.dataset.k);
+  });
+  // Desktop: just type the PIN. Digits fill it, Backspace deletes, Esc clears.
+  // Only while the login screen is actually showing, and never while the person
+  // is typing into a real input (the join/find-panel fields live here too).
+  document.addEventListener('keydown', (e) => {
+    const login = document.getElementById('loginScreen');
+    if (!login || login.classList.contains('hidden')) return;
+    if (e.metaKey || e.ctrlKey || e.altKey) return;
+    const t = e.target;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+    let k = null;
+    if (/^[0-9]$/.test(e.key)) k = e.key;
+    else if (e.key === 'Backspace') k = 'back';
+    else if (e.key === 'Escape' || e.key === 'Delete') k = 'clear';
+    else return;
+    e.preventDefault();
+    flashKey(k);
+    pressKey(k);
   });
 })();
 function renderPinDots() { document.querySelectorAll('.pin-dot').forEach((d, i) => { d.classList.remove('error'); d.classList.toggle('filled', i < pinBuffer.length); }); }
@@ -1659,23 +1688,23 @@ body{
   content:''; position:absolute; inset:-20%; z-index:0; pointer-events:none; opacity:.5;
   background:radial-gradient(circle at 30% 20%, rgba(147,112,255,.10), transparent 42%),
              radial-gradient(circle at 78% 68%, rgba(79,140,255,.08), transparent 45%);
-  animation:aurora 26s ease-in-out infinite alternate;
+  will-change:transform; animation:aurora 44s ease-in-out infinite alternate;
 }
 .app-shell::after{
-  content:''; position:absolute; inset:-25%; z-index:0; pointer-events:none; opacity:.42;
-  background:radial-gradient(circle at 68% 22%, rgba(245,158,11,.07), transparent 44%),
+  content:''; position:absolute; inset:-25%; z-index:0; pointer-events:none; opacity:.4;
+  background:radial-gradient(circle at 68% 22%, rgba(79,140,255,.08), transparent 44%),
              radial-gradient(circle at 20% 78%, rgba(124,92,255,.09), transparent 46%);
-  animation:auroraB 34s ease-in-out infinite alternate;
+  will-change:transform; animation:auroraB 58s ease-in-out infinite alternate;
 }
+/* translate3d only: scaling a full-viewport gradient re-rasterises it every
+   frame, which is what made the shell feel heavy. Translation stays on the GPU. */
 @keyframes auroraB{
-  0%{transform:translate(0,0) scale(1.04);}
-  50%{transform:translate(-3%,3%) scale(1);}
-  100%{transform:translate(3%,-2%) scale(1.07);}
+  0%{transform:translate3d(0,0,0);}
+  100%{transform:translate3d(2.4%,-1.8%,0);}
 }
 @keyframes aurora{
-  0%{transform:translate(0,0) scale(1);}
-  50%{transform:translate(2%,-3%) scale(1.06);}
-  100%{transform:translate(-2%,2%) scale(1);}
+  0%{transform:translate3d(0,0,0);}
+  100%{transform:translate3d(-2.2%,1.8%,0);}
 }
 .app-shell > *{position:relative; z-index:1;}
 @media (max-width:640px){ .app-shell{margin:0;border-radius:0;min-height:100vh;min-height:100dvh;} }
@@ -1739,18 +1768,18 @@ a{color:inherit;text-decoration:none;}
 .stat-grid > .stat-box:nth-child(6){animation-delay:.29s;}
 .stat-grid > .stat-box:nth-child(7){animation-delay:.34s;}
 .stat-grid > .stat-box:nth-child(n+8){animation-delay:.38s;}
-.stat-box::after{content:'';position:absolute;top:-20%;bottom:-20%;left:0;width:38%;pointer-events:none;
-  background:linear-gradient(100deg,transparent,rgba(255,255,255,.06),transparent);
-  animation:cpSheen 7s ease-in-out infinite;animation-delay:1.4s;}
-.stat-box.accent::after{background:linear-gradient(100deg,transparent,rgba(245,158,11,.13),transparent);animation-duration:5.2s;}
+/* Only the accent tile glints — running a sheen layer on every tile in the grid
+   was a dozen composited animations at once for very little visual payoff. */
+.stat-box.accent::after{content:'';position:absolute;top:-20%;bottom:-20%;left:0;width:38%;pointer-events:none;
+  background:linear-gradient(100deg,transparent,rgba(122,171,255,.18),transparent);
+  will-change:transform;animation:cpSheen 6s ease-in-out infinite;animation-delay:1.2s;}
 .stat-box:hover{transform:translateY(-3px);border-color:rgba(167,139,250,.3);box-shadow:0 10px 26px rgba(0,0,0,.32);}
 .stat-box:active{transform:scale(.97);}
 
 /* --- Section headers: accent bar with a continuously flowing gradient --- */
 .section-title{display:flex;align-items:center;gap:9px;}
 .section-title::before{content:'';width:3px;height:1.02em;border-radius:2px;flex-shrink:0;
-  background:linear-gradient(180deg,var(--violet-bright),var(--gold),var(--violet-bright));
-  background-size:100% 260%;animation:cpFlow 5s ease-in-out infinite;
+  background:linear-gradient(180deg,var(--violet-bright),var(--gold));
   box-shadow:0 0 9px var(--violet-glow);}
 
 /* --- Buttons: tactile press + sheen sweeping the primary action --- */
@@ -1891,15 +1920,27 @@ label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spa
 .login-title{font-size:28px;color:var(--text);margin-bottom:6px;font-weight:800;letter-spacing:-.03em;font-family:'Bricolage Grotesque',sans-serif;}
 .login-sub{font-size:14px;margin-bottom:32px;color:var(--text-dim);}
 .pin-dots{display:flex;justify-content:center;gap:16px;margin-bottom:32px;}
-.pin-dot{width:13px;height:13px;border-radius:50%;border:1.5px solid var(--border-2);transition:transform .28s var(--ease-spring), background .2s ease, border-color .2s ease, box-shadow .2s ease;}
-.pin-dot.filled{background:var(--gold);border-color:var(--gold);transform:scale(1.2);box-shadow:0 0 12px var(--gold-glow);}
-.pin-dot.error{border-color:var(--danger);animation:shake .4s;}
+.pin-dot{position:relative;width:13px;height:13px;border-radius:50%;border:1.5px solid var(--border-2);background:rgba(255,255,255,.025);transition:transform .3s var(--ease-spring), background .22s ease, border-color .22s ease, box-shadow .22s ease;}
+.pin-dot.filled{background:linear-gradient(150deg,var(--violet-bright),var(--gold));border-color:transparent;transform:scale(1.32);
+  box-shadow:0 0 0 4px rgba(124,92,255,.12), 0 0 16px var(--gold-glow);}
+/* a single ping ring the moment a digit lands */
+.pin-dot.filled::after{content:'';position:absolute;inset:-7px;border-radius:50%;border:1.5px solid var(--gold);animation:pinPing .5s var(--ease-out) both;}
+@keyframes pinPing{0%{transform:scale(.55);opacity:.85;}100%{transform:scale(1.3);opacity:0;}}
+.pin-dot.error{border-color:var(--danger);background:rgba(239,68,68,.2);animation:shake .4s;}
 @keyframes shake{0%,100%{transform:translateX(0);}25%{transform:translateX(-6px);}75%{transform:translateX(6px);}}
 .keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
-.key{aspect-ratio:1;border-radius:20px;font-size:23px;font-weight:600;background:linear-gradient(160deg,rgba(255,255,255,.055),rgba(255,255,255,.02) 60%);border:1px solid var(--border-2);color:var(--text);font-family:'Geist Mono',monospace;position:relative;overflow:hidden;transition:transform .14s var(--ease-spring), background .14s ease, border-color .14s ease, box-shadow .18s ease;box-shadow:inset 0 1px 0 rgba(255,255,255,.08), 0 1px 2px rgba(0,0,0,.3), 0 4px 12px rgba(0,0,0,.22);}
-.key:hover{background:linear-gradient(160deg,rgba(255,255,255,.09),rgba(255,255,255,.03) 60%);border-color:rgba(255,255,255,.2);box-shadow:inset 0 1px 0 rgba(255,255,255,.1), 0 2px 4px rgba(0,0,0,.3), 0 8px 20px rgba(0,0,0,.3);transform:translateY(-1px);}
-.key:active{transform:scale(.9);background:linear-gradient(140deg,var(--violet-bright),var(--gold));color:#fff;border-color:transparent;box-shadow:0 4px 20px var(--gold-glow), inset 0 1px 0 rgba(255,255,255,.4);}
-.key.wide{font-size:12px;color:var(--text-dim);}
+.key{aspect-ratio:1;border-radius:20px;font-size:23px;font-weight:600;background:linear-gradient(160deg,rgba(255,255,255,.06),rgba(255,255,255,.02) 60%);border:1px solid var(--border-2);color:var(--text);font-family:'Geist Mono',monospace;position:relative;overflow:hidden;isolation:isolate;transition:transform .16s var(--ease-spring), background .16s ease, border-color .16s ease, box-shadow .2s ease, color .16s ease;box-shadow:inset 0 1px 0 rgba(255,255,255,.09), 0 1px 2px rgba(0,0,0,.3), 0 4px 14px rgba(0,0,0,.24);}
+/* Ripple blooms from the centre of the key on press. Negative z-index paints it
+   above the key's own background but underneath the digit, so nothing is hidden. */
+.key::before{content:'';position:absolute;inset:0;z-index:-1;border-radius:inherit;opacity:0;transform:scale(.45);
+  background:radial-gradient(circle at 50% 50%, rgba(122,171,255,.6), transparent 64%);
+  transition:opacity .32s ease, transform .32s var(--ease-out);}
+.key:hover{background:linear-gradient(160deg,rgba(255,255,255,.1),rgba(255,255,255,.035) 60%);border-color:rgba(122,171,255,.34);transform:translateY(-2px);box-shadow:inset 0 1px 0 rgba(255,255,255,.12), 0 3px 6px rgba(0,0,0,.3), 0 12px 26px rgba(0,0,0,.32);}
+/* .pressed mirrors :active so physical-keyboard input feels identical to a tap */
+.key:active,.key.pressed{transform:scale(.91);background:linear-gradient(140deg,var(--violet-bright),var(--gold));color:#fff;border-color:transparent;box-shadow:0 6px 26px var(--gold-glow), inset 0 1px 0 rgba(255,255,255,.4);}
+.key:active::before,.key.pressed::before{opacity:1;transform:scale(1);}
+.key.wide{font-size:12px;color:var(--text-dim);letter-spacing:.06em;text-transform:uppercase;}
+.key.wide:active,.key.wide.pressed{color:#fff;}
 .login-error{color:var(--danger);font-size:12.5px;margin-top:12px;min-height:16px;}
 
 /* ---------- Shell layout ---------- */
