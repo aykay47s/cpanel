@@ -9,7 +9,7 @@ function switchAdminTab(tab) {
 // Every screen explains itself in one sentence — same place, same style, so
 // nobody needs a walkthrough to know what a tab is for or what acting on it does.
 const TAB_HINTS = {
-  dashboard: 'Live overview of the whole floor — lead totals, who is on a call right now, and everything that just happened.',
+  dashboard: 'Live overview of the whole call center — lead totals, who is on a call right now, and everything that just happened.',
   leads: 'Every lead in the system. Click a row for its full history, send one to a specific caller, or search and filter across all of them.',
   import: 'Paste or upload raw lead data — it gets parsed, previewed, and de-duplicated before anything touches the live queue.',
   vault: 'Held-back leads that callers cannot see yet. Release them into the live queue in batches whenever you want the floor to have them.',
@@ -66,7 +66,7 @@ async function renderAdminDashboard(el) {
   const _pipe = (d.awaiting_finishing || 0) + (d.assigned_finishing || 0);
   const _pct = (n, dn) => dn > 0 ? Math.round((n / dn) * 100) : 0;
   const _bar = (label, val, of, color) => '<div style="margin-bottom:9px;"><div style="display:flex;justify-content:space-between;font-size:11.5px;margin-bottom:3px;"><span style="color:var(--text-dim);">' + label + '</span><span style="font-weight:700;">' + val + (of ? ' <span style="color:var(--text-faint);font-weight:500;">(' + _pct(val, of) + '%)</span>' : '') + '</span></div><div style="height:7px;border-radius:6px;background:rgba(255,255,255,.06);overflow:hidden;"><div style="height:100%;width:' + (_t > 0 ? Math.round(val / _t * 100) : 0) + '%;background:' + color + ';border-radius:6px;"></div></div></div>';
-  const perfCard = '<div class="panel p fade-up"><div class="section-title" style="margin-top:0;">Floor performance</div>'
+  const perfCard = '<div class="panel p fade-up"><div class="section-title" style="margin-top:0;">Call center performance</div>'
     + '<div class="stat-grid" style="grid-template-columns:repeat(3,1fr);margin-bottom:14px;">'
     + '<div class="stat-box panel"><div class="num">' + _pct(_work, _t) + '%</div><div class="lbl">Contacted</div></div>'
     + '<div class="stat-box panel accent"><div class="num">' + _pct(_s, _work) + '%</div><div class="lbl">Success rate</div></div>'
@@ -942,21 +942,19 @@ async function renderAdminCategories(el) {
   el.innerHTML = \`
     <div class="panel p fade-up">
       <div class="section-title" style="margin-top:0;">Add a Category</div>
-      <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:14px;line-height:1.5;">Pick a region and tap a bank to add it — the real logo comes with it and shows on every lead. Crypto exchanges and wallets have their own tabs. Not listed? Use Custom to add anything by name.</p>
+      <p style="font-size:12.5px;color:var(--text-dim);margin-bottom:14px;line-height:1.5;">Pick a group and tap a bank to add it — the real logo comes with it and shows on every lead. Not listed? Use Custom to add anything by name.</p>
       <div class="seg-tabs" style="margin-bottom:12px;flex-wrap:wrap;gap:6px;">
         <button class="seg-tab \${bankPickerTab==='all'?'on':''}" onclick="setBankTab('all')">All</button>
-        <button class="seg-tab \${bankPickerTab==='uk_high_street'?'on':''}" onclick="setBankTab('uk_high_street')">UK High Street</button>
+        <button class="seg-tab \${bankPickerTab==='crypto'?'on':''}" onclick="setBankTab('crypto')">Crypto</button>
+        <button class="seg-tab \${bankPickerTab==='uk_high_street'?'on':''}" onclick="setBankTab('uk_high_street')">UK Mainstream</button>
         <button class="seg-tab \${bankPickerTab==='uk_digital'?'on':''}" onclick="setBankTab('uk_digital')">UK Digital</button>
         <button class="seg-tab \${bankPickerTab==='uk_building_societies'?'on':''}" onclick="setBankTab('uk_building_societies')">UK Building Societies</button>
         <button class="seg-tab \${bankPickerTab==='uk_lenders'?'on':''}" onclick="setBankTab('uk_lenders')">UK Specialist</button>
-        <button class="seg-tab \${bankPickerTab==='us'?'on':''}" onclick="setBankTab('us')">US</button>
-        <button class="seg-tab \${bankPickerTab==='canada'?'on':''}" onclick="setBankTab('canada')">Canada</button>
         <button class="seg-tab \${bankPickerTab==='europe'?'on':''}" onclick="setBankTab('europe')">Europe</button>
+        <button class="seg-tab \${bankPickerTab==='north_america'?'on':''}" onclick="setBankTab('north_america')">North America</button>
         <button class="seg-tab \${bankPickerTab==='asia_pacific'?'on':''}" onclick="setBankTab('asia_pacific')">Asia-Pacific</button>
         <button class="seg-tab \${bankPickerTab==='mideast_africa'?'on':''}" onclick="setBankTab('mideast_africa')">Middle East & Africa</button>
         <button class="seg-tab \${bankPickerTab==='latam'?'on':''}" onclick="setBankTab('latam')">Latin America</button>
-        <button class="seg-tab \${bankPickerTab==='crypto_ex'?'on':''}" onclick="setBankTab('crypto_ex')">Exchanges</button>
-        <button class="seg-tab \${bankPickerTab==='crypto_wallets'?'on':''}" onclick="setBankTab('crypto_wallets')">Wallets</button>
         <button class="seg-tab \${bankPickerTab==='custom'?'on':''}" onclick="setBankTab('custom')">Custom</button>
       </div>
       <div id="bankPickerBody"></div>
@@ -1004,6 +1002,14 @@ function renderBankPicker() {
       }
     }
     list.sort((a, b) => a[0].localeCompare(b[0]));
+  } else if (bankPickerTab === 'crypto' || bankPickerTab === 'north_america') {
+    // A couple of tabs merge several directory groups into one clean list:
+    // Crypto = every exchange + wallet; North America = US + Canada. Deduped by name.
+    const groups = bankPickerTab === 'crypto' ? ['crypto_ex', 'crypto_wallets'] : ['us', 'canada'];
+    const seen = {}; list = [];
+    for (const g of groups) {
+      for (const b of (BANK_DIR[g] || [])) { const k = b[0].toLowerCase(); if (!seen[k]) { seen[k] = 1; list.push(b); } }
+    }
   } else {
     list = BANK_DIR[bankPickerTab] || [];
   }
