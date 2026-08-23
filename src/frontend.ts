@@ -1652,13 +1652,25 @@ body{
   box-shadow:inset 0 1px 0 rgba(255,255,255,.04), 0 2px 8px rgba(0,0,0,.3), 0 24px 64px rgba(0,0,0,.5), 0 0 120px rgba(124,92,255,.05);
   min-height:calc(100vh - 36px); min-height:calc(100dvh - 36px);
 }
-/* Static ambient glow behind the shell — no animation. A continuously animating
-   full-shell gradient with will-change kept the compositor busy every frame for
-   a purely decorative drift; the static version looks the same at a glance. */
+/* Living ambient aurora behind the shell — two counter-drifting layers, the same
+   signature motion the storefront uses. Transform-only so it stays on the
+   compositor; killed entirely under prefers-reduced-motion. */
 .app-shell::before{
   content:''; position:absolute; inset:-20%; z-index:0; pointer-events:none; opacity:.5;
   background:radial-gradient(circle at 30% 20%, rgba(147,112,255,.10), transparent 42%),
              radial-gradient(circle at 78% 68%, rgba(79,140,255,.08), transparent 45%);
+  animation:aurora 26s ease-in-out infinite alternate;
+}
+.app-shell::after{
+  content:''; position:absolute; inset:-25%; z-index:0; pointer-events:none; opacity:.42;
+  background:radial-gradient(circle at 68% 22%, rgba(245,158,11,.07), transparent 44%),
+             radial-gradient(circle at 20% 78%, rgba(124,92,255,.09), transparent 46%);
+  animation:auroraB 34s ease-in-out infinite alternate;
+}
+@keyframes auroraB{
+  0%{transform:translate(0,0) scale(1.04);}
+  50%{transform:translate(-3%,3%) scale(1);}
+  100%{transform:translate(3%,-2%) scale(1.07);}
 }
 @keyframes aurora{
   0%{transform:translate(0,0) scale(1);}
@@ -1693,31 +1705,87 @@ a{color:inherit;text-decoration:none;}
    cards cascade in on load without needing the .stagger class added everywhere. */
 .staff-body > .panel, .staff-body > .fade-up{animation:fadeUp .4s var(--ease-out) both;}
 
-/* ---- admin panel motion + polish (ui-ux-pro-max principles: transform/opacity
-   only, spring easing, staggered + meaningful motion, reduced-motion honoured) ---- */
-.admin-content > .panel, .admin-content > .fade-up{animation:fadeUp .42s var(--ease-out) both;}
-.admin-content > *:nth-child(2){animation-delay:.05s;}
-.admin-content > *:nth-child(3){animation-delay:.1s;}
-.admin-content > *:nth-child(4){animation-delay:.15s;}
-.admin-content > *:nth-child(n+5){animation-delay:.19s;}
+/* ================= CLEARPANEL MOTION SYSTEM =================
+   Store-grade motion applied globally, so every screen (dashboard, leads,
+   roster, scripts, chat, profile) inherits it without moving any layout.
+   Principles: animate transform/opacity only; spring easing on entrances;
+   staggered choreography; AMBIENT motion visible without :hover, because
+   touch devices never fire hover; full reduced-motion respect. */
+@keyframes cpRise{from{opacity:0;transform:translateY(14px) scale(.975);}to{opacity:1;transform:none;}}
+@keyframes cpPop{from{opacity:0;transform:translateY(10px) scale(.94);}to{opacity:1;transform:none;}}
+@keyframes cpSheen{0%{transform:translateX(-180%) skewX(-18deg);}100%{transform:translateX(320%) skewX(-18deg);}}
+@keyframes cpFlow{0%,100%{background-position:50% 0%;}50%{background-position:50% 100%;}}
+@keyframes cpBreathe{0%,100%{opacity:.62;}50%{opacity:1;}}
+
+/* --- Panel entrances: deeper, springier stagger --- */
+.admin-content > .panel, .admin-content > .fade-up{animation:cpRise .5s var(--ease-smooth) both;}
+.admin-content > *:nth-child(1){animation-delay:.02s;}
+.admin-content > *:nth-child(2){animation-delay:.07s;}
+.admin-content > *:nth-child(3){animation-delay:.12s;}
+.admin-content > *:nth-child(4){animation-delay:.17s;}
+.admin-content > *:nth-child(5){animation-delay:.22s;}
+.admin-content > *:nth-child(n+6){animation-delay:.26s;}
 .panel{transition:transform .22s var(--ease-smooth), border-color .22s, box-shadow .22s;}
 .admin-content > .panel:hover{transform:translateY(-2px);border-color:rgba(167,139,250,.24);}
-@keyframes statPop{from{opacity:0;transform:translateY(9px) scale(.96);}to{opacity:1;transform:none;}}
-.stat-box{transition:transform .2s var(--ease-spring), border-color .2s, box-shadow .2s;}
+.panel:active{transform:scale(.995);}
+
+/* --- Stat tiles: pop in, then a slow recurring glint so they never look dead --- */
+.stat-box{position:relative;overflow:hidden;transition:transform .2s var(--ease-spring), border-color .2s, box-shadow .2s;animation:cpPop .55s var(--ease-spring) both;}
+.stat-grid > .stat-box:nth-child(1){animation-delay:.04s;}
+.stat-grid > .stat-box:nth-child(2){animation-delay:.09s;}
+.stat-grid > .stat-box:nth-child(3){animation-delay:.14s;}
+.stat-grid > .stat-box:nth-child(4){animation-delay:.19s;}
+.stat-grid > .stat-box:nth-child(5){animation-delay:.24s;}
+.stat-grid > .stat-box:nth-child(6){animation-delay:.29s;}
+.stat-grid > .stat-box:nth-child(7){animation-delay:.34s;}
+.stat-grid > .stat-box:nth-child(n+8){animation-delay:.38s;}
+.stat-box::after{content:'';position:absolute;top:-20%;bottom:-20%;left:0;width:38%;pointer-events:none;
+  background:linear-gradient(100deg,transparent,rgba(255,255,255,.06),transparent);
+  animation:cpSheen 7s ease-in-out infinite;animation-delay:1.4s;}
+.stat-box.accent::after{background:linear-gradient(100deg,transparent,rgba(245,158,11,.13),transparent);animation-duration:5.2s;}
 .stat-box:hover{transform:translateY(-3px);border-color:rgba(167,139,250,.3);box-shadow:0 10px 26px rgba(0,0,0,.32);}
-.stat-grid.stagger > .stat-box{animation:statPop .5s var(--ease-spring) both;}
+.stat-box:active{transform:scale(.97);}
+
+/* --- Section headers: accent bar with a continuously flowing gradient --- */
 .section-title{display:flex;align-items:center;gap:9px;}
-.section-title::before{content:'';width:3px;height:1.02em;border-radius:2px;background:linear-gradient(180deg,var(--violet-bright),var(--gold));flex-shrink:0;box-shadow:0 0 9px var(--violet-glow);}
-.btn{transition:transform .12s var(--ease-out), filter .15s, box-shadow .2s, background .2s;}
-.btn:active{transform:translateY(1px) scale(.985);}
+.section-title::before{content:'';width:3px;height:1.02em;border-radius:2px;flex-shrink:0;
+  background:linear-gradient(180deg,var(--violet-bright),var(--gold),var(--violet-bright));
+  background-size:100% 260%;animation:cpFlow 5s ease-in-out infinite;
+  box-shadow:0 0 9px var(--violet-glow);}
+
+/* --- Buttons: tactile press + sheen sweeping the primary action --- */
+.btn{position:relative;overflow:hidden;transition:transform .12s var(--ease-out), filter .15s, box-shadow .2s, background .2s;}
+.btn:active{transform:translateY(1px) scale(.97);}
+.btn-gold::after{content:'';position:absolute;top:-40%;bottom:-40%;left:0;width:40%;pointer-events:none;
+  background:linear-gradient(100deg,transparent,rgba(255,255,255,.26),transparent);
+  animation:cpSheen 4.6s ease-in-out infinite;animation-delay:1s;}
+
+/* --- Rows + cards: touch feedback, not hover-dependent --- */
 .bank-card{transition:transform .16s var(--ease-spring), border-color .16s, background .16s;}
 .bank-card:hover{transform:translateY(-2px) scale(1.02);border-color:var(--gold-glow);}
-.bank-grid .bank-card{animation:fadeUp .26s var(--ease-out) both;}
-.admin-content tbody tr{transition:background .15s;}
+.bank-card:active{transform:scale(.96);}
+.bank-grid .bank-card{animation:cpPop .3s var(--ease-spring) both;}
+.admin-content tbody tr{transition:background .15s, transform .15s;}
 .admin-content tbody tr:hover{background:rgba(167,139,250,.05);}
+.admin-content tbody tr:active{background:rgba(167,139,250,.09);}
+.dm-contact{transition:transform .15s var(--ease-out), background .15s, border-color .15s;}
+.dm-contact:active{transform:scale(.985);}
+
+/* --- Chat: messages ease in instead of snapping --- */
+.tg-msg{animation:cpRise .28s var(--ease-out) both;}
+.tg-send{transition:transform .14s var(--ease-spring);}
+.tg-send:active{transform:scale(.9);}
+
+/* --- Live/secure badges breathe so "live" actually reads as live --- */
+.tg-lock{animation:cpBreathe 3.4s ease-in-out infinite;}
+
 @media (prefers-reduced-motion:reduce){
-  .admin-content > .panel,.admin-content > .fade-up,.stat-grid.stagger > .stat-box{animation:none!important;}
-  .admin-content > .panel:hover,.stat-box:hover,.bank-card:hover,.btn:active{transform:none!important;}
+  .app-shell::before,.app-shell::after,.stat-box::after,.btn-gold::after,
+  .section-title::before,.tg-lock{animation:none!important;}
+  .admin-content > .panel,.admin-content > .fade-up,.stat-box,.tg-msg,
+  .bank-grid .bank-card{animation:none!important;}
+  .admin-content > .panel:hover,.stat-box:hover,.bank-card:hover,.btn:active,
+  .panel:active,.stat-box:active,.bank-card:active,.tg-send:active{transform:none!important;}
 }
 .staff-body > *:nth-child(1){animation-delay:.02s;} .staff-body > *:nth-child(2){animation-delay:.06s;}
 .staff-body > *:nth-child(3){animation-delay:.10s;} .staff-body > *:nth-child(4){animation-delay:.14s;}
