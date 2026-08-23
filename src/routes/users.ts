@@ -106,8 +106,23 @@ users.get('/api/me', async (c) => {
   c.header('Cache-Control', 'no-store, no-cache, must-revalidate');
   const user = await authenticate(c);
   if (!user) return bad(c, 'Unauthorized', 401);
-  const [fresh] = await sql`SELECT id, name, pin, role, avatar, pfp_data, xp, clocked_in, notif_prefs, is_super_admin, role_confirmed_at, tenant_id, username, handle, handle_claimed_at, bio, banner_color, accent_color FROM users WHERE id = ${user.id}`;
-  return c.json({ data: fresh });
+  const [fresh] = await sql`SELECT id, name, pin, role, avatar, pfp_data, xp, clocked_in, notif_prefs, is_super_admin, role_confirmed_at, tenant_id, username, handle, handle_claimed_at, bio, banner_color, accent_color, telegram_username FROM users WHERE id = ${user.id}`;
+  // Multi-panel: other active panels where the same verified identity (Telegram
+  // handle) already has an account. Read-only \u2014 switching still requires that
+  // panel's own PIN, so listing them grants no access. Only public slug + name
+  // leave the server, never any cross-panel data.
+  let other_panels: any[] = [];
+  if (fresh && fresh.telegram_username) {
+    other_panels = await sql`
+      SELECT DISTINCT t.slug, t.name
+      FROM users u JOIN tenants t ON t.id = u.tenant_id
+      WHERE lower(u.telegram_username) = lower(${fresh.telegram_username})
+        AND u.tenant_id <> ${user.tenant_id}
+        AND u.suspended_at IS NULL
+        AND t.status = 'active' AND t.slug IS NOT NULL
+      ORDER BY t.name LIMIT 10`;
+  }
+  return c.json({ data: { ...fresh, other_panels } });
 });
 
 // One-time role confirmation, stored server-side so it genuinely never re-asks —
